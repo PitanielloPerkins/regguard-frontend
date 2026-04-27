@@ -1,4 +1,6 @@
-import os
+"""
+Reg Guard — City of Dallas commercial permit queries (Socrata API).
+"""
 import os
 from typing import Optional
 

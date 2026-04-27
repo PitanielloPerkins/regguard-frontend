@@ -1,3 +1,6 @@
+"""
+Reg Guard — Dallas Open Data / Supabase compliance URL tracking.
+"""
 import asyncio
 import json
 import os
