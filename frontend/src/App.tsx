@@ -20,6 +20,8 @@ type JurisdictionInfo = {
 type ResearchJson = {
   zip: string;
   site_address?: string | null;
+  city?: string | null;
+  county?: string | null;
   jurisdiction?: JurisdictionInfo | null;
   summary: string;
   source_urls: string[];
@@ -126,18 +128,54 @@ function ResearchMemo({
   const showAppendix =
     result.enhanced_query.length > 2 && !result.enhanced_query.trim().startsWith("— (no");
 
+  const ju = result.jurisdiction;
+  const lineAddress =
+    result.site_address?.trim() ||
+    ju?.formatted_address?.trim() ||
+    [ju?.street_line, ju?.city, ju?.state, ju?.zip].filter(Boolean).join(", ").trim() ||
+    "";
+  const lineCity = (result.city ?? ju?.city)?.trim() || "";
+  const lineCounty = (result.county ?? ju?.county)?.trim() || "";
+  const lineZip = result.zip?.trim() || "";
+
   return (
     <article ref={memoRef} className="rg-memo">
+      <p className="rg-memo__watermark" aria-hidden="true">
+        Verified
+      </p>
+      <div className="rg-memo__sheet">
       <header className="rg-memo__header">
         <p className="rg-memo__kicker">Technical memorandum</p>
         <h2 className="rg-memo__title">Compliance register — code & permit references</h2>
+
+        <section className="rg-memo__site-block">
+          <h3 className="rg-memo__site-block-title">Site location</h3>
+          <dl className="rg-memo__site-grid">
+            <div>
+              <dt>Address</dt>
+              <dd>{lineAddress || "—"}</dd>
+            </div>
+            <div>
+              <dt>City</dt>
+              <dd>{lineCity || "—"}</dd>
+            </div>
+            <div>
+              <dt>County</dt>
+              <dd>{lineCounty || "—"}</dd>
+            </div>
+            <div>
+              <dt>ZIP</dt>
+              <dd>{lineZip || "—"}</dd>
+            </div>
+          </dl>
+        </section>
+
         <dl className="rg-memo__meta">
           <div className="rg-memo__meta-row">
             <dt>Subject</dt>
             <dd>
-              {result.site_address?.trim()
-                ? `Building code and permit pointers — ${result.site_address.trim()} (U.S. ZIP ${result.zip})`
-                : `Building code and permit pointers — U.S. ZIP ${result.zip}`}
+              Jurisdiction research for building codes and permits at the site listed above (U.S.
+              ). city vs county routing follows server geocoding of the selected address.
             </dd>
           </div>
           <div className="rg-memo__meta-row">
@@ -248,6 +286,7 @@ function ResearchMemo({
           Opens print — choose &ldquo;Save as PDF&rdquo; as the destination.
         </p>
       </footer>
+      </div>
     </article>
   );
 }

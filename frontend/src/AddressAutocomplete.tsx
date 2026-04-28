@@ -130,7 +130,7 @@ export function AddressAutocomplete({ disabled, onSelection }: Props) {
         disabled
         placeholder="Set VITE_GOOGLE_MAPS_API_KEY to enable U.S. address search…"
         autoComplete="off"
-        aria-describedby="job-site-address-label"
+        aria-labelledby="job-site-address-label"
       />
     );
   }
