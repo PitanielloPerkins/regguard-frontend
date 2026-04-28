@@ -56,10 +56,19 @@ export function AddressAutocomplete({ disabled, onSelection }: Props) {
     const scriptSrcPrefix = "https://maps.googleapis.com/maps/api/js";
     const existing = document.querySelector(`script[src^="${scriptSrcPrefix}"]`);
     if (existing) {
-      void google.maps.importLibrary("places").then(
-        () => setMapsReady(true),
-        () => setMapsReady(false),
-      );
+      const bootstrapPlaces = () => {
+        if (!window.google?.maps) {
+          return false;
+        }
+        void google.maps.importLibrary("places").then(
+          () => setMapsReady(true),
+          () => setMapsReady(false),
+        );
+        return true;
+      };
+      if (!bootstrapPlaces()) {
+        existing.addEventListener("load", () => bootstrapPlaces(), { once: true });
+      }
       return () => {};
     }
     (window as unknown as Record<string, () => void>)[cb] = () => {
