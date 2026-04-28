@@ -725,12 +725,12 @@ function App() {
           {locationToast.text}
         </div>
       )}
-      <header className="rg-hero">
+      <header className="rg-hero rg-no-print">
         <h1>Reg Guard</h1>
         <p>Agentic compliance research — jobsite voice, photo, and code links</p>
       </header>
 
-      <form onSubmit={submit} className="rg-panel" autoComplete="off">
+      <form onSubmit={submit} className="rg-panel rg-no-print" autoComplete="off">
         <h2>Request</h2>
         <div className="rg-row rg-grid-2">
           <div>
@@ -888,79 +888,62 @@ function App() {
         </button>
       </form>
 
-      {loading && !streamProgress && <ResearchResultsSkeleton />}
+      {loading && !streamProgress && (
+        <section className="rg-no-print">
+          <ResearchResultsSkeleton />
+        </section>
+      )}
 
       {streamProgress && (
         <section
-          className="rg-panel rg-out rg-out--streaming"
+          className="rg-memo rg-memo--draft rg-no-print"
           aria-busy="true"
           aria-label="Research in progress"
         >
-          <h2>Results (updating)</h2>
-          <p className="rg-stream-status">
-            Steps completed:{" "}
-            {streamProgress.stepsDone.length
-              ? streamProgress.stepsDone.join(" → ")
-              : "starting…"}
-          </p>
-          {streamProgress.enhanced_query ? (
-            <>
-              <p className="rg-sect-title">Enhanced query (live)</p>
-              <pre>{streamProgress.enhanced_query}</pre>
-            </>
-          ) : null}
-          {streamProgress.photo_analysis ? (
-            <>
-              <p className="rg-sect-title">Photo analysis</p>
-              <pre>{streamProgress.photo_analysis}</pre>
-            </>
-          ) : null}
-          <p className="rg-sect-title">Links found so far</p>
-          {streamProgress.links.length ? (
-            <ul className="rg-links">
-              {streamProgress.links.map((u) => (
-                <li key={u}>
-                  <a href={u} target="_blank" rel="noreferrer">
-                    {u}
-                  </a>
-                </li>
-              ))}
-            </ul>
-          ) : (
-            <p className="rg-skeleton-hint">Waiting for first search results…</p>
-          )}
+          <header className="rg-memo__header">
+            <p className="rg-memo__kicker">Technical memorandum (draft)</p>
+            <h2 className="rg-memo__title">Research in progress</h2>
+            <p className="rg-memo__lead rg-memo__muted">
+              Steps:{" "}
+              {streamProgress.stepsDone.length
+                ? streamProgress.stepsDone.join(" → ")
+                : "starting Universal Scout…"}
+            </p>
+          </header>
+          <div className="rg-memo__body">
+            <section className="rg-memo__section">
+              <h3 className="rg-memo__section-head">Applicable Code Sections</h3>
+              {streamProgress.links.length ? (
+                <ol className="rg-memo__codes">
+                  {streamProgress.links.map((u) => (
+                    <li key={u}>
+                      <a href={u} target="_blank" rel="noreferrer">
+                        {u}
+                      </a>
+                    </li>
+                  ))}
+                </ol>
+              ) : (
+                <p className="rg-memo__muted">Collecting official links…</p>
+              )}
+            </section>
+            {streamProgress.enhanced_query ? (
+              <section className="rg-memo__section">
+                <h3 className="rg-memo__section-head">Key Requirements</h3>
+                <pre className="rg-memo__pre rg-memo__pre--sm">{streamProgress.enhanced_query}</pre>
+              </section>
+            ) : null}
+            {streamProgress.photo_analysis ? (
+              <section className="rg-memo__section">
+                <h3 className="rg-memo__section-head">Pro-Tips</h3>
+                <pre className="rg-memo__pre rg-memo__pre--sm">{streamProgress.photo_analysis}</pre>
+              </section>
+            ) : null}
+          </div>
         </section>
       )}
 
-      {result && (
-        <section className="rg-panel rg-out">
-          <h2>Results</h2>
-          <p className="rg-sect-title">Summary</p>
-          <pre>{result.summary}</pre>
-          {result.enhanced_query && (
-            <>
-              <p className="rg-sect-title">Enhanced query (sent to research)</p>
-              <pre>{result.enhanced_query}</pre>
-            </>
-          )}
-          {result.photo_analysis && (
-            <>
-              <p className="rg-sect-title">Photo analysis (Claude vision)</p>
-              <pre>{result.photo_analysis}</pre>
-            </>
-          )}
-          <p className="rg-sect-title">Official links to verify</p>
-          <ul className="rg-links">
-            {result.source_urls.map((u) => (
-              <li key={u}>
-                <a href={u} target="_blank" rel="noreferrer">
-                  {u}
-                </a>
-              </li>
-            ))}
-          </ul>
-        </section>
-      )}
+      {result && <ResearchMemo result={result} memoRef={memoPrintRef} />}
 
       {cameraOpen && (
         <div
@@ -1012,7 +995,7 @@ function App() {
         </div>
       )}
 
-      <footer className="rg-footer" role="contentinfo">
+      <footer className="rg-footer rg-no-print" role="contentinfo">
         <p>
           Reg Guard is an AI-powered assistant. All information must be verified
           by the contractor using the official links provided. We are not a
