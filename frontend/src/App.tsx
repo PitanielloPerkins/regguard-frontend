@@ -600,106 +600,108 @@ function App() {
       const reader = r.body.getReader();
       const dec = new TextDecoder();
       let buffer = "";
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
+
+      type NdjsonEv = {
+        event?: string;
+        step?: string;
+        data?: { results?: { url?: string | null }[] };
+        enhanced_query?: string;
+        job_description?: string;
+        photo_analysis?: string | null;
+        zip?: string;
+        summary?: string;
+        source_urls?: string[];
+      };
+
+      const handleNdjsonLine = (rawLine: string): boolean => {
+        const line = rawLine.trim();
+        if (!line) {
+          return true;
         }
-        buffer += dec.decode(value, { stream: true });
+        let ev: NdjsonEv;
+        try {
+          ev = JSON.parse(line) as NdjsonEv;
+        } catch {
+          setErr("Invalid stream line from server.");
+          return false;
+        }
+        if (ev.event === "context") {
+          setStreamProgress((p) => ({
+            enhanced_query: String(ev.enhanced_query ?? ""),
+            job_description: String(ev.job_description ?? ""),
+            photo_analysis: ev.photo_analysis ?? null,
+            links: p?.links ?? [],
+            stepsDone: p?.stepsDone ?? [],
+          }));
+        } else if (ev.event === "step" && ev.step) {
+          const stepKey = ev.step;
+          const title = STEP_TITLE[stepKey] ?? stepKey;
+          const rows = ev.data?.results ?? [];
+          setStreamProgress((p) => {
+            if (!p) {
+              return {
+                enhanced_query: "",
+                job_description: job,
+                photo_analysis: null,
+                links: appendUrls([], rows),
+                stepsDone: [title],
+              };
+            }
+            return {
+              ...p,
+              links: appendUrls(p.links, rows),
+              stepsDone: [...p.stepsDone, title],
+            };
+          });
+        } else if (ev.event === "complete") {
+          setResult({
+            zip: String(ev.zip ?? ""),
+            summary: String(ev.summary ?? ""),
+            source_urls: ev.source_urls ?? [],
+            enhanced_query: String(ev.enhanced_query ?? ""),
+            job_description: String(ev.job_description ?? ""),
+            photo_analysis: ev.photo_analysis ?? null,
+          });
+          setStreamProgress(null);
+        }
+        return true;
+      };
+
+      const drainNewlineDelimitedLines = (): boolean => {
         for (;;) {
           const nl = buffer.indexOf("\n");
           if (nl < 0) {
             break;
           }
-          const line = buffer.slice(0, nl).trim();
+          const raw = buffer.slice(0, nl);
           buffer = buffer.slice(nl + 1);
-          if (!line) {
-            continue;
+          if (!handleNdjsonLine(raw)) {
+            return false;
           }
-          let ev: {
-            event?: string;
-            step?: string;
-            data?: { results?: { url?: string | null }[] };
-            enhanced_query?: string;
-            job_description?: string;
-            photo_analysis?: string | null;
-            zip?: string;
-            summary?: string;
-            source_urls?: string[];
-          };
-          try {
-            ev = JSON.parse(line) as typeof ev;
-          } catch {
-            setErr("Invalid stream line from server.");
+        }
+        return true;
+      };
+
+      while (true) {
+        const { done, value } = await reader.read();
+        if (value?.byteLength) {
+          buffer += dec.decode(value, { stream: true });
+        }
+        if (!drainNewlineDelimitedLines()) {
+          return;
+        }
+        if (done) {
+          buffer += dec.decode(new Uint8Array(0), { stream: false });
+          if (!drainNewlineDelimitedLines()) {
             return;
           }
-          if (ev.event === "context") {
-            setStreamProgress({
-              enhanced_query: String(ev.enhanced_query ?? ""),
-              job_description: String(ev.job_description ?? ""),
-              photo_analysis: ev.photo_analysis ?? null,
-              links: [],
-              stepsDone: [],
-            });
-          } else if (ev.event === "step" && ev.step) {
-            const stepKey = ev.step;
-            const title = STEP_TITLE[stepKey] ?? stepKey;
-            const rows = ev.data?.results ?? [];
-            setStreamProgress((p) => {
-              if (!p) {
-                return {
-                  enhanced_query: "",
-                  job_description: job,
-                  photo_analysis: null,
-                  links: appendUrls([], rows),
-                  stepsDone: [title],
-                };
-              }
-              return {
-                ...p,
-                links: appendUrls(p.links, rows),
-                stepsDone: [...p.stepsDone, title],
-              };
-            });
-          } else if (ev.event === "complete") {
-            setResult({
-              zip: String(ev.zip ?? ""),
-              summary: String(ev.summary ?? ""),
-              source_urls: ev.source_urls ?? [],
-              enhanced_query: String(ev.enhanced_query ?? ""),
-              job_description: String(ev.job_description ?? ""),
-              photo_analysis: ev.photo_analysis ?? null,
-            });
-            setStreamProgress(null);
-          }
+          break;
         }
       }
+
       const tail = buffer.trim();
-      if (tail) {
-        try {
-          const ev = JSON.parse(tail) as {
-            event?: string;
-            zip?: string;
-            summary?: string;
-            source_urls?: string[];
-            enhanced_query?: string;
-            job_description?: string;
-            photo_analysis?: string | null;
-          };
-          if (ev.event === "complete") {
-            setResult({
-              zip: String(ev.zip ?? ""),
-              summary: String(ev.summary ?? ""),
-              source_urls: ev.source_urls ?? [],
-              enhanced_query: String(ev.enhanced_query ?? ""),
-              job_description: String(ev.job_description ?? ""),
-              photo_analysis: ev.photo_analysis ?? null,
-            });
-            setStreamProgress(null);
-          }
-        } catch {
-          setErr("Incomplete or invalid stream from server.");
-        }
+      if (tail && !handleNdjsonLine(tail)) {
+        return;
       }
     } catch (ex) {
       setErr(
