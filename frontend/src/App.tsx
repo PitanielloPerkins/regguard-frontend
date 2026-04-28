@@ -174,8 +174,8 @@ function ResearchMemo({
           <div className="rg-memo__meta-row">
             <dt>Subject</dt>
             <dd>
-              Jurisdiction research for building codes and permits at the site listed above (U.S.
-              ). city vs county routing follows server geocoding of the selected address.
+              Jurisdiction research for building codes and permits at the site listed above (U.S.).
+              City vs county routing follows server geocoding of the selected address.
             </dd>
           </div>
           <div className="rg-memo__meta-row">
@@ -317,7 +317,6 @@ function App() {
   const useMapsAddr = mapsAutocompleteEnabled();
   const [zip, setZip] = useState("");
   const [formattedAddress, setFormattedAddress] = useState("");
-  const [addressFieldKey, setAddressFieldKey] = useState(0);
   const [job, setJob] = useState("");
   const [limit, setLimit] = useState(5);
   const [file, setFile] = useState<File | null>(null);
@@ -330,40 +329,11 @@ function App() {
   const [noSpeech, setNoSpeech] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
   const [videoReady, setVideoReady] = useState(false);
-  const [locatingZip, setLocatingZip] = useState(false);
-  const [locationToast, setLocationToast] = useState<{
-    kind: "success" | "error";
-    text: string;
-  } | null>(null);
   const recRef = useRef<SpeechRecognition | null>(null);
   const prevUrl = useRef<string | null>(null);
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
-  const locationToastTimerRef = useRef<number | null>(null);
   const memoPrintRef = useRef<HTMLElement | null>(null);
-
-  const showLocationToast = useCallback(
-    (kind: "success" | "error", text: string) => {
-      if (locationToastTimerRef.current !== null) {
-        window.clearTimeout(locationToastTimerRef.current);
-        locationToastTimerRef.current = null;
-      }
-      setLocationToast({ kind, text });
-      locationToastTimerRef.current = window.setTimeout(() => {
-        setLocationToast(null);
-        locationToastTimerRef.current = null;
-      }, 4000);
-    },
-    [],
-  );
-
-  useEffect(() => {
-    return () => {
-      if (locationToastTimerRef.current !== null) {
-        window.clearTimeout(locationToastTimerRef.current);
-      }
-    };
-  }, []);
 
   const onAddressSelection = useCallback((sel: AddressSelection | null) => {
     setFormattedAddress(sel?.formattedAddress ?? "");
@@ -373,81 +343,6 @@ function App() {
       setZip("");
     }
   }, []);
-
-  const locateFromDevice = useCallback(() => {
-    if (locatingZip) {
-      return;
-    }
-    if (typeof navigator === "undefined" || !navigator.geolocation) {
-      showLocationToast(
-        "error",
-        "This browser does not support location. Type your ZIP in the field above.",
-      );
-      return;
-    }
-    if (typeof window !== "undefined" && !window.isSecureContext) {
-      showLocationToast(
-        "error",
-        "Location for ZIP detection needs a secure (HTTPS) page. You can type your ZIP in.",
-      );
-      return;
-    }
-    setLocatingZip(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const { latitude, longitude } = pos.coords;
-          const qs = new URLSearchParams({
-            latitude: String(latitude),
-            longitude: String(longitude),
-          });
-          const r = await fetch(`/api/geocode-zip?${qs}`);
-          const data = (await r.json()) as { zip?: string; detail?: unknown };
-          if (r.ok && data.zip) {
-            setZip(data.zip);
-            if (useMapsAddr) {
-              setFormattedAddress("");
-              setAddressFieldKey((k) => k + 1);
-            }
-            showLocationToast("success", "Location detected!");
-          } else {
-            let msg = "Could not look up a ZIP. Try again or type your ZIP.";
-            if (typeof data.detail === "string") {
-              msg = data.detail;
-            } else if (Array.isArray(data.detail) && data.detail[0]) {
-              const f = data.detail[0] as { msg?: string };
-              if (typeof f?.msg === "string") {
-                msg = f.msg;
-              }
-            }
-            showLocationToast("error", msg);
-          }
-        } catch {
-          showLocationToast(
-            "error",
-            "Could not look up a ZIP. Try again or type your ZIP.",
-          );
-        } finally {
-          setLocatingZip(false);
-        }
-      },
-      (geoErr: GeolocationPositionError) => {
-        setLocatingZip(false);
-        if (geoErr.code === 1) {
-          showLocationToast(
-            "error",
-            "Location access is off for this site. You can type your ZIP above, or allow location in your browser settings and try again.",
-          );
-        } else {
-          showLocationToast(
-            "error",
-            "GPS signal weak—please type your ZIP.",
-          );
-        }
-      },
-      { enableHighAccuracy: false, maximumAge: 0, timeout: 10_000 },
-    );
-  }, [locatingZip, showLocationToast, useMapsAddr]);
 
   const stopMic = useCallback(() => {
     recRef.current?.stop();
