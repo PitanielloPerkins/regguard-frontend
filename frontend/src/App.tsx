@@ -168,8 +168,8 @@ function ResearchMemo({
               When the site spans municipal boundaries, check city and county (or special district)
               rules separately.
             </li>
-            {photoTips.map((t) => (
-              <li key={t}>
+            {photoTips.map((t, i) => (
+              <li key={`photo-tip-${i}-${t.slice(0, 40)}`}>
                 <span className="rg-memo__tip-label">From site photo: </span>
                 {t}
               </li>
