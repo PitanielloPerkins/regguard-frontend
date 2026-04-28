@@ -122,6 +122,16 @@
   margin-bottom: 0.4rem;
 }
 
+.rg-code-hint {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  font-weight: 600;
+  color: var(--rg-accent);
+  background: rgba(15, 39, 68, 0.06);
+  padding: 0.08em 0.35em;
+  border-radius: 3px;
+}
+
 .rg-input,
 .rg-textarea,
 .rg-select {
@@ -1036,7 +1046,7 @@
     display: none !important;
   }
 
-  .rg-cm-table a {
-    color: #1a2744 !important;
+  .rg-memo__watermark {
+    color: rgba(15, 39, 68, 0.04) !important;
+    border-color: rgba(15, 39, 68, 0.05) !important;
   }
-}
