@@ -118,19 +118,33 @@ export function AddressAutocomplete({ disabled, onSelection }: Props) {
     };
   }, [key, mapsReady]);
 
+  const barClass =
+    "rg-input rg-address-autocomplete" + (key ? "" : " rg-address-autocomplete--needs-key");
+
   if (!key) {
-    return null;
+    return (
+      <input
+        id={inputId}
+        className={barClass}
+        type="text"
+        disabled
+        placeholder="Set VITE_GOOGLE_MAPS_API_KEY to enable U.S. address search…"
+        autoComplete="off"
+        aria-describedby="job-site-address-label"
+      />
+    );
   }
 
   return (
     <input
       ref={inputRef}
       id={inputId}
-      className="rg-input"
+      className={barClass}
       type="text"
       disabled={disabled || !mapsReady}
-      placeholder={mapsReady ? "Start typing street address…" : "Loading address search…"}
+      placeholder={mapsReady ? "Search street address (Google Places)…" : "Loading Maps…"}
       autoComplete="off"
+      aria-describedby="job-site-address-label"
     />
   );
 }
