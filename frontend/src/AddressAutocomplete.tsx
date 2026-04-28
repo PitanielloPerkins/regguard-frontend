@@ -2,9 +2,9 @@ import { useEffect, useId, useRef, useState } from "react";
 
 const CALLBACK_PREFIX = "__rgGoogleMapsCb_";
 
+/** After a Places selection: Google's formatted line + ZIP for optional server cross-check. */
 export type AddressSelection = {
-  placeId: string;
-  siteAddressLine: string;
+  formattedAddress: string;
   zip: string;
 };
 
@@ -21,30 +21,6 @@ function extractZip5(components: google.maps.GeocoderAddressComponent[]): string
   const z = components.find((c) => c.types.includes("postal_code"));
   const digits = (z?.long_name || "").replace(/\D/g, "");
   return digits.length >= 5 ? digits.slice(0, 5) : null;
-}
-
-function formatSiteAddressLine(
-  components: google.maps.GeocoderAddressComponent[],
-  formattedFallback: string | undefined,
-): string {
-  const pick = (...types: string[]) =>
-    components.find((x) => types.some((t) => x.types.includes(t)));
-
-  const sn = pick("street_number")?.long_name || "";
-  const route = pick("route")?.long_name || "";
-  const street = [sn, route].filter(Boolean).join(" ");
-  const city =
-    pick("locality")?.long_name ||
-    pick("sublocality", "sublocality_level_1")?.long_name ||
-    "";
-  const st = pick("administrative_area_level_1")?.short_name || "";
-  const zip = pick("postal_code")?.long_name || "";
-  const tail = [city, st, zip].filter(Boolean).join(" ");
-  const line = [street, tail].filter(Boolean).join(", ");
-  if (line.length > 6) {
-    return line;
-  }
-  return (formattedFallback || "").trim();
 }
 
 export function mapsAutocompleteEnabled(): boolean {
@@ -98,16 +74,16 @@ export function AddressAutocomplete({ disabled, onSelection }: Props) {
     const ac = new google.maps.places.Autocomplete(el, {
       types: ["address"],
       componentRestrictions: { country: "us" },
-      fields: ["address_components", "formatted_address", "place_id"],
+      fields: ["address_components", "formatted_address"],
     });
 
     const lastCommitted = { current: null as string | null };
 
     const sub = ac.addListener("place_changed", () => {
       const place = ac.getPlace();
-      const pid = place.place_id;
       const comp = place.address_components;
-      if (!pid || !comp) {
+      const formatted = (place.formatted_address || "").trim();
+      if (!comp || !formatted) {
         lastCommitted.current = null;
         onSelRef.current(null);
         return;
@@ -118,10 +94,8 @@ export function AddressAutocomplete({ disabled, onSelection }: Props) {
         onSelRef.current(null);
         return;
       }
-      const line = formatSiteAddressLine(comp, place.formatted_address);
-      const display = (place.formatted_address || line).trim();
-      lastCommitted.current = display;
-      onSelRef.current({ placeId: pid, siteAddressLine: line, zip });
+      lastCommitted.current = formatted;
+      onSelRef.current({ formattedAddress: formatted, zip });
     });
 
     const onInput = () => {

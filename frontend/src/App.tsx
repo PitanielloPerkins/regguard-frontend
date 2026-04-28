@@ -276,8 +276,7 @@ function App() {
   const fileInputId = useId();
   const useMapsAddr = mapsAutocompleteEnabled();
   const [zip, setZip] = useState("");
-  const [placeId, setPlaceId] = useState<string | null>(null);
-  const [siteAddressLine, setSiteAddressLine] = useState("");
+  const [formattedAddress, setFormattedAddress] = useState("");
   const [addressFieldKey, setAddressFieldKey] = useState(0);
   const [job, setJob] = useState("");
   const [limit, setLimit] = useState(5);
@@ -327,10 +326,11 @@ function App() {
   }, []);
 
   const onAddressSelection = useCallback((sel: AddressSelection | null) => {
-    setPlaceId(sel?.placeId ?? null);
-    setSiteAddressLine(sel?.siteAddressLine ?? "");
+    setFormattedAddress(sel?.formattedAddress ?? "");
     if (sel?.zip) {
       setZip(sel.zip);
+    } else {
+      setZip("");
     }
   }, []);
 
@@ -366,8 +366,7 @@ function App() {
           if (r.ok && data.zip) {
             setZip(data.zip);
             if (useMapsAddr) {
-              setPlaceId(null);
-              setSiteAddressLine("");
+              setFormattedAddress("");
               setAddressFieldKey((k) => k + 1);
             }
             showLocationToast("success", "Location detected!");
@@ -629,8 +628,8 @@ function App() {
     setResult(null);
     setStreamProgress(null);
     if (useMapsAddr) {
-      if (!placeId?.trim()) {
-        setErr("Choose a U.S. street address from the suggestions (with ZIP).");
+      if (!formattedAddress.trim()) {
+        setErr("Choose a full U.S. street address from the suggestions.");
         return;
       }
     }
@@ -646,11 +645,8 @@ function App() {
     try {
       const fd = new FormData();
       fd.append("zip_code", zip.replace(/\s/g, ""));
-      if (placeId?.trim()) {
-        fd.append("place_id", placeId.trim());
-      }
-      if (siteAddressLine.trim()) {
-        fd.append("site_address", siteAddressLine.trim());
+      if (formattedAddress.trim()) {
+        fd.append("site_address", formattedAddress.trim());
       }
       fd.append("job_description", job);
       fd.append("search_limit", String(limit));
@@ -909,7 +905,9 @@ function App() {
           <div>
             {useMapsAddr ? (
               <>
-                <span className="rg-label">Job site address</span>
+                <span className="rg-label" id="job-site-address-label">
+                  Job site address
+                </span>
                 <AddressAutocomplete
                   key={addressFieldKey}
                   disabled={loading}
@@ -919,20 +917,9 @@ function App() {
                   className="rg-memo__muted"
                   style={{ marginTop: "0.35rem", fontSize: "0.85rem" }}
                 >
-                  Select a full U.S. street address from suggestions. The API uses Google Places to
-                  steer city vs county building departments.
+                  Type a U.S. street address and select a result. The server geocodes Google&apos;s
+                  formatted address for city vs county permit routing.
                 </p>
-                <label className="rg-label" htmlFor="zip" style={{ marginTop: "0.75rem", display: "block" }}>
-                  ZIP (from address)
-                </label>
-                <input
-                  id="zip"
-                  className="rg-input"
-                  value={zip}
-                  readOnly
-                  placeholder="—"
-                  aria-readonly="true"
-                />
               </>
             ) : (
               <>

@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from geocode import us_zip_from_lat_lon
-from jurisdiction import fetch_place_profile
+from jurisdiction import geocode_profile_from_address
 from scraper import iter_universal_scout, normalize_us_zip
 from vision import iter_job_site_image_text_stream, normalize_vision_text
 
@@ -175,11 +175,16 @@ def geocode_zip(latitude: float, longitude: float) -> Dict[str, str]:
 
 @app.post("/research")
 async def research(
-    zip_code: str = Form(..., description="US ZIP (5 digits or ZIP+4)"),
+    zip_code: str = Form(
+        "",
+        description="ZIP when using ZIP-only mode, or to verify autocomplete selection",
+    ),
     job_description: str = Form(""),
     search_limit: int = Form(5),
-    place_id: str = Form("", description="Google Places place_id from address autocomplete"),
-    site_address: str = Form("", description="Street, City, ST, ZIP — from autocomplete"),
+    site_address: str = Form(
+        "",
+        description="Google Places formatted_address — geocoded for jurisdiction when set",
+    ),
     image: Optional[UploadFile] = File(None),
 ):
     """
@@ -188,8 +193,8 @@ async def research(
     Emits immediately to avoid proxy/client JSON timeouts, then streams Claude vision (if any),
     Firecrawl scout steps, and word chunks of the final summary.
 
-    Events include: ``open``, ``vision_delta``, ``context``, ``jurisdiction`` (with Places), ``step``,
-    ``summary_delta``, ``complete``.
+    Events include: ``open``, ``vision_delta``, ``context``, ``jurisdiction`` (from geocoded address),
+    ``step``, ``summary_delta``, ``complete``.
     """
     try:
         lim = _parse_search_limit(search_limit)
@@ -204,33 +209,38 @@ async def research(
             image_meta = (image.content_type, image.filename)
 
     jd = (job_description or "").strip()
-    pid = (place_id or "").strip()
     site_line = (site_address or "").strip()
 
     scout_jurisdiction: Optional[Dict[str, Any]] = None
     scout_site: Optional[str] = None
-    zip_for_scout = zip_code
+    zip_for_scout: str = ""
 
-    if pid:
+    if site_line:
         try:
-            profile = await run_in_threadpool(fetch_place_profile, pid)
+            profile = await run_in_threadpool(geocode_profile_from_address, site_line)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        try:
-            client_z = normalize_us_zip(zip_code)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-        if client_z != profile.zip5:
-            raise HTTPException(
-                status_code=400,
-                detail="ZIP code must match the selected address. Pick the address again from suggestions.",
-            )
+        if (zip_code or "").strip():
+            try:
+                client_z = normalize_us_zip(zip_code)
+            except ValueError as e:
+                raise HTTPException(status_code=400, detail=str(e)) from e
+            if client_z != profile.zip5:
+                raise HTTPException(
+                    status_code=400,
+                    detail="ZIP does not match the selected address. Pick the address again from suggestions.",
+                )
         zip_for_scout = profile.zip5
         scout_jurisdiction = profile.to_scout_dict()
-        scout_site = site_line or profile.formatted_address
+        scout_site = profile.formatted_address or site_line
     else:
+        if not (zip_code or "").strip():
+            raise HTTPException(
+                status_code=400,
+                detail="Enter a street address from suggestions, or a U.S. ZIP code.",
+            )
         try:
-            normalize_us_zip(zip_code)
+            zip_for_scout = normalize_us_zip(zip_code)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
