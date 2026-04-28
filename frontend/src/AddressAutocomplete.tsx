@@ -25,6 +25,15 @@ function extractZip5FromPlaceComponents(
   return digits.length >= 5 ? digits.slice(0, 5) : null;
 }
 
+/** Fallback when postal_code isn't in fetched components (sometimes omitted until full parse). */
+function extractZip5FromFormattedAddress(formatted: string): string | null {
+  const m = formatted.match(/\b(\d{5})(?:-\d{4})?\b/);
+  if (!m) {
+    return null;
+  }
+  return m[1] ?? null;
+}
+
 export function mapsAutocompleteEnabled(): boolean {
   return mapsKey().length > 0;
 }
@@ -113,8 +122,22 @@ export function AddressAutocomplete({ disabled, onSelection }: Props) {
       const lastCommitted = { current: null as string | null };
 
       const onSelect = async (ev: Event) => {
-        const e = ev as google.maps.places.PlacePredictionSelectEvent;
-        const place = e.placePrediction.toPlace();
+        type SelEv = Partial<{
+          placePrediction?: google.maps.places.PlacePrediction;
+          place?: google.maps.places.Place;
+        }>;
+        const raw = ev as SelEv;
+        let place: google.maps.places.Place | null = null;
+        if (raw.placePrediction) {
+          place = raw.placePrediction.toPlace();
+        } else if (raw.place) {
+          place = raw.place;
+        }
+        if (!place) {
+          lastCommitted.current = null;
+          onSelRef.current(null);
+          return;
+        }
         try {
           await place.fetchFields({
             fields: ["formattedAddress", "addressComponents"],
@@ -126,12 +149,13 @@ export function AddressAutocomplete({ disabled, onSelection }: Props) {
         }
         const formatted = (place.formattedAddress || "").trim();
         const comp = place.addressComponents ?? [];
-        if (!formatted || comp.length === 0) {
+        if (!formatted) {
           lastCommitted.current = null;
           onSelRef.current(null);
           return;
         }
-        const zip = extractZip5FromPlaceComponents(comp);
+        let zip =
+          extractZip5FromPlaceComponents(comp) ?? extractZip5FromFormattedAddress(formatted);
         if (!zip) {
           lastCommitted.current = null;
           onSelRef.current(null);

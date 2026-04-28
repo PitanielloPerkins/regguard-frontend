@@ -334,15 +334,315 @@ function App() {
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const memoPrintRef = useRef<HTMLElement | null>(null);
+  const researchAbortRef = useRef<AbortController | null>(null);
 
-  const onAddressSelection = useCallback((sel: AddressSelection | null) => {
-    setFormattedAddress(sel?.formattedAddress ?? "");
-    if (sel?.zip) {
-      setZip(sel.zip);
-    } else {
-      setZip("");
-    }
-  }, []);
+  const executeResearch = useCallback(
+    async (addressOverride?: AddressSelection | null) => {
+      setErr(null);
+      setResult(null);
+      setStreamProgress(null);
+
+      const resolvedSite = (addressOverride?.formattedAddress ?? formattedAddress).trim();
+      const resolvedZip = (addressOverride?.zip ?? zip).replace(/\s/g, "");
+
+      if (!useMapsAddr) {
+        setErr(
+          "Add VITE_GOOGLE_MAPS_API_KEY to your frontend environment and restart the dev server.",
+        );
+        return;
+      }
+      if (!resolvedSite) {
+        setErr("Choose a full U.S. street address from the suggestions.");
+        return;
+      }
+      if (!/^\d{5}(-\d{4})?$/.test(resolvedZip)) {
+        setErr(
+          "The selected address must include a U.S. ZIP. Pick the address again from suggestions.",
+        );
+        return;
+      }
+
+      researchAbortRef.current?.abort();
+      const ac = new AbortController();
+      researchAbortRef.current = ac;
+      const { signal } = ac;
+
+      setLoading(true);
+      try {
+        const fd = new FormData();
+        fd.append("zip_code", resolvedZip);
+        fd.append("site_address", resolvedSite);
+        fd.append("job_description", job);
+        fd.append("search_limit", String(limit));
+        if (file) {
+          fd.append("image", file);
+        }
+        const r = await fetch("/api/research", { method: "POST", body: fd, signal });
+        if (!r.ok) {
+          const text = await r.text();
+          let msg = "Request failed. Check the API and your keys.";
+          try {
+            const data = JSON.parse(text) as { detail?: unknown };
+            const d = data.detail;
+            if (typeof d === "string") {
+              msg = d;
+            } else if (Array.isArray(d)) {
+              msg = d
+                .map((i: { msg?: string }) => i?.msg)
+                .filter(Boolean)
+                .join(" ");
+            }
+          } catch {
+            if (text.trim()) {
+              msg = text.slice(0, 500);
+            }
+          }
+          setErr(msg);
+          return;
+        }
+        if (!r.body) {
+          setErr("No response body from server.");
+          return;
+        }
+        const reader = r.body.getReader();
+        const dec = new TextDecoder();
+        let buffer = "";
+
+        type NdjsonEv = {
+          event?: string;
+          step?: string;
+          data?: { results?: { url?: string | null }[] };
+          enhanced_query?: string;
+          job_description?: string;
+          photo_analysis?: string | null;
+          zip?: string;
+          summary?: string;
+          source_urls?: string[];
+          text?: string;
+          message?: string;
+          detail?: string;
+          site_address?: string | null;
+          city?: string | null;
+          county?: string | null;
+          jurisdiction?: JurisdictionInfo | null;
+          profile?: JurisdictionInfo | null;
+        };
+
+        const handleNdjsonLine = (rawLine: string): boolean => {
+          const line = rawLine.trim();
+          if (!line) {
+            return true;
+          }
+          let ev: NdjsonEv;
+          try {
+            ev = JSON.parse(line) as NdjsonEv;
+          } catch {
+            setErr("Invalid stream line from server.");
+            return false;
+          }
+          if (ev.event === "error") {
+            setErr(typeof ev.message === "string" ? ev.message : String(ev.detail ?? "Stream error."));
+            return false;
+          }
+          if (ev.event === "open") {
+            setStreamProgress({
+              enhanced_query: "",
+              job_description: job,
+              photo_analysis: null,
+              links: [],
+              stepsDone: [],
+              streamingSummary: "",
+              jurisdictionNote: "",
+            });
+          } else if (ev.event === "vision_delta" && typeof ev.text === "string") {
+            setStreamProgress((p) => {
+              const base: StreamProgress = p ?? {
+                enhanced_query: "",
+                job_description: job,
+                photo_analysis: "",
+                links: [],
+                stepsDone: [],
+                streamingSummary: "",
+                jurisdictionNote: "",
+              };
+              return {
+                ...base,
+                photo_analysis: (base.photo_analysis ?? "") + ev.text,
+              };
+            });
+          } else if (ev.event === "context") {
+            setStreamProgress((p) => ({
+              enhanced_query: String(ev.enhanced_query ?? ""),
+              job_description: String(ev.job_description ?? ""),
+              photo_analysis: ev.photo_analysis ?? null,
+              links: p?.links ?? [],
+              stepsDone: p?.stepsDone ?? [],
+              streamingSummary: p?.streamingSummary ?? "",
+              jurisdictionNote: p?.jurisdictionNote ?? "",
+            }));
+          } else if (ev.event === "jurisdiction") {
+            const prof = ev.profile;
+            const note =
+              prof && typeof prof === "object" && typeof prof.label === "string" && prof.label.trim()
+                ? prof.label.trim()
+                : String(ev.site_address ?? "").trim();
+            setStreamProgress((p) => {
+              const base: StreamProgress = p ?? {
+                enhanced_query: "",
+                job_description: job,
+                photo_analysis: null,
+                links: [],
+                stepsDone: [],
+                streamingSummary: "",
+                jurisdictionNote: "",
+              };
+              return { ...base, jurisdictionNote: note || base.jurisdictionNote };
+            });
+          } else if (ev.event === "summary_delta" && typeof ev.text === "string") {
+            setStreamProgress((p) => {
+              if (!p) {
+                return {
+                  enhanced_query: "",
+                  job_description: job,
+                  photo_analysis: null,
+                  links: [],
+                  stepsDone: [],
+                  streamingSummary: ev.text ?? "",
+                  jurisdictionNote: "",
+                };
+              }
+              return {
+                ...p,
+                streamingSummary: (p.streamingSummary ?? "") + ev.text,
+              };
+            });
+          } else if (ev.event === "step" && ev.step) {
+            const stepKey = ev.step;
+            const title = STEP_TITLE[stepKey] ?? stepKey;
+            const rows = ev.data?.results ?? [];
+            setStreamProgress((p) => {
+              if (!p) {
+                return {
+                  enhanced_query: "",
+                  job_description: job,
+                  photo_analysis: null,
+                  links: appendUrls([], rows),
+                  stepsDone: [title],
+                  streamingSummary: "",
+                  jurisdictionNote: "",
+                };
+              }
+              return {
+                ...p,
+                links: appendUrls(p.links, rows),
+                stepsDone: [...p.stepsDone, title],
+              };
+            });
+          } else if (ev.event === "complete") {
+            const ju =
+              ev.jurisdiction && typeof ev.jurisdiction === "object"
+                ? (ev.jurisdiction as JurisdictionInfo)
+                : null;
+            const city =
+              typeof ev.city === "string" && ev.city.trim() ? ev.city.trim() : ju?.city ?? null;
+            const county =
+              typeof ev.county === "string" && ev.county.trim()
+                ? ev.county.trim()
+                : ju?.county ?? null;
+            setResult({
+              zip: String(ev.zip ?? ""),
+              site_address:
+                typeof ev.site_address === "string" && ev.site_address.trim()
+                  ? ev.site_address.trim()
+                  : null,
+              city,
+              county,
+              jurisdiction: ju,
+              summary: String(ev.summary ?? ""),
+              source_urls: ev.source_urls ?? [],
+              enhanced_query: String(ev.enhanced_query ?? ""),
+              job_description: String(ev.job_description ?? ""),
+              photo_analysis: ev.photo_analysis ?? null,
+            });
+            setStreamProgress(null);
+          }
+          return true;
+        };
+
+        const drainNewlineDelimitedLines = (): boolean => {
+          for (;;) {
+            const nl = buffer.indexOf("\n");
+            if (nl < 0) {
+              break;
+            }
+            const raw = buffer.slice(0, nl);
+            buffer = buffer.slice(nl + 1);
+            if (!handleNdjsonLine(raw)) {
+              return false;
+            }
+          }
+          return true;
+        };
+
+        while (true) {
+          const { done, value } = await reader.read();
+          if (value?.byteLength) {
+            buffer += dec.decode(value, { stream: true });
+          }
+          if (!drainNewlineDelimitedLines()) {
+            return;
+          }
+          if (done) {
+            buffer += dec.decode(new Uint8Array(0), { stream: false });
+            if (!drainNewlineDelimitedLines()) {
+              return;
+            }
+            break;
+          }
+        }
+
+        const tail = buffer.trim();
+        if (tail && !handleNdjsonLine(tail)) {
+          return;
+        }
+      } catch (ex) {
+        if (ex instanceof DOMException && ex.name === "AbortError") {
+          return;
+        }
+        if (ex instanceof Error && ex.name === "AbortError") {
+          return;
+        }
+        setErr(
+          ex instanceof Error ? ex.message : "Network error — is the API running?",
+        );
+      } finally {
+        if (!signal.aborted) {
+          setLoading(false);
+        }
+        if (researchAbortRef.current === ac) {
+          researchAbortRef.current = null;
+        }
+      }
+    },
+    [formattedAddress, zip, job, limit, file, useMapsAddr],
+  );
+
+  const onAddressSelection = useCallback(
+    (sel: AddressSelection | null) => {
+      setFormattedAddress(sel?.formattedAddress ?? "");
+      setZip(sel?.zip ?? "");
+      const zs = sel?.zip?.replace(/\s/g, "") ?? "";
+      if (
+        sel?.formattedAddress?.trim() &&
+        /^\d{5}(-\d{4})?$/.test(zs) &&
+        useMapsAddr &&
+        sel
+      ) {
+        void executeResearch(sel);
+      }
+    },
+    [executeResearch, useMapsAddr],
+  );
 
   const stopMic = useCallback(() => {
     recRef.current?.stop();
