@@ -1,16 +1,21 @@
 """
-Reverse geocoding (lat/lon → U.S. ZIP) via BigDataCloud client API.
-
-@lru_cache deduplicates HTTP calls for the same rounded coordinates in-process
-(e.g. user taps "Locate" twice, or the same area is used again).
+Geocoding: reverse (lat/lon → U.S. ZIP) via BigDataCloud, and forward (U.S. address / ZIP)
+via Google Geocoding for **city / county** resolution on the research path.
 """
 import json
+import os
 import re
 import urllib.error
 import urllib.parse
 import urllib.request
 from functools import lru_cache
-from typing import Any, Optional
+from pathlib import Path
+from typing import Any, List, Optional, Tuple
+
+from dotenv import load_dotenv
+
+_ROOT = Path(__file__).resolve().parent.parent
+load_dotenv(_ROOT / ".env")
 
 _RE_ZIP5 = re.compile(r"^(\d{5})")
 
@@ -86,3 +91,96 @@ def us_zip_from_lat_lon(lat: float, lon: float) -> str:
         ) from e
     except Exception as e:  # noqa: BLE001 — surface as 400, do not crash the app
         raise ValueError("Could not look up a ZIP for this area. Type your ZIP manually.") from e
+
+
+def require_google_maps_key() -> str:
+    """Server-side key for Google Geocoding (city / county from formatted address or ZIP)."""
+    key = (os.environ.get("GOOGLE_MAPS_API_KEY") or "").strip()
+    if not key:
+        raise ValueError(
+            "GOOGLE_MAPS_API_KEY is missing. Set it in .env so addresses can be resolved to city and county."
+        )
+    return key
+
+
+def _google_geocode_get(payload: dict[str, Any]) -> dict[str, Any]:
+    q = urllib.parse.urlencode(payload, quote_via=urllib.parse.quote)
+    url = f"https://maps.googleapis.com/maps/api/geocode/json?{q}"
+    req = urllib.request.Request(
+        url,
+        headers={"Accept": "application/json", "User-Agent": "RegGuard/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            if resp.status != 200:
+                raise ValueError("Google Geocoding HTTP error.")
+            return json.load(resp)
+    except urllib.error.HTTPError as e:
+        raise ValueError(f"Google Geocoding request failed: {e.code}") from e
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as e:
+        raise ValueError("Could not reach Google Geocoding. Try again.") from e
+
+
+def google_geocode_us_address(address: str) -> Tuple[List[dict[str, Any]], str]:
+    """
+    Forward geocode a U.S. postal address string (e.g. Places formatted_address).
+
+    Returns ``(address_components, formatted_address)`` for jurisdiction classification.
+    """
+    raw = (address or "").strip()
+    if not raw:
+        raise ValueError("Address is required.")
+    key = require_google_maps_key()
+    payload = _google_geocode_get(
+        {"address": raw, "components": "country:US", "key": key},
+    )
+    status = (payload.get("status") or "").strip()
+    if status != "OK":
+        msg = payload.get("error_message") or status or "UNKNOWN"
+        raise ValueError(f"Google Geocoding error: {msg}")
+
+    results = payload.get("results") or []
+    if not results:
+        raise ValueError("Could not resolve that address. Try another selection.")
+
+    top = results[0]
+    components = top.get("address_components")
+    if not isinstance(components, list):
+        raise ValueError("Invalid Geocoding response (no address_components).")
+
+    is_us = any(
+        "country" in set(c.get("types") or []) and (c.get("short_name") or "").upper() == "US"
+        for c in components
+    )
+    if not is_us:
+        raise ValueError("Only U.S. addresses are supported.")
+
+    formatted = str(top.get("formatted_address") or raw)
+    return components, formatted
+
+
+def google_geocode_us_zip(zip5: str) -> Tuple[List[dict[str, Any]], str]:
+    """Geocode a 5-digit U.S. ZIP (centroid / area) for approximate city / county."""
+    z = "".join(ch for ch in (zip5 or "") if ch.isdigit())[:5]
+    if len(z) != 5:
+        raise ValueError("A 5-digit U.S. ZIP is required for ZIP geocoding.")
+    key = require_google_maps_key()
+    payload = _google_geocode_get(
+        {"components": f"country:US|postal_code:{z}", "key": key},
+    )
+    status = (payload.get("status") or "").strip()
+    if status != "OK":
+        msg = payload.get("error_message") or status or "UNKNOWN"
+        raise ValueError(f"Google Geocoding error: {msg}")
+
+    results = payload.get("results") or []
+    if not results:
+        raise ValueError("Could not geocode that ZIP code.")
+
+    top = results[0]
+    components = top.get("address_components")
+    if not isinstance(components, list):
+        raise ValueError("Invalid Geocoding response (no address_components).")
+
+    formatted = str(top.get("formatted_address") or f"ZIP {z}")
+    return components, formatted
