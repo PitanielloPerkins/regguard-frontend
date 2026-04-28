@@ -304,7 +304,7 @@ async def research(
                     "event": "step",
                     "step": "step_ahj_identification",
                     "data": {
-                        "query": "Identify city and county from site address / ZIP (Google Geocoding)",
+                        "query": "Identify city and county from formatted address (geocode.py → Google Geocoding API)",
                         "results": [],
                         **ahj_for_scout,
                     },
@@ -342,11 +342,14 @@ async def research(
         for chunk in _iter_summary_word_chunks(summary):
             yield _line({"event": "summary_delta", "text": chunk})
 
+        ju_complete = scout_jurisdiction or {}
         yield _line(
             {
                 "event": "complete",
                 "zip": raw["zip"],
                 "site_address": raw.get("site_address"),
+                "city": ju_complete.get("city") or None,
+                "county": ju_complete.get("county") or None,
                 "jurisdiction": raw.get("jurisdiction"),
                 "summary": summary,
                 "source_urls": source_urls,
