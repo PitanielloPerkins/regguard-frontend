@@ -455,8 +455,9 @@ def iter_universal_scout(
       - ``{"event": "step", "step": "<key>", "data": {...}}``
       - ``{"event": "complete", "raw": <full scout dict>}``
 
-    When ``site_address`` and ``jurisdiction`` are provided (from Google Places),
-    search lines steer toward **city** vs **county** building departments.
+    When ``jurisdiction`` is present (from geocoding), Universal Scout search lines name the
+    resolved **city** or **county** for permits and **building codes**. Optional
+    ``ahj_identification`` is echoed into the final payload for the memo.
     """
     z = normalize_us_zip(zip_code)
     ctx = (enhanced_context or "").strip() or None

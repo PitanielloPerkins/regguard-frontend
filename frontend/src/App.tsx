@@ -39,6 +39,7 @@ type StreamProgress = {
 };
 
 const STEP_TITLE: Record<string, string> = {
+  step_ahj_identification: "City & county",
   step_jurisdiction: "Jurisdiction",
   step_building_permits: "Permits & AHJ",
   step_building_codes: "Adopted codes",
