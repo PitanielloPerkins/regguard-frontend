@@ -1,8 +1,26 @@
 import { useCallback, useEffect, useId, useRef, useState } from "react";
 import "./App.css";
+import {
+  AddressAutocomplete,
+  mapsAutocompleteEnabled,
+  type AddressSelection,
+} from "./AddressAutocomplete";
+
+type JurisdictionInfo = {
+  mode?: string;
+  label?: string;
+  city?: string;
+  county?: string;
+  state?: string;
+  zip?: string;
+  street_line?: string;
+  formatted_address?: string;
+};
 
 type ResearchJson = {
   zip: string;
+  site_address?: string | null;
+  jurisdiction?: JurisdictionInfo | null;
   summary: string;
   source_urls: string[];
   enhanced_query: string;
@@ -17,6 +35,7 @@ type StreamProgress = {
   links: string[];
   stepsDone: string[];
   streamingSummary: string;
+  jurisdictionNote?: string;
 };
 
 const STEP_TITLE: Record<string, string> = {
@@ -114,7 +133,11 @@ function ResearchMemo({
         <dl className="rg-memo__meta">
           <div className="rg-memo__meta-row">
             <dt>Subject</dt>
-            <dd>Building code and permit pointers — U.S. ZIP {result.zip}</dd>
+            <dd>
+              {result.site_address?.trim()
+                ? `Building code and permit pointers — ${result.site_address.trim()} (U.S. ZIP ${result.zip})`
+                : `Building code and permit pointers — U.S. ZIP ${result.zip}`}
+            </dd>
           </div>
           <div className="rg-memo__meta-row">
             <dt>Date</dt>
@@ -251,7 +274,11 @@ function ResearchResultsSkeleton() {
 
 function App() {
   const fileInputId = useId();
+  const useMapsAddr = mapsAutocompleteEnabled();
   const [zip, setZip] = useState("");
+  const [placeId, setPlaceId] = useState<string | null>(null);
+  const [siteAddressLine, setSiteAddressLine] = useState("");
+  const [addressFieldKey, setAddressFieldKey] = useState(0);
   const [job, setJob] = useState("");
   const [limit, setLimit] = useState(5);
   const [file, setFile] = useState<File | null>(null);
@@ -299,6 +326,14 @@ function App() {
     };
   }, []);
 
+  const onAddressSelection = useCallback((sel: AddressSelection | null) => {
+    setPlaceId(sel?.placeId ?? null);
+    setSiteAddressLine(sel?.siteAddressLine ?? "");
+    if (sel?.zip) {
+      setZip(sel.zip);
+    }
+  }, []);
+
   const locateFromDevice = useCallback(() => {
     if (locatingZip) {
       return;
@@ -330,6 +365,11 @@ function App() {
           const data = (await r.json()) as { zip?: string; detail?: unknown };
           if (r.ok && data.zip) {
             setZip(data.zip);
+            if (useMapsAddr) {
+              setPlaceId(null);
+              setSiteAddressLine("");
+              setAddressFieldKey((k) => k + 1);
+            }
             showLocationToast("success", "Location detected!");
           } else {
             let msg = "Could not look up a ZIP. Try again or type your ZIP.";
@@ -368,7 +408,7 @@ function App() {
       },
       { enableHighAccuracy: false, maximumAge: 0, timeout: 10_000 },
     );
-  }, [locatingZip, showLocationToast]);
+  }, [locatingZip, showLocationToast, useMapsAddr]);
 
   const stopMic = useCallback(() => {
     recRef.current?.stop();
@@ -588,14 +628,30 @@ function App() {
     setErr(null);
     setResult(null);
     setStreamProgress(null);
+    if (useMapsAddr) {
+      if (!placeId?.trim()) {
+        setErr("Choose a U.S. street address from the suggestions (with ZIP).");
+        return;
+      }
+    }
     if (!/^\d{5}(-\d{4})?$/.test(zip.replace(/\s/g, ""))) {
-      setErr("Enter a valid U.S. ZIP (5 digits or ZIP+4).");
+      setErr(
+        useMapsAddr
+          ? "The selected address must include a U.S. ZIP. Pick the address again from suggestions."
+          : "Enter a valid U.S. ZIP (5 digits or ZIP+4).",
+      );
       return;
     }
     setLoading(true);
     try {
       const fd = new FormData();
       fd.append("zip_code", zip.replace(/\s/g, ""));
+      if (placeId?.trim()) {
+        fd.append("place_id", placeId.trim());
+      }
+      if (siteAddressLine.trim()) {
+        fd.append("site_address", siteAddressLine.trim());
+      }
       fd.append("job_description", job);
       fd.append("search_limit", String(limit));
       if (file) {
@@ -645,6 +701,9 @@ function App() {
         text?: string;
         message?: string;
         detail?: string;
+        site_address?: string | null;
+        jurisdiction?: JurisdictionInfo | null;
+        profile?: JurisdictionInfo | null;
       };
 
       const handleNdjsonLine = (rawLine: string): boolean => {
@@ -671,6 +730,7 @@ function App() {
             links: [],
             stepsDone: [],
             streamingSummary: "",
+            jurisdictionNote: "",
           });
         } else if (ev.event === "vision_delta" && typeof ev.text === "string") {
           setStreamProgress((p) => {
@@ -681,6 +741,7 @@ function App() {
               links: [],
               stepsDone: [],
               streamingSummary: "",
+              jurisdictionNote: "",
             };
             return {
               ...base,
@@ -695,7 +756,26 @@ function App() {
             links: p?.links ?? [],
             stepsDone: p?.stepsDone ?? [],
             streamingSummary: p?.streamingSummary ?? "",
+            jurisdictionNote: p?.jurisdictionNote ?? "",
           }));
+        } else if (ev.event === "jurisdiction") {
+          const prof = ev.profile;
+          const note =
+            prof && typeof prof === "object" && typeof prof.label === "string" && prof.label.trim()
+              ? prof.label.trim()
+              : String(ev.site_address ?? "").trim();
+          setStreamProgress((p) => {
+            const base: StreamProgress = p ?? {
+              enhanced_query: "",
+              job_description: job,
+              photo_analysis: null,
+              links: [],
+              stepsDone: [],
+              streamingSummary: "",
+              jurisdictionNote: "",
+            };
+            return { ...base, jurisdictionNote: note || base.jurisdictionNote };
+          });
         } else if (ev.event === "summary_delta" && typeof ev.text === "string") {
           setStreamProgress((p) => {
             if (!p) {
@@ -706,6 +786,7 @@ function App() {
                 links: [],
                 stepsDone: [],
                 streamingSummary: ev.text ?? "",
+                jurisdictionNote: "",
               };
             }
             return {
@@ -726,6 +807,7 @@ function App() {
                 links: appendUrls([], rows),
                 stepsDone: [title],
                 streamingSummary: "",
+                jurisdictionNote: "",
               };
             }
             return {
@@ -737,6 +819,14 @@ function App() {
         } else if (ev.event === "complete") {
           setResult({
             zip: String(ev.zip ?? ""),
+            site_address:
+              typeof ev.site_address === "string" && ev.site_address.trim()
+                ? ev.site_address.trim()
+                : null,
+            jurisdiction:
+              ev.jurisdiction && typeof ev.jurisdiction === "object"
+                ? (ev.jurisdiction as JurisdictionInfo)
+                : null,
             summary: String(ev.summary ?? ""),
             source_urls: ev.source_urls ?? [],
             enhanced_query: String(ev.enhanced_query ?? ""),
@@ -817,50 +907,81 @@ function App() {
         <h2>Request</h2>
         <div className="rg-row rg-grid-2">
           <div>
-            <label className="rg-label" htmlFor="zip">
-              ZIP
-            </label>
-            <div className="rg-wrap-zip">
-              <input
-                id="zip"
-                className="rg-input rg-input--has-locate"
-                value={zip}
-                onChange={(e) => setZip(e.target.value)}
-                placeholder="75001"
-                inputMode="numeric"
-                autoComplete="postal-code"
-              />
-              <button
-                type="button"
-                className={`rg-locate${locatingZip ? " locating" : ""}`}
-                onClick={locateFromDevice}
-                disabled={locatingZip}
-                title="Use my location to fill ZIP"
-                aria-label="Locate me and fill ZIP code"
-              >
-                <svg
-                  width="20"
-                  height="20"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  aria-hidden
+            {useMapsAddr ? (
+              <>
+                <span className="rg-label">Job site address</span>
+                <AddressAutocomplete
+                  key={addressFieldKey}
+                  disabled={loading}
+                  onSelection={onAddressSelection}
+                />
+                <p
+                  className="rg-memo__muted"
+                  style={{ marginTop: "0.35rem", fontSize: "0.85rem" }}
                 >
-                  <circle
-                    cx="12"
-                    cy="12"
-                    r="3"
-                    stroke="currentColor"
-                    strokeWidth="2"
+                  Select a full U.S. street address from suggestions. The API uses Google Places to
+                  steer city vs county building departments.
+                </p>
+                <label className="rg-label" htmlFor="zip" style={{ marginTop: "0.75rem", display: "block" }}>
+                  ZIP (from address)
+                </label>
+                <input
+                  id="zip"
+                  className="rg-input"
+                  value={zip}
+                  readOnly
+                  placeholder="—"
+                  aria-readonly="true"
+                />
+              </>
+            ) : (
+              <>
+                <label className="rg-label" htmlFor="zip">
+                  ZIP
+                </label>
+                <div className="rg-wrap-zip">
+                  <input
+                    id="zip"
+                    className="rg-input rg-input--has-locate"
+                    value={zip}
+                    onChange={(e) => setZip(e.target.value)}
+                    placeholder="75001"
+                    inputMode="numeric"
+                    autoComplete="postal-code"
                   />
-                  <path
-                    d="M12 2.5V6M12 18v3.5M2.5 12H6M18 12h3.5M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                  />
-                </svg>
-              </button>
-            </div>
+                  <button
+                    type="button"
+                    className={`rg-locate${locatingZip ? " locating" : ""}`}
+                    onClick={locateFromDevice}
+                    disabled={locatingZip}
+                    title="Use my location to fill ZIP"
+                    aria-label="Locate me and fill ZIP code"
+                  >
+                    <svg
+                      width="20"
+                      height="20"
+                      viewBox="0 0 24 24"
+                      fill="none"
+                      aria-hidden
+                    >
+                      <circle
+                        cx="12"
+                        cy="12"
+                        r="3"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                      />
+                      <path
+                        d="M12 2.5V6M12 18v3.5M2.5 12H6M18 12h3.5M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"
+                        stroke="currentColor"
+                        strokeWidth="2"
+                        strokeLinecap="round"
+                      />
+                    </svg>
+                  </button>
+                </div>
+              </>
+            )}
           </div>
           <div>
             <label className="rg-label" htmlFor="slim">
@@ -986,6 +1107,9 @@ function App() {
           <header className="rg-memo__header">
             <p className="rg-memo__kicker">Technical memorandum (draft)</p>
             <h2 className="rg-memo__title">Research in progress</h2>
+            {streamProgress.jurisdictionNote ? (
+              <p className="rg-memo__lead rg-memo__muted">{streamProgress.jurisdictionNote}</p>
+            ) : null}
             <p className="rg-memo__lead rg-memo__muted">
               Steps:{" "}
               {streamProgress.stepsDone.length

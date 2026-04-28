@@ -15,6 +15,7 @@ from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from geocode import us_zip_from_lat_lon
+from jurisdiction import fetch_place_profile
 from scraper import iter_universal_scout, normalize_us_zip
 from vision import iter_job_site_image_text_stream, normalize_vision_text
 
@@ -78,14 +79,31 @@ def _research_summary(
     enhanced_query: str,
 ) -> str:
     zip_str = raw.get("zip", "")
+    site = (raw.get("site_address") or "").strip()
+    ju = raw.get("jurisdiction")
+    ju_line = ""
+    if isinstance(ju, dict):
+        lab = ju.get("label")
+        if isinstance(lab, str) and lab.strip():
+            ju_line = lab.strip()
+
+    head = (
+        f"Reg Guard research for {site} (US ZIP {zip_str})."
+        if site
+        else f"Reg Guard research for US ZIP {zip_str}."
+    )
     has_ctx = (enhanced_query or "").strip() and not enhanced_query.strip().startswith("— (no")
-    lines = [
-        f"Reg Guard research for US ZIP {zip_str}.",
-        "Enhanced job context (voice, typed text, and/or photo) was used to steer"
-        f" the Firecrawl search chain: {'yes' if has_ctx else 'no (ZIP only)'}",
-        "",
-        "Workflow:",
-    ]
+    lines = [head]
+    if ju_line:
+        lines.append(f"Jurisdiction steering: {ju_line}")
+    lines.extend(
+        [
+            "Enhanced job context (voice, typed text, and/or photo) was used to steer"
+            f" the Firecrawl search chain: {'yes' if has_ctx else 'no (ZIP only)'}",
+            "",
+            "Workflow:",
+        ]
+    )
     for line in raw.get("agentic_workflow") or []:
         lines.append(f"• {line}")
     if has_ctx and len(enhanced_query) < 2000:
@@ -160,6 +178,8 @@ async def research(
     zip_code: str = Form(..., description="US ZIP (5 digits or ZIP+4)"),
     job_description: str = Form(""),
     search_limit: int = Form(5),
+    place_id: str = Form("", description="Google Places place_id from address autocomplete"),
+    site_address: str = Form("", description="Street, City, ST, ZIP — from autocomplete"),
     image: Optional[UploadFile] = File(None),
 ):
     """
@@ -168,7 +188,8 @@ async def research(
     Emits immediately to avoid proxy/client JSON timeouts, then streams Claude vision (if any),
     Firecrawl scout steps, and word chunks of the final summary.
 
-    Events include: ``open``, ``vision_delta``, ``context``, ``step``, ``summary_delta``, ``complete``.
+    Events include: ``open``, ``vision_delta``, ``context``, ``jurisdiction`` (with Places), ``step``,
+    ``summary_delta``, ``complete``.
     """
     try:
         lim = _parse_search_limit(search_limit)
@@ -183,11 +204,35 @@ async def research(
             image_meta = (image.content_type, image.filename)
 
     jd = (job_description or "").strip()
+    pid = (place_id or "").strip()
+    site_line = (site_address or "").strip()
 
-    try:
-        normalize_us_zip(zip_code)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
+    scout_jurisdiction: Optional[Dict[str, Any]] = None
+    scout_site: Optional[str] = None
+    zip_for_scout = zip_code
+
+    if pid:
+        try:
+            profile = await run_in_threadpool(fetch_place_profile, pid)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        try:
+            client_z = normalize_us_zip(zip_code)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
+        if client_z != profile.zip5:
+            raise HTTPException(
+                status_code=400,
+                detail="ZIP code must match the selected address. Pick the address again from suggestions.",
+            )
+        zip_for_scout = profile.zip5
+        scout_jurisdiction = profile.to_scout_dict()
+        scout_site = site_line or profile.formatted_address
+    else:
+        try:
+            normalize_us_zip(zip_code)
+        except ValueError as e:
+            raise HTTPException(status_code=400, detail=str(e)) from e
 
     async def ndjson_bytes():
         yield _line({"event": "open"})
@@ -226,11 +271,22 @@ async def research(
             }
         )
 
+        if scout_jurisdiction and scout_site:
+            yield _line(
+                {
+                    "event": "jurisdiction",
+                    "site_address": scout_site,
+                    "profile": scout_jurisdiction,
+                }
+            )
+
         it = iter(
             iter_universal_scout(
-                zip_code,
+                zip_for_scout,
                 search_limit=lim,
                 enhanced_context=enhanced_query,
+                site_address=scout_site,
+                jurisdiction=scout_jurisdiction,
             )
         )
         final_raw: Optional[Dict[str, Any]] = None
@@ -258,6 +314,8 @@ async def research(
             {
                 "event": "complete",
                 "zip": raw["zip"],
+                "site_address": raw.get("site_address"),
+                "jurisdiction": raw.get("jurisdiction"),
                 "summary": summary,
                 "source_urls": source_urls,
                 "enhanced_query": enhanced_query,

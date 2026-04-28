@@ -13,7 +13,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Mapping, Optional
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -34,19 +34,76 @@ SEARCH_DOMAIN_SCOPE = (
     "OR site:amlegal.com OR site:up.codes)"
 )
 
-_AGENT_JURISDICTION = (
+_AGENT_JURISDICTION_ZIP = (
     "Find which US city and county US ZIP {zip} falls under. "
     "Prefer results naming the municipality and county for permit jurisdiction."
 )
-_AGENT_PERMITS = (
+_AGENT_PERMITS_ZIP = (
     "For the US city and/or county that contains ZIP {zip}, search for: "
     "[City/County] building department, permit applications, "
     "adopted building code and local amendments, official AHJ site."
 )
-_AGENT_CODES = (
+_AGENT_CODES_ZIP = (
     "For ZIP {zip} and its local jurisdiction, find adopted building codes "
     "(e.g. IBC/IRC) and municipal or county code amendments, official sources."
 )
+
+
+def _scout_queries_for_location(
+    z: str,
+    site_address: Optional[str],
+    jurisdiction: Optional[Mapping[str, Any]],
+) -> tuple[str, str, str]:
+    """
+    Build (jurisdiction, permits, codes) search lines for Universal Scout.
+
+    When ``jurisdiction`` is present (from Google Places + heuristic), steer explicitly
+    toward **city** vs **county** building departments; otherwise keep ZIP-centric copy.
+    """
+    addr = (site_address or "").strip()
+    if not jurisdiction or not addr:
+        return (
+            f"{_AGENT_JURISDICTION_ZIP.format(zip=z)} (ZIP {z})",
+            _AGENT_PERMITS_ZIP.format(zip=z),
+            _AGENT_CODES_ZIP.format(zip=z),
+        )
+
+    mode = str(jurisdiction.get("mode") or "").strip().lower()
+    city = str(jurisdiction.get("city") or "").strip()
+    county = str(jurisdiction.get("county") or "").strip()
+    st = str(jurisdiction.get("state") or "").strip()
+
+    if mode == "county" or (not city and county):
+        county_disp = f"{county} County" if county and not county.lower().endswith("county") else county
+        juris = (
+            f"For job site {addr} in unincorporated or county-administered {county_disp}, "
+            f"{st} (ZIP {z}), confirm the **county** is the Authority Having Jurisdiction "
+            f"(AHJ) for building permits — not a city municipal building department."
+        )
+        permits = (
+            f"{county_disp} {st} building permits and inspections, development services, "
+            f"unincorporated areas, official .gov — ZIP {z}"
+        )
+        codes = (
+            f"{county_disp} {st} adopted building codes county ordinances amendments "
+            f"official source — area ZIP {z}"
+        )
+        return (juris, permits, codes)
+
+    city_disp = city or "the municipality"
+    juris = (
+        f"For job site {addr} in incorporated {city_disp}, {st} (ZIP {z}), the **city** "
+        f"municipality is typically the AHJ for building permits at this address (not the county)."
+    )
+    permits = (
+        f"{city_disp} {st} building department permits applications plan check "
+        f"official city .gov — ZIP {z}"
+    )
+    codes = (
+        f"{city_disp} {st} adopted building codes municipal amendments codified "
+        f"official — ZIP {z}"
+    )
+    return (juris, permits, codes)
 
 # Reuse cached scrapes where possible (24h).
 FIRECRAWL_MAX_AGE_MS = 86400000
@@ -315,9 +372,31 @@ def _final_scout_response(
     meta2: Dict[str, Any],
     hits3: List[Dict[str, Optional[str]]],
     meta3: Dict[str, Any],
+    *,
+    site_address: Optional[str] = None,
+    jurisdiction: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
+    addr = (site_address or "").strip()
+    ju = dict(jurisdiction) if jurisdiction else None
+    wf: List[str] = []
+    if ju and ju.get("label"):
+        wf.append(
+            f"Location — {ju['label']}. "
+            "Universal Scout search lines target the city vs county building department accordingly."
+        )
+    wf.extend(
+        [
+            "Fallback — If a scoped step returns no trusted URLs: one unscoped search (no site: filters) "
+            "with *official* and *city government landing page* to reach the locality's official entry point.",
+            "Universal Scout 1 — Jurisdiction: city/county AHJ hints (trusted hosts).",
+            "Universal Scout 2 — Permits: **city** or **county** building department (steered from address).",
+            "Universal Scout 3 — Codes: adopted codes and local amendments (official publishers).",
+        ]
+    )
     return {
         "zip": z,
+        "site_address": addr or None,
+        "jurisdiction": ju,
         "scout": {
             "mode": "discovery",
             "search_domain_scope": SEARCH_DOMAIN_SCOPE,
@@ -333,13 +412,7 @@ def _final_scout_response(
             ),
         },
         "enhanced_context_used": bool(ctx),
-        "agentic_workflow": [
-            "Fallback — If a scoped step returns no trusted URLs: one unscoped search (no site: filters) "
-            "with *official* and *city government landing page* to reach the municipality's official entry point.",
-            "Universal Scout 1 — Jurisdiction: infer city/county for the ZIP (trusted hosts).",
-            "Universal Scout 2 — Permits: building department and permit sources.",
-            "Universal Scout 3 — Codes: adopted codes and local amendments (official publishers).",
-        ],
+        "agentic_workflow": wf,
         "step_jurisdiction": _step_result_dict(hits1, meta1),
         "step_building_permits": _step_result_dict(hits2, meta2),
         "step_building_codes": _step_result_dict(hits3, meta3),
@@ -351,6 +424,8 @@ def iter_universal_scout(
     *,
     search_limit: int,
     enhanced_context: str = "",
+    site_address: Optional[str] = None,
+    jurisdiction: Optional[Mapping[str, Any]] = None,
 ):
     """
     Yield one event dict per Universal Scout step, then a terminal ``complete`` event.
@@ -358,17 +433,22 @@ def iter_universal_scout(
     Events:
       - ``{"event": "step", "step": "<key>", "data": {...}}``
       - ``{"event": "complete", "raw": <full scout dict>}``
+
+    When ``site_address`` and ``jurisdiction`` are provided (from Google Places),
+    search lines steer toward **city** vs **county** building departments.
     """
     z = normalize_us_zip(zip_code)
     ctx = (enhanced_context or "").strip() or None
     fc = _get_client()
+    addr = (site_address or "").strip() or None
+    ju: Optional[Mapping[str, Any]] = jurisdiction if jurisdiction else None
 
-    q1 = _with_context(f"{_AGENT_JURISDICTION.format(zip=z)} (ZIP {z})", ctx)
+    q1_core, q2_core, q3_core = _scout_queries_for_location(z, addr, ju)
+    q1 = _with_context(q1_core, ctx)
     hits1, meta1 = _scout_search(fc, q1, user_limit=search_limit)
     yield {"event": "step", "step": "step_jurisdiction", "data": _step_result_dict(hits1, meta1)}
     hint = _jurisdiction_spelling_hint(hits1)
 
-    q2_core = _AGENT_PERMITS.format(zip=z)
     if hint:
         q2 = _with_context(f"{q2_core} Context from web: {hint}", ctx)
     else:
@@ -376,11 +456,22 @@ def iter_universal_scout(
     hits2, meta2 = _scout_search(fc, q2, user_limit=search_limit)
     yield {"event": "step", "step": "step_building_permits", "data": _step_result_dict(hits2, meta2)}
 
-    q3 = _with_context(_AGENT_CODES.format(zip=z), ctx)
+    q3 = _with_context(q3_core, ctx)
     hits3, meta3 = _scout_search(fc, q3, user_limit=search_limit)
     yield {"event": "step", "step": "step_building_codes", "data": _step_result_dict(hits3, meta3)}
 
-    full = _final_scout_response(z, ctx, hits1, meta1, hits2, meta2, hits3, meta3)
+    full = _final_scout_response(
+        z,
+        ctx,
+        hits1,
+        meta1,
+        hits2,
+        meta2,
+        hits3,
+        meta3,
+        site_address=addr,
+        jurisdiction=ju,
+    )
     yield {"event": "complete", "raw": full}
 
 
