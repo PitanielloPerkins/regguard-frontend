@@ -73,6 +73,33 @@
   font-size: 0.95rem;
 }
 
+.rg-await-jurisdiction {
+  display: flex;
+  align-items: center;
+  gap: 0.6rem;
+  margin: 0 0 0.75rem;
+  font-size: 0.9rem;
+  color: var(--rg-muted);
+}
+
+.rg-spinner {
+  display: inline-block;
+  flex-shrink: 0;
+  width: 1.1rem;
+  height: 1.1rem;
+  border: 2px solid rgba(232, 234, 237, 0.15);
+  border-top-color: var(--rg-accent);
+  border-radius: 50%;
+  animation: rg-spin 0.7s linear infinite;
+  vertical-align: middle;
+}
+
+@keyframes rg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .rg-panel {
   background: var(--rg-surface);
   border: 1px solid var(--rg-border);
