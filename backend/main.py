@@ -1,15 +1,17 @@
 """
 Reg Guard — FastAPI application entry point.
 """
+import json
 import re
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, Iterator, List, Optional
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from geocode import us_zip_from_lat_lon
-from scraper import search_local_building_codes_by_zip
+from scraper import iter_universal_scout, normalize_us_zip
 from vision import analyze_job_site_image
 
 app = FastAPI(
@@ -97,6 +99,13 @@ def _research_summary(
     return "\n".join(lines)
 
 
+def _scout_iter_next(it: Iterator[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    try:
+        return next(it)
+    except StopIteration:
+        return None
+
+
 @app.get("/")
 def root() -> Dict[str, str]:
     return {
@@ -123,11 +132,14 @@ async def research(
     job_description: str = Form(""),
     search_limit: int = Form(5),
     image: Optional[UploadFile] = File(None),
-) -> Dict[str, Any]:
+):
     """
-    Multipart research: ZIP, optional job description, optional job-site image.
-    If an image is present, Claude 3.5 Sonnet vision (Anthropic SDK, ANTHROPIC_API_KEY) processes it;
-    results merge into the single enhanced query for Firecrawl.
+    Multipart research streamed as NDJSON (one JSON object per line).
+
+    Events:
+      - ``context`` — ``enhanced_query``, job text, photo analysis (after vision if any)
+      - ``step`` — Universal Scout partial: ``step`` key + ``data`` (URLs, query, fallbacks)
+      - ``complete`` — final ``zip``, ``summary``, ``source_urls``, same fields as legacy JSON API
     """
     try:
         lim = _parse_search_limit(search_limit)
@@ -153,29 +165,56 @@ async def research(
                     detail="Vision (Claude) request failed. Check ANTHROPIC_API_KEY and image format.",
                 ) from e
 
+    jd = (job_description or "").strip()
     enhanced_query = _build_enhanced_query(job_description, photo_analysis)
 
     try:
-        raw = await run_in_threadpool(
-            search_local_building_codes_by_zip,
-            zip_code,
-            search_limit=lim,
-            enhanced_context=enhanced_query,
-        )
+        normalize_us_zip(zip_code)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    except Exception as e:
-        raise HTTPException(
-            status_code=502,
-            detail="Firecrawl research failed. Verify FIRECRAWL_API_KEY and service status.",
-        ) from e
 
-    source_urls = _collect_source_urls(raw)
-    return {
-        "zip": raw["zip"],
-        "summary": _research_summary(raw, source_urls, enhanced_query),
-        "source_urls": source_urls,
-        "enhanced_query": enhanced_query,
-        "job_description": (job_description or "").strip(),
-        "photo_analysis": photo_analysis,
-    }
+    async def ndjson_bytes():
+        ctx_payload = {
+            "event": "context",
+            "enhanced_query": enhanced_query,
+            "job_description": jd,
+            "photo_analysis": photo_analysis,
+        }
+        yield (json.dumps(ctx_payload, ensure_ascii=False) + "\n").encode("utf-8")
+
+        it = iter(
+            iter_universal_scout(
+                zip_code,
+                search_limit=lim,
+                enhanced_context=enhanced_query,
+            )
+        )
+        while True:
+            ev = await run_in_threadpool(_scout_iter_next, it)
+            if ev is None:
+                break
+            if ev.get("event") == "complete":
+                raw = ev["raw"]
+                source_urls = _collect_source_urls(raw)
+                summary = _research_summary(raw, source_urls, enhanced_query)
+                done = {
+                    "event": "complete",
+                    "zip": raw["zip"],
+                    "summary": summary,
+                    "source_urls": source_urls,
+                    "enhanced_query": enhanced_query,
+                    "job_description": jd,
+                    "photo_analysis": photo_analysis,
+                }
+                yield (json.dumps(done, ensure_ascii=False) + "\n").encode("utf-8")
+            else:
+                yield (json.dumps(ev, ensure_ascii=False) + "\n").encode("utf-8")
+
+    return StreamingResponse(
+        ndjson_bytes(),
+        media_type="application/x-ndjson; charset=utf-8",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )

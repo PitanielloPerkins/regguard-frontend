@@ -10,6 +10,33 @@ type ResearchJson = {
   photo_analysis: string | null;
 };
 
+type StreamProgress = {
+  enhanced_query: string;
+  job_description: string;
+  photo_analysis: string | null;
+  links: string[];
+  stepsDone: string[];
+};
+
+const STEP_TITLE: Record<string, string> = {
+  step_jurisdiction: "Jurisdiction",
+  step_building_permits: "Permits & AHJ",
+  step_building_codes: "Adopted codes",
+};
+
+function appendUrls(ordered: string[], rows: { url?: string | null }[]): string[] {
+  const seen = new Set(ordered);
+  const out = [...ordered];
+  for (const row of rows) {
+    const u = row.url;
+    if (u && !seen.has(u)) {
+      seen.add(u);
+      out.push(u);
+    }
+  }
+  return out;
+}
+
 function getSpeechCtor(): (new () => SpeechRecognition) | null {
   if (typeof window === "undefined") {
     return null;
@@ -48,6 +75,7 @@ function App() {
   const [loading, setLoading] = useState(false);
   const [err, setErr] = useState<string | null>(null);
   const [result, setResult] = useState<ResearchJson | null>(null);
+  const [streamProgress, setStreamProgress] = useState<StreamProgress | null>(null);
   const [listening, setListening] = useState(false);
   const [noSpeech, setNoSpeech] = useState(false);
   const [cameraOpen, setCameraOpen] = useState(false);
@@ -374,6 +402,7 @@ function App() {
     e.preventDefault();
     setErr(null);
     setResult(null);
+    setStreamProgress(null);
     if (!/^\d{5}(-\d{4})?$/.test(zip.replace(/\s/g, ""))) {
       setErr("Enter a valid U.S. ZIP (5 digits or ZIP+4).");
       return;
@@ -388,24 +417,136 @@ function App() {
         fd.append("image", file);
       }
       const r = await fetch("/api/research", { method: "POST", body: fd });
-      const data = (await r.json()) as
-        | ResearchJson
-        | { detail?: unknown };
       if (!r.ok) {
+        const text = await r.text();
         let msg = "Request failed. Check the API and your keys.";
-        const d = "detail" in data ? data.detail : undefined;
-        if (typeof d === "string") {
-          msg = d;
-        } else if (Array.isArray(d)) {
-          msg = d
-            .map((i: { msg?: string }) => i?.msg)
-            .filter(Boolean)
-            .join(" ");
+        try {
+          const data = JSON.parse(text) as { detail?: unknown };
+          const d = data.detail;
+          if (typeof d === "string") {
+            msg = d;
+          } else if (Array.isArray(d)) {
+            msg = d
+              .map((i: { msg?: string }) => i?.msg)
+              .filter(Boolean)
+              .join(" ");
+          }
+        } catch {
+          if (text.trim()) {
+            msg = text.slice(0, 500);
+          }
         }
         setErr(msg);
         return;
       }
-      setResult(data as ResearchJson);
+      if (!r.body) {
+        setErr("No response body from server.");
+        return;
+      }
+      const reader = r.body.getReader();
+      const dec = new TextDecoder();
+      let buffer = "";
+      while (true) {
+        const { done, value } = await reader.read();
+        if (done) {
+          break;
+        }
+        buffer += dec.decode(value, { stream: true });
+        for (;;) {
+          const nl = buffer.indexOf("\n");
+          if (nl < 0) {
+            break;
+          }
+          const line = buffer.slice(0, nl).trim();
+          buffer = buffer.slice(nl + 1);
+          if (!line) {
+            continue;
+          }
+          let ev: {
+            event?: string;
+            step?: string;
+            data?: { results?: { url?: string | null }[] };
+            enhanced_query?: string;
+            job_description?: string;
+            photo_analysis?: string | null;
+            zip?: string;
+            summary?: string;
+            source_urls?: string[];
+          };
+          try {
+            ev = JSON.parse(line) as typeof ev;
+          } catch {
+            setErr("Invalid stream line from server.");
+            return;
+          }
+          if (ev.event === "context") {
+            setStreamProgress({
+              enhanced_query: String(ev.enhanced_query ?? ""),
+              job_description: String(ev.job_description ?? ""),
+              photo_analysis: ev.photo_analysis ?? null,
+              links: [],
+              stepsDone: [],
+            });
+          } else if (ev.event === "step" && ev.step) {
+            const stepKey = ev.step;
+            const title = STEP_TITLE[stepKey] ?? stepKey;
+            const rows = ev.data?.results ?? [];
+            setStreamProgress((p) => {
+              if (!p) {
+                return {
+                  enhanced_query: "",
+                  job_description: job,
+                  photo_analysis: null,
+                  links: appendUrls([], rows),
+                  stepsDone: [title],
+                };
+              }
+              return {
+                ...p,
+                links: appendUrls(p.links, rows),
+                stepsDone: [...p.stepsDone, title],
+              };
+            });
+          } else if (ev.event === "complete") {
+            setResult({
+              zip: String(ev.zip ?? ""),
+              summary: String(ev.summary ?? ""),
+              source_urls: ev.source_urls ?? [],
+              enhanced_query: String(ev.enhanced_query ?? ""),
+              job_description: String(ev.job_description ?? ""),
+              photo_analysis: ev.photo_analysis ?? null,
+            });
+            setStreamProgress(null);
+          }
+        }
+      }
+      const tail = buffer.trim();
+      if (tail) {
+        try {
+          const ev = JSON.parse(tail) as {
+            event?: string;
+            zip?: string;
+            summary?: string;
+            source_urls?: string[];
+            enhanced_query?: string;
+            job_description?: string;
+            photo_analysis?: string | null;
+          };
+          if (ev.event === "complete") {
+            setResult({
+              zip: String(ev.zip ?? ""),
+              summary: String(ev.summary ?? ""),
+              source_urls: ev.source_urls ?? [],
+              enhanced_query: String(ev.enhanced_query ?? ""),
+              job_description: String(ev.job_description ?? ""),
+              photo_analysis: ev.photo_analysis ?? null,
+            });
+            setStreamProgress(null);
+          }
+        } catch {
+          setErr("Incomplete or invalid stream from server.");
+        }
+      }
     } catch (ex) {
       setErr(
         ex instanceof Error ? ex.message : "Network error — is the API running?",
@@ -593,7 +734,49 @@ function App() {
         </button>
       </form>
 
-      {loading && <ResearchResultsSkeleton />}
+      {loading && !streamProgress && <ResearchResultsSkeleton />}
+
+      {streamProgress && (
+        <section
+          className="rg-panel rg-out rg-out--streaming"
+          aria-busy="true"
+          aria-label="Research in progress"
+        >
+          <h2>Results (updating)</h2>
+          <p className="rg-stream-status">
+            Steps completed:{" "}
+            {streamProgress.stepsDone.length
+              ? streamProgress.stepsDone.join(" → ")
+              : "starting…"}
+          </p>
+          {streamProgress.enhanced_query ? (
+            <>
+              <p className="rg-sect-title">Enhanced query (live)</p>
+              <pre>{streamProgress.enhanced_query}</pre>
+            </>
+          ) : null}
+          {streamProgress.photo_analysis ? (
+            <>
+              <p className="rg-sect-title">Photo analysis</p>
+              <pre>{streamProgress.photo_analysis}</pre>
+            </>
+          ) : null}
+          <p className="rg-sect-title">Links found so far</p>
+          {streamProgress.links.length ? (
+            <ul className="rg-links">
+              {streamProgress.links.map((u) => (
+                <li key={u}>
+                  <a href={u} target="_blank" rel="noreferrer">
+                    {u}
+                  </a>
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className="rg-skeleton-hint">Waiting for first search results…</p>
+          )}
+        </section>
+      )}
 
       {result && (
         <section className="rg-panel rg-out">

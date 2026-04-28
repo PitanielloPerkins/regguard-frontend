@@ -294,52 +294,28 @@ def _scout_search(
     return _dedupe_take(_web_hits_raw(r2), user_limit), meta
 
 
-def search_local_building_codes_by_zip(
-    zip_code: str,
-    *,
-    search_limit: int = 5,
-    enhanced_context: str = "",
+def _step_result_dict(
+    hits: List[Dict[str, Optional[str]]],
+    scout_meta: Dict[str, Any],
 ) -> Dict[str, Any]:
-    """
-    Universal Scout workflow (ZIP-centric, three passes):
+    return {
+        "query": scout_meta["primary_query"],
+        "results": hits,
+        "fallback_used": scout_meta.get("fallback_used", False),
+        "fallback_query": scout_meta.get("fallback_query"),
+    }
 
-    1. Jurisdiction hints for the ZIP (trusted domains only).
-    2. Building department / permits for that area.
-    3. Adopted codes and amendments.
 
-    Each step uses Firecrawl **search discovery** (search + per-result scrape of
-    markdown and links), scoped to trusted hosts; empty scoped steps trigger one
-    unscoped **official** fallback search oriented to the city's government landing page.
-    """
-    z = normalize_us_zip(zip_code)
-    ctx = (enhanced_context or "").strip() or None
-    fc = _get_client()
-
-    q1 = _with_context(f"{_AGENT_JURISDICTION.format(zip=z)} (ZIP {z})", ctx)
-    hits1, meta1 = _scout_search(fc, q1, user_limit=search_limit)
-    hint = _jurisdiction_spelling_hint(hits1)
-
-    q2_core = _AGENT_PERMITS.format(zip=z)
-    if hint:
-        q2 = _with_context(f"{q2_core} Context from web: {hint}", ctx)
-    else:
-        q2 = _with_context(q2_core, ctx)
-    hits2, meta2 = _scout_search(fc, q2, user_limit=search_limit)
-
-    q3 = _with_context(_AGENT_CODES.format(zip=z), ctx)
-    hits3, meta3 = _scout_search(fc, q3, user_limit=search_limit)
-
-    def _step_payload(
-        hits: List[Dict[str, Optional[str]]],
-        scout_meta: Dict[str, Any],
-    ) -> Dict[str, Any]:
-        return {
-            "query": scout_meta["primary_query"],
-            "results": hits,
-            "fallback_used": scout_meta.get("fallback_used", False),
-            "fallback_query": scout_meta.get("fallback_query"),
-        }
-
+def _final_scout_response(
+    z: str,
+    ctx: Optional[str],
+    hits1: List[Dict[str, Optional[str]]],
+    meta1: Dict[str, Any],
+    hits2: List[Dict[str, Optional[str]]],
+    meta2: Dict[str, Any],
+    hits3: List[Dict[str, Optional[str]]],
+    meta3: Dict[str, Any],
+) -> Dict[str, Any]:
     return {
         "zip": z,
         "scout": {
@@ -364,7 +340,70 @@ def search_local_building_codes_by_zip(
             "Universal Scout 2 — Permits: building department and permit sources.",
             "Universal Scout 3 — Codes: adopted codes and local amendments (official publishers).",
         ],
-        "step_jurisdiction": _step_payload(hits1, meta1),
-        "step_building_permits": _step_payload(hits2, meta2),
-        "step_building_codes": _step_payload(hits3, meta3),
+        "step_jurisdiction": _step_result_dict(hits1, meta1),
+        "step_building_permits": _step_result_dict(hits2, meta2),
+        "step_building_codes": _step_result_dict(hits3, meta3),
     }
+
+
+def iter_universal_scout(
+    zip_code: str,
+    *,
+    search_limit: int,
+    enhanced_context: str = "",
+):
+    """
+    Yield one event dict per Universal Scout step, then a terminal ``complete`` event.
+
+    Events:
+      - ``{"event": "step", "step": "<key>", "data": {...}}``
+      - ``{"event": "complete", "raw": <full scout dict>}``
+    """
+    z = normalize_us_zip(zip_code)
+    ctx = (enhanced_context or "").strip() or None
+    fc = _get_client()
+
+    q1 = _with_context(f"{_AGENT_JURISDICTION.format(zip=z)} (ZIP {z})", ctx)
+    hits1, meta1 = _scout_search(fc, q1, user_limit=search_limit)
+    yield {"event": "step", "step": "step_jurisdiction", "data": _step_result_dict(hits1, meta1)}
+    hint = _jurisdiction_spelling_hint(hits1)
+
+    q2_core = _AGENT_PERMITS.format(zip=z)
+    if hint:
+        q2 = _with_context(f"{q2_core} Context from web: {hint}", ctx)
+    else:
+        q2 = _with_context(q2_core, ctx)
+    hits2, meta2 = _scout_search(fc, q2, user_limit=search_limit)
+    yield {"event": "step", "step": "step_building_permits", "data": _step_result_dict(hits2, meta2)}
+
+    q3 = _with_context(_AGENT_CODES.format(zip=z), ctx)
+    hits3, meta3 = _scout_search(fc, q3, user_limit=search_limit)
+    yield {"event": "step", "step": "step_building_codes", "data": _step_result_dict(hits3, meta3)}
+
+    full = _final_scout_response(z, ctx, hits1, meta1, hits2, meta2, hits3, meta3)
+    yield {"event": "complete", "raw": full}
+
+
+def search_local_building_codes_by_zip(
+    zip_code: str,
+    *,
+    search_limit: int = 5,
+    enhanced_context: str = "",
+) -> Dict[str, Any]:
+    """
+    Universal Scout workflow (ZIP-centric, three passes):
+
+    1. Jurisdiction hints for the ZIP (trusted domains only).
+    2. Building department / permits for that area.
+    3. Adopted codes and amendments.
+
+    Each step uses Firecrawl **search discovery** (search + per-result scrape of
+    markdown and links), scoped to trusted hosts; empty scoped steps trigger one
+    unscoped **official** fallback search oriented to the city's government landing page.
+    """
+    for ev in iter_universal_scout(
+        zip_code, search_limit=search_limit, enhanced_context=enhanced_context
+    ):
+        if ev.get("event") == "complete":
+            return ev["raw"]
+    raise RuntimeError("Universal Scout completed without a terminal event")
