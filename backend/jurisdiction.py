@@ -48,10 +48,6 @@ class JurisdictionProfile:
         }
 
 
-def _require_google_maps_key() -> str:
-    return require_google_maps_key()
-
-
 def _first_long(components: List[Dict[str, Any]], *types: str) -> str:
     want = set(types)
     for c in components:
@@ -139,7 +135,7 @@ def fetch_place_profile(place_id: str) -> JurisdictionProfile:
     pid = (place_id or "").strip()
     if not pid:
         raise ValueError("place_id is required.")
-    key = _require_google_maps_key()
+    key = require_google_maps_key()
     fields = "address_components,formatted_address"
     q = urllib.parse.urlencode(
         {"place_id": pid, "fields": fields, "key": key},
