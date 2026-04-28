@@ -14,6 +14,7 @@ export default defineConfig({
   plugins: [react()],
   server: {
     port: 5173,
+    strictPort: true,
     fs: {
       allow: [regGuardRoot, __dirname],
     },
