@@ -1050,3 +1050,8 @@
     color: rgba(15, 39, 68, 0.04) !important;
     border-color: rgba(15, 39, 68, 0.05) !important;
   }
+
+  .rg-cm-table a {
+    color: #0f2744 !important;
+  }
+}
