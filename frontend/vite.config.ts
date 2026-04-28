@@ -1,10 +1,9 @@
-/// <reference types="vite/client" />
 import { dirname, resolve } from "node:path";
 import { fileURLToPath } from "node:url";
 import { defineConfig } from "vite";
 import react from "@vitejs/plugin-react";
 
-// reg-guard/frontend — this file lives under the `reg-guard` project root
+/** This file sits under `reg-guard/frontend`; workspace root is one level up */
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const regGuardRoot = resolve(__dirname, "..");
 
