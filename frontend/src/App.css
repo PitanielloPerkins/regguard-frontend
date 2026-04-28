@@ -755,7 +755,7 @@
 
 .rg-memo__header {
   padding: 1.5rem 1.75rem 1.25rem;
-  background: linear-gradient(180deg, var(--memo-gray-bg) 0%, var(--memo-white) 100%);
+  background: linear-gradient(180deg, #e9edf2 0%, var(--memo-white) 65%);
   border-bottom: 1px solid var(--memo-gray-line);
 }
 
