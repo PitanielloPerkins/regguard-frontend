@@ -1,9 +1,13 @@
 """
 Reg Guard — FastAPI application entry point.
 """
+from __future__ import annotations
+
 import json
 import re
-from typing import Any, Dict, Iterator, List, Optional
+import threading
+from queue import Queue
+from typing import Any, Dict, Iterator, List, Optional, Tuple, cast
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
@@ -12,7 +16,7 @@ from starlette.concurrency import run_in_threadpool
 
 from geocode import us_zip_from_lat_lon
 from scraper import iter_universal_scout, normalize_us_zip
-from vision import analyze_job_site_image
+from vision import iter_job_site_image_text_stream, normalize_vision_text
 
 app = FastAPI(
     title="Reg Guard",
@@ -106,6 +110,31 @@ def _scout_iter_next(it: Iterator[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
         return None
 
 
+def _iter_summary_word_chunks(text: str) -> Iterator[str]:
+    """Yield text in word-sized pieces (including trailing whitespace) for client typewriter UI."""
+    for m in re.finditer(r"\S+\s*", text or "", flags=re.MULTILINE):
+        yield m.group(0)
+
+
+def _vision_queue_producer(
+    q: Queue,
+    image_bytes: bytes,
+    content_type: Optional[str],
+    filename: Optional[str],
+) -> None:
+    try:
+        for fragment in iter_job_site_image_text_stream(image_bytes, content_type, filename):
+            if fragment:
+                q.put(("delta", fragment))
+        q.put(("done", None))
+    except Exception as e:
+        q.put(("error", e))
+
+
+def _line(obj: Dict[str, Any]) -> bytes:
+    return (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+
+
 @app.get("/")
 def root() -> Dict[str, str]:
     return {
@@ -136,37 +165,24 @@ async def research(
     """
     Multipart research streamed as NDJSON (one JSON object per line).
 
-    Events:
-      - ``context`` — ``enhanced_query``, job text, photo analysis (after vision if any)
-      - ``step`` — Universal Scout partial: ``step`` key + ``data`` (URLs, query, fallbacks)
-      - ``complete`` — final ``zip``, ``summary``, ``source_urls``, same fields as legacy JSON API
+    Emits immediately to avoid proxy/client JSON timeouts, then streams Claude vision (if any),
+    Firecrawl scout steps, and word chunks of the final summary.
+
+    Events include: ``open``, ``vision_delta``, ``context``, ``step``, ``summary_delta``, ``complete``.
     """
     try:
         lim = _parse_search_limit(search_limit)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
 
-    photo_analysis: Optional[str] = None
+    image_bytes: Optional[bytes] = None
+    image_meta: Tuple[Optional[str], Optional[str]] = (None, None)
     if image is not None and (image.filename or "").strip():
-        data = await image.read()
-        if data:
-            try:
-                photo_analysis = await run_in_threadpool(
-                    analyze_job_site_image,
-                    data,
-                    image.content_type,
-                    image.filename,
-                )
-            except ValueError as e:
-                raise HTTPException(status_code=400, detail=str(e)) from e
-            except Exception as e:
-                raise HTTPException(
-                    status_code=502,
-                    detail="Vision (Claude) request failed. Check ANTHROPIC_API_KEY and image format.",
-                ) from e
+        image_bytes = await image.read()
+        if image_bytes:
+            image_meta = (image.content_type, image.filename)
 
     jd = (job_description or "").strip()
-    enhanced_query = _build_enhanced_query(job_description, photo_analysis)
 
     try:
         normalize_us_zip(zip_code)
@@ -174,13 +190,41 @@ async def research(
         raise HTTPException(status_code=400, detail=str(e)) from e
 
     async def ndjson_bytes():
-        ctx_payload = {
-            "event": "context",
-            "enhanced_query": enhanced_query,
-            "job_description": jd,
-            "photo_analysis": photo_analysis,
-        }
-        yield (json.dumps(ctx_payload, ensure_ascii=False) + "\n").encode("utf-8")
+        yield _line({"event": "open"})
+
+        photo_analysis: Optional[str] = None
+        if image_bytes:
+            content_type, filename = image_meta
+            q: Queue = Queue()
+            thread = threading.Thread(
+                target=_vision_queue_producer,
+                args=(q, image_bytes, content_type, filename),
+                daemon=True,
+            )
+            thread.start()
+            raw_parts: List[str] = []
+            while True:
+                kind, val = await run_in_threadpool(q.get)
+                if kind == "delta":
+                    raw_parts.append(cast(str, val))
+                    yield _line({"event": "vision_delta", "text": cast(str, val)})
+                elif kind == "done":
+                    break
+                else:
+                    err = cast(Exception, val)
+                    yield _line({"event": "error", "message": str(err)})
+                    return
+            photo_analysis = normalize_vision_text("".join(raw_parts))
+
+        enhanced_query = _build_enhanced_query(job_description, photo_analysis)
+        yield _line(
+            {
+                "event": "context",
+                "enhanced_query": enhanced_query,
+                "job_description": jd,
+                "photo_analysis": photo_analysis,
+            }
+        )
 
         it = iter(
             iter_universal_scout(
@@ -189,26 +233,38 @@ async def research(
                 enhanced_context=enhanced_query,
             )
         )
+        final_raw: Optional[Dict[str, Any]] = None
         while True:
             ev = await run_in_threadpool(_scout_iter_next, it)
             if ev is None:
                 break
             if ev.get("event") == "complete":
-                raw = ev["raw"]
-                source_urls = _collect_source_urls(raw)
-                summary = _research_summary(raw, source_urls, enhanced_query)
-                done = {
-                    "event": "complete",
-                    "zip": raw["zip"],
-                    "summary": summary,
-                    "source_urls": source_urls,
-                    "enhanced_query": enhanced_query,
-                    "job_description": jd,
-                    "photo_analysis": photo_analysis,
-                }
-                yield (json.dumps(done, ensure_ascii=False) + "\n").encode("utf-8")
-            else:
-                yield (json.dumps(ev, ensure_ascii=False) + "\n").encode("utf-8")
+                final_raw = ev["raw"]
+                break
+            yield _line(ev)
+
+        if final_raw is None:
+            yield _line({"event": "error", "message": "Research finished without complete payload."})
+            return
+
+        raw = final_raw
+        source_urls = _collect_source_urls(raw)
+        summary = _research_summary(raw, source_urls, enhanced_query)
+
+        for chunk in _iter_summary_word_chunks(summary):
+            yield _line({"event": "summary_delta", "text": chunk})
+
+        yield _line(
+            {
+                "event": "complete",
+                "zip": raw["zip"],
+                "summary": summary,
+                "source_urls": source_urls,
+                "enhanced_query": enhanced_query,
+                "job_description": jd,
+                "photo_analysis": photo_analysis,
+            }
+        )
 
     return StreamingResponse(
         ndjson_bytes(),

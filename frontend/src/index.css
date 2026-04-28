@@ -1,13 +1,14 @@
 :root {
-  --rg-bg: #0a0b0d;
-  --rg-surface: #12141a;
-  --rg-surface-2: #1a1d26;
-  --rg-border: #2d3340;
-  --rg-text: #e8eaed;
-  --rg-muted: #8b9199;
-  --rg-accent: #f59e0b;
-  --rg-accent-dim: #b45309;
-  --rg-danger: #ef4444;
+  /* Construction management — light shell, navy accents */
+  --rg-bg: #f0f2f5;
+  --rg-surface: #ffffff;
+  --rg-surface-2: #f8fafc;
+  --rg-border: #e2e8f0;
+  --rg-text: #1e293b;
+  --rg-muted: #64748b;
+  --rg-accent: #1e3a5f;
+  --rg-accent-dim: #2d4a6f;
+  --rg-danger: #b91c1c;
   --font-ui: "DM Sans", system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
 }
@@ -24,11 +25,7 @@ body {
   line-height: 1.5;
   color: var(--rg-text);
   background: var(--rg-bg);
-  background-image: radial-gradient(
-    ellipse 120% 80% at 20% 0%,
-    rgba(245, 158, 11, 0.08) 0%,
-    transparent 50%
-  );
+  background-image: linear-gradient(180deg, #ffffff 0%, var(--rg-bg) 48%, #e8ecf1 100%);
 }
 
 #root {
@@ -41,5 +38,5 @@ a {
   color: var(--rg-accent);
 }
 a:hover {
-  color: #fbbf24;
+  color: var(--rg-accent-dim);
 }

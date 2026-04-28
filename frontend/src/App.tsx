@@ -16,6 +16,7 @@ type StreamProgress = {
   photo_analysis: string | null;
   links: string[];
   stepsDone: string[];
+  streamingSummary: string;
 };
 
 const STEP_TITLE: Record<string, string> = {
@@ -73,6 +74,21 @@ function formatMemoDate(): string {
   });
 }
 
+function codeSourceCategory(url: string): string {
+  try {
+    const h = new URL(url).hostname.toLowerCase();
+    if (h.endsWith(".gov")) return "Government / AHJ";
+    if (h.includes("municode")) return "Municode";
+    if (h.includes("iccsafe")) return "ICC / Code Council";
+    if (h.includes("amlegal")) return "American Legal Publishing";
+    if (h.includes("up.codes")) return "UpCodes";
+    if (h.endsWith(".org")) return ".org registry";
+    return "Reference source";
+  } catch {
+    return "—";
+  }
+}
+
 function ResearchMemo({
   result,
   memoRef,
@@ -94,7 +110,7 @@ function ResearchMemo({
     <article ref={memoRef} className="rg-memo">
       <header className="rg-memo__header">
         <p className="rg-memo__kicker">Technical memorandum</p>
-        <h2 className="rg-memo__title">Regulatory research summary</h2>
+        <h2 className="rg-memo__title">Compliance register — code & permit references</h2>
         <dl className="rg-memo__meta">
           <div className="rg-memo__meta-row">
             <dt>Subject</dt>
@@ -120,15 +136,30 @@ function ResearchMemo({
             them in the field.
           </p>
           {result.source_urls.length ? (
-            <ol className="rg-memo__codes">
-              {result.source_urls.map((u) => (
-                <li key={u}>
-                  <a href={u} target="_blank" rel="noreferrer">
-                    {u}
-                  </a>
-                </li>
-              ))}
-            </ol>
+            <div className="rg-cm-table-wrap">
+              <table className="rg-cm-table">
+                <thead>
+                  <tr>
+                    <th className="rg-cm-table__ref">Ref</th>
+                    <th className="rg-cm-table__src">Source</th>
+                    <th>URL</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {result.source_urls.map((u, i) => (
+                    <tr key={u}>
+                      <td className="rg-cm-table__ref">{i + 1}</td>
+                      <td className="rg-cm-table__src">{codeSourceCategory(u)}</td>
+                      <td>
+                        <a href={u} target="_blank" rel="noreferrer">
+                          {u}
+                        </a>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
           ) : (
             <p className="rg-memo__muted">
               No source URLs were returned for this run. Try a higher results limit or refine job
@@ -611,6 +642,9 @@ function App() {
         zip?: string;
         summary?: string;
         source_urls?: string[];
+        text?: string;
+        message?: string;
+        detail?: string;
       };
 
       const handleNdjsonLine = (rawLine: string): boolean => {
@@ -625,14 +659,60 @@ function App() {
           setErr("Invalid stream line from server.");
           return false;
         }
-        if (ev.event === "context") {
+        if (ev.event === "error") {
+          setErr(typeof ev.message === "string" ? ev.message : String(ev.detail ?? "Stream error."));
+          return false;
+        }
+        if (ev.event === "open") {
+          setStreamProgress({
+            enhanced_query: "",
+            job_description: job,
+            photo_analysis: null,
+            links: [],
+            stepsDone: [],
+            streamingSummary: "",
+          });
+        } else if (ev.event === "vision_delta" && typeof ev.text === "string") {
+          setStreamProgress((p) => {
+            const base: StreamProgress = p ?? {
+              enhanced_query: "",
+              job_description: job,
+              photo_analysis: "",
+              links: [],
+              stepsDone: [],
+              streamingSummary: "",
+            };
+            return {
+              ...base,
+              photo_analysis: (base.photo_analysis ?? "") + ev.text,
+            };
+          });
+        } else if (ev.event === "context") {
           setStreamProgress((p) => ({
             enhanced_query: String(ev.enhanced_query ?? ""),
             job_description: String(ev.job_description ?? ""),
             photo_analysis: ev.photo_analysis ?? null,
             links: p?.links ?? [],
             stepsDone: p?.stepsDone ?? [],
+            streamingSummary: p?.streamingSummary ?? "",
           }));
+        } else if (ev.event === "summary_delta" && typeof ev.text === "string") {
+          setStreamProgress((p) => {
+            if (!p) {
+              return {
+                enhanced_query: "",
+                job_description: job,
+                photo_analysis: null,
+                links: [],
+                stepsDone: [],
+                streamingSummary: ev.text ?? "",
+              };
+            }
+            return {
+              ...p,
+              streamingSummary: (p.streamingSummary ?? "") + ev.text,
+            };
+          });
         } else if (ev.event === "step" && ev.step) {
           const stepKey = ev.step;
           const title = STEP_TITLE[stepKey] ?? stepKey;
@@ -645,6 +725,7 @@ function App() {
                 photo_analysis: null,
                 links: appendUrls([], rows),
                 stepsDone: [title],
+                streamingSummary: "",
               };
             }
             return {
@@ -729,7 +810,7 @@ function App() {
       )}
       <header className="rg-hero rg-no-print">
         <h1>Reg Guard</h1>
-        <p>Agentic compliance research — jobsite voice, photo, and code links</p>
+        <p>Construction compliance desk — voice, photo, and verified code references</p>
       </header>
 
       <form onSubmit={submit} className="rg-panel rg-no-print" autoComplete="off">
@@ -916,29 +997,62 @@ function App() {
             <section className="rg-memo__section">
               <h3 className="rg-memo__section-head">Applicable Code Sections</h3>
               {streamProgress.links.length ? (
-                <ol className="rg-memo__codes">
-                  {streamProgress.links.map((u) => (
-                    <li key={u}>
-                      <a href={u} target="_blank" rel="noreferrer">
-                        {u}
-                      </a>
-                    </li>
-                  ))}
-                </ol>
+                <div className="rg-cm-table-wrap">
+                  <table className="rg-cm-table">
+                    <thead>
+                      <tr>
+                        <th className="rg-cm-table__ref">Ref</th>
+                        <th className="rg-cm-table__src">Source</th>
+                        <th>URL</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {streamProgress.links.map((u, i) => (
+                        <tr key={u}>
+                          <td className="rg-cm-table__ref">{i + 1}</td>
+                          <td className="rg-cm-table__src">{codeSourceCategory(u)}</td>
+                          <td>
+                            <a href={u} target="_blank" rel="noreferrer">
+                              {u}
+                            </a>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
               ) : (
                 <p className="rg-memo__muted">Collecting official links…</p>
               )}
             </section>
-            {streamProgress.enhanced_query ? (
-              <section className="rg-memo__section">
-                <h3 className="rg-memo__section-head">Key Requirements</h3>
+            <section className="rg-memo__section">
+              <h3 className="rg-memo__section-head">Key Requirements</h3>
+              {streamProgress.streamingSummary ? (
+                <pre className="rg-memo__pre rg-memo__pre--sm rg-memo__typewriter">
+                  {streamProgress.streamingSummary}
+                  <span className="rg-stream-caret" aria-hidden>
+                    ▌
+                  </span>
+                </pre>
+              ) : streamProgress.enhanced_query ? (
                 <pre className="rg-memo__pre rg-memo__pre--sm">{streamProgress.enhanced_query}</pre>
-              </section>
-            ) : null}
-            {streamProgress.photo_analysis ? (
+              ) : (
+                <p className="rg-memo__muted">Awaiting research narrative…</p>
+              )}
+            </section>
+            {file || streamProgress.photo_analysis ? (
               <section className="rg-memo__section">
-                <h3 className="rg-memo__section-head">Pro-Tips</h3>
-                <pre className="rg-memo__pre rg-memo__pre--sm">{streamProgress.photo_analysis}</pre>
+                <h3 className="rg-memo__section-head">AI site observation</h3>
+                {streamProgress.photo_analysis ? (
+                  <pre className="rg-memo__pre rg-memo__pre--sm rg-memo__typewriter">
+                    {streamProgress.photo_analysis}
+                    <span className="rg-stream-caret" aria-hidden>
+                      ▌
+                    </span>
+                  </pre>
+                ) : (
+                  <p className="rg-memo__muted">Streaming Claude vision analysis…</p>
+                )}
               </section>
             ) : null}
           </div>

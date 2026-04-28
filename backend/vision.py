@@ -5,7 +5,7 @@ import base64
 import os
 import re
 from pathlib import Path
-from typing import Optional
+from typing import Iterator, Optional
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
@@ -53,10 +53,22 @@ def _normalize_media_type(content_type: Optional[str], filename: Optional[str]) 
     return "image/jpeg"
 
 
-def analyze_job_site_image(image_bytes: bytes, content_type: Optional[str], filename: Optional[str] = None) -> str:
+def normalize_vision_text(raw: str) -> str:
+    """Normalize concatenated stream text to the same shape as a non-streaming response."""
+    out = re.sub(r"[\n\r]{2,}", "\n", (raw or "").strip())
+    if not out:
+        return "• (No text returned from vision model; try a clearer photo.)"
+    return out
+
+
+def iter_job_site_image_text_stream(
+    image_bytes: bytes,
+    content_type: Optional[str],
+    filename: Optional[str] = None,
+) -> Iterator[str]:
     """
-    Return a text summary of the photo (equipment, site context) using Claude vision
-    (default model: claude-3-5-sonnet-latest via the Anthropic Messages API).
+    Yield incremental text fragments from Claude vision (Anthropic message stream).
+    Caller should join and pass ``normalize_vision_text`` for the final stored string.
     """
     if not image_bytes:
         raise ValueError("Empty image data.")
@@ -70,7 +82,7 @@ def analyze_job_site_image(image_bytes: bytes, content_type: Optional[str], file
     media_type = _normalize_media_type(content_type, filename)
     b64 = base64.standard_b64encode(image_bytes).decode("ascii")
     try:
-        msg = client.messages.create(
+        with client.messages.stream(
             model=_vision_model(),
             max_tokens=800,
             messages=[
@@ -89,21 +101,23 @@ def analyze_job_site_image(image_bytes: bytes, content_type: Optional[str], file
                     ],
                 }
             ],
-        )
+        ) as stream:
+            for text in stream.text_stream:
+                if text:
+                    yield text
     except Exception as err:
         raise ValueError(
             f"Claude vision request failed: {err!s}" if str(err) else "Claude vision request failed"
         ) from err
 
-    parts: list[str] = []
-    for block in msg.content or []:
-        t = getattr(block, "type", None) or (block.get("type") if isinstance(block, dict) else None)
-        if t == "text":
-            tx = getattr(block, "text", None) or (block.get("text") if isinstance(block, dict) else None)
-            if tx:
-                parts.append(str(tx).strip())
-    out = "\n".join(p for p in parts if p)
-    out = re.sub(r"[\n\r]{2,}", "\n", out).strip()
-    if not out:
-        return "• (No text returned from vision model; try a clearer photo.)"
-    return out
+
+def analyze_job_site_image(
+    image_bytes: bytes,
+    content_type: Optional[str],
+    filename: Optional[str] = None,
+) -> str:
+    """
+    Return a text summary of the photo (equipment, site context) using Claude vision
+    (default model: claude-3-5-sonnet-latest via the Anthropic Messages API).
+    """
+    return normalize_vision_text("".join(iter_job_site_image_text_stream(image_bytes, content_type, filename)))
