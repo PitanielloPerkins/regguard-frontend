@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from geocode import us_zip_from_lat_lon
-from jurisdiction import geocode_profile_from_address, geocode_profile_from_zip
+from jurisdiction import JurisdictionProfile, geocode_profile_from_address
 from scraper import iter_universal_scout, normalize_us_zip
 from vision import iter_job_site_image_text_stream, normalize_vision_text
 
@@ -189,13 +189,13 @@ def geocode_zip(latitude: float, longitude: float) -> Dict[str, str]:
 async def research(
     zip_code: str = Form(
         "",
-        description="ZIP when using ZIP-only mode, or to verify autocomplete selection",
+        description="5-digit ZIP from address selection (cross-check with geocode.py)",
     ),
     job_description: str = Form(""),
     search_limit: int = Form(5),
     site_address: str = Form(
         "",
-        description="Google Places formatted_address — geocoded for jurisdiction when set",
+        description="Google Places formatted_address — city/county via geocode.py",
     ),
     image: Optional[UploadFile] = File(None),
 ):
@@ -224,46 +224,31 @@ async def research(
     jd = (job_description or "").strip()
     site_line = (site_address or "").strip()
 
-    scout_jurisdiction: Optional[Dict[str, Any]] = None
-    scout_site: Optional[str] = None
-    zip_for_scout: str = ""
+    if not site_line:
+        raise HTTPException(
+            status_code=400,
+            detail="Select a U.S. job site address from the address search field.",
+        )
 
-    if site_line:
+    profile: JurisdictionProfile
+    try:
+        profile = await run_in_threadpool(geocode_profile_from_address, site_line)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+    if (zip_code or "").strip():
         try:
-            profile = await run_in_threadpool(geocode_profile_from_address, site_line)
+            client_z = normalize_us_zip(zip_code)
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
-        if (zip_code or "").strip():
-            try:
-                client_z = normalize_us_zip(zip_code)
-            except ValueError as e:
-                raise HTTPException(status_code=400, detail=str(e)) from e
-            if client_z != profile.zip5:
-                raise HTTPException(
-                    status_code=400,
-                    detail="ZIP does not match the selected address. Pick the address again from suggestions.",
-                )
-        zip_for_scout = profile.zip5
-        scout_jurisdiction = profile.to_scout_dict()
-        scout_site = profile.formatted_address or site_line
-    else:
-        if not (zip_code or "").strip():
+        if client_z != profile.zip5:
             raise HTTPException(
                 status_code=400,
-                detail="Enter a street address from suggestions, or a U.S. ZIP code.",
+                detail="ZIP does not match the selected address. Pick the address again from suggestions.",
             )
-        try:
-            zip_for_scout = normalize_us_zip(zip_code)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-
-    if scout_jurisdiction is None and zip_for_scout:
-        try:
-            prof = await run_in_threadpool(geocode_profile_from_zip, zip_for_scout)
-            scout_jurisdiction = prof.to_scout_dict()
-            scout_site = (scout_site or "").strip() or prof.formatted_address or f"ZIP {zip_for_scout}"
-        except ValueError:
-            pass
+    zip_for_scout = profile.zip5
+    scout_jurisdiction = profile.to_scout_dict()
+    scout_site = profile.formatted_address or site_line
 
     async def ndjson_bytes():
         yield _line({"event": "open"})
