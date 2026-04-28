@@ -947,7 +947,7 @@ function App() {
 
       {cameraOpen && (
         <div
-          className="rg-modal-backdrop"
+          className="rg-modal-backdrop rg-no-print"
           role="presentation"
           onClick={closeCamera}
         >
