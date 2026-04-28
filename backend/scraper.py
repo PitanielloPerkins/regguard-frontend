@@ -221,10 +221,17 @@ def _scout_api_limit(user_limit: int) -> int:
 
 
 def _fallback_official_query(base: str) -> str:
-    """Unscoped follow-up query: require the word *official* (no `site:` restrictions)."""
+    """
+    Unscoped follow-up (no `site:`): bias toward the municipality's own official entry point.
+
+    Ensures the keyword *official* and phrases that steer SERP to the city's government
+    landing page (.gov or official portal), not blogs or listicles.
+    """
     b = (base or "").strip()
     if not re.search(r"\bofficial\b", b, re.IGNORECASE):
         b = f"{b} official".strip()
+    if not re.search(r"\blanding\s+page\b", b, re.IGNORECASE):
+        b = f"{b} city government landing page".strip()
     return b
 
 
@@ -254,7 +261,8 @@ def _scout_search(
     """
     Run Universal Scout: scoped discovery search + trusted-host filter.
     If that yields zero rows, run one fallback search **without** domain operators,
-    steering with the keyword *official*, and return unfiltered web hits (deduped).
+    adding *official* (if absent) and *city government landing page* so the SERP targets
+    the locality's official municipal entry page; return unfiltered web hits (deduped).
     """
     api_limit = _scout_api_limit(user_limit)
     primary_q = _append_scope(query)
@@ -301,7 +309,7 @@ def search_local_building_codes_by_zip(
 
     Each step uses Firecrawl **search discovery** (search + per-result scrape of
     markdown and links), scoped to trusted hosts; empty scoped steps trigger one
-    unscoped **official** fallback search.
+    unscoped **official** fallback search oriented to the city's government landing page.
     """
     z = normalize_us_zip(zip_code)
     ctx = (enhanced_context or "").strip() or None
@@ -342,12 +350,16 @@ def search_local_building_codes_by_zip(
             ),
             "scrape_formats": ["markdown", "links"],
             "fallback": (
-                "If a scoped step returns zero trusted URLs, one extra search runs without "
-                "site: filters, adding the keyword *official* when missing."
+                "If a scoped step returns zero trusted URLs, Universal Scout runs one unscoped "
+                "search: it keeps the same research intent, ensures the word *official*, and adds "
+                "*city government landing page* to surface the municipality's official site entry "
+                "(no site: domain filters)."
             ),
         },
         "enhanced_context_used": bool(ctx),
         "agentic_workflow": [
+            "Fallback — If a scoped step returns no trusted URLs: one unscoped search (no site: filters) "
+            "with *official* and *city government landing page* to reach the municipality's official entry point.",
             "Universal Scout 1 — Jurisdiction: infer city/county for the ZIP (trusted hosts).",
             "Universal Scout 2 — Permits: building department and permit sources.",
             "Universal Scout 3 — Codes: adopted codes and local amendments (official publishers).",
