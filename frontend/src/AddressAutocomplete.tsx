@@ -144,7 +144,7 @@ export function AddressAutocomplete({ disabled, onSelection }: Props) {
       disabled={disabled || !mapsReady}
       placeholder={mapsReady ? "Search street address (Google Places)…" : "Loading Maps…"}
       autoComplete="off"
-      aria-describedby="job-site-address-label"
+      aria-labelledby="job-site-address-label"
     />
   );
 }
