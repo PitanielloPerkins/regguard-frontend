@@ -5,7 +5,8 @@ Discovery mode here means the Firecrawl `/search` flow that returns SERP hits an
 via `scrapeOptions`, fetches each page (markdown + outbound links) in one call—
 the “discover URLs, then extract content” pattern from Firecrawl’s search API.
 
-Results are steered to official-style hosts: `.gov`, `.org`, Municode, and ICC / ICCSAFE.
+Results are steered to official-style hosts: `.gov`, `.org`, Municode, ICC / ICCSAFE,
+American Legal Publishing (amlegal.com), and UpCodes (up.codes).
 """
 from __future__ import annotations
 
@@ -27,9 +28,10 @@ load_dotenv(_ROOT / ".env")
 # -----------------------------------------------------------------------------
 
 # Firecrawl supports common search operators; this OR-chain biases SERP toward
-# government, broad non-profit TLD, and the two major US code publishers.
+# government, broad non-profit TLD, major code publishers, and common codified-law hosts.
 SEARCH_DOMAIN_SCOPE = (
-    "(site:gov OR site:org OR site:municode.com OR site:iccsafe.org)"
+    "(site:gov OR site:org OR site:municode.com OR site:iccsafe.org "
+    "OR site:amlegal.com OR site:up.codes)"
 )
 
 _AGENT_JURISDICTION = (
@@ -88,7 +90,8 @@ def _hostname(url: str) -> str:
 
 def hostname_matches_trust_policy(host: str) -> bool:
     """
-    True if the host is intended coverage: .gov, .org, Municode, or ICC / ICCSAFE.
+    True if the host matches Universal Scout coverage: .gov, .org, Municode,
+    ICC / ICCSAFE, American Legal Publishing, or UpCodes.
 
     Post-filter is defense-in-depth alongside SEARCH_DOMAIN_SCOPE in the query string.
     """
@@ -101,6 +104,10 @@ def hostname_matches_trust_policy(host: str) -> bool:
     if "municode" in host:
         return True
     if "iccsafe" in host:
+        return True
+    if "amlegal" in host:
+        return True
+    if "up.codes" in host:
         return True
     return False
 
@@ -213,25 +220,70 @@ def _scout_api_limit(user_limit: int) -> int:
     return min(100, max(user_limit, user_limit * 4))
 
 
+def _fallback_official_query(base: str) -> str:
+    """Unscoped follow-up query: require the word *official* (no `site:` restrictions)."""
+    b = (base or "").strip()
+    if not re.search(r"\bofficial\b", b, re.IGNORECASE):
+        b = f"{b} official".strip()
+    return b
+
+
+def _dedupe_take(
+    hits: List[Dict[str, Optional[str]]],
+    limit: int,
+) -> List[Dict[str, Optional[str]]]:
+    seen: set[str] = set()
+    out: List[Dict[str, Optional[str]]] = []
+    for h in hits:
+        u = h.get("url")
+        if not u or u in seen:
+            continue
+        seen.add(u)
+        out.append(h)
+        if len(out) >= limit:
+            break
+    return out
+
+
 def _scout_search(
     fc: Firecrawl,
     query: str,
     *,
     user_limit: int,
-) -> List[Dict[str, Optional[str]]]:
+) -> tuple[List[Dict[str, Optional[str]]], Dict[str, Any]]:
     """
-    Run one Universal Scout Firecrawl search: discovery scrape options + trusted-host filter.
+    Run Universal Scout: scoped discovery search + trusted-host filter.
+    If that yields zero rows, run one fallback search **without** domain operators,
+    steering with the keyword *official*, and return unfiltered web hits (deduped).
     """
-    q = _append_scope(query)
     api_limit = _scout_api_limit(user_limit)
+    primary_q = _append_scope(query)
+    meta: Dict[str, Any] = {
+        "primary_query": primary_q,
+        "fallback_used": False,
+        "fallback_query": None,
+    }
+
     r = fc.search(
-        q,
+        primary_q,
         limit=api_limit,
         location="US",
         scrape_options=DISCOVERY_SCRAPE_OPTIONS,
     )
-    raw_hits = _web_hits_raw(r)
-    return _filter_trusted(raw_hits, user_limit)
+    trusted = _filter_trusted(_web_hits_raw(r), user_limit)
+    if trusted:
+        return trusted, meta
+
+    fb = _fallback_official_query(query)
+    meta["fallback_used"] = True
+    meta["fallback_query"] = fb
+    r2 = fc.search(
+        fb,
+        limit=api_limit,
+        location="US",
+        scrape_options=DISCOVERY_SCRAPE_OPTIONS,
+    )
+    return _dedupe_take(_web_hits_raw(r2), user_limit), meta
 
 
 def search_local_building_codes_by_zip(
@@ -248,14 +300,15 @@ def search_local_building_codes_by_zip(
     3. Adopted codes and amendments.
 
     Each step uses Firecrawl **search discovery** (search + per-result scrape of
-    markdown and links) and restricts to `.gov`, `.org`, Municode, and ICCSAFE hosts.
+    markdown and links), scoped to trusted hosts; empty scoped steps trigger one
+    unscoped **official** fallback search.
     """
     z = normalize_us_zip(zip_code)
     ctx = (enhanced_context or "").strip() or None
     fc = _get_client()
 
     q1 = _with_context(f"{_AGENT_JURISDICTION.format(zip=z)} (ZIP {z})", ctx)
-    hits1 = _scout_search(fc, q1, user_limit=search_limit)
+    hits1, meta1 = _scout_search(fc, q1, user_limit=search_limit)
     hint = _jurisdiction_spelling_hint(hits1)
 
     q2_core = _AGENT_PERMITS.format(zip=z)
@@ -263,18 +316,35 @@ def search_local_building_codes_by_zip(
         q2 = _with_context(f"{q2_core} Context from web: {hint}", ctx)
     else:
         q2 = _with_context(q2_core, ctx)
-    hits2 = _scout_search(fc, q2, user_limit=search_limit)
+    hits2, meta2 = _scout_search(fc, q2, user_limit=search_limit)
 
     q3 = _with_context(_AGENT_CODES.format(zip=z), ctx)
-    hits3 = _scout_search(fc, q3, user_limit=search_limit)
+    hits3, meta3 = _scout_search(fc, q3, user_limit=search_limit)
+
+    def _step_payload(
+        hits: List[Dict[str, Optional[str]]],
+        scout_meta: Dict[str, Any],
+    ) -> Dict[str, Any]:
+        return {
+            "query": scout_meta["primary_query"],
+            "results": hits,
+            "fallback_used": scout_meta.get("fallback_used", False),
+            "fallback_query": scout_meta.get("fallback_query"),
+        }
 
     return {
         "zip": z,
         "scout": {
             "mode": "discovery",
             "search_domain_scope": SEARCH_DOMAIN_SCOPE,
-            "trust_policy": "hostname ends with .gov or .org, or contains municode / iccsafe",
+            "trust_policy": (
+                "hostname ends with .gov or .org, or contains municode, iccsafe, amlegal, or up.codes"
+            ),
             "scrape_formats": ["markdown", "links"],
+            "fallback": (
+                "If a scoped step returns zero trusted URLs, one extra search runs without "
+                "site: filters, adding the keyword *official* when missing."
+            ),
         },
         "enhanced_context_used": bool(ctx),
         "agentic_workflow": [
@@ -282,7 +352,7 @@ def search_local_building_codes_by_zip(
             "Universal Scout 2 — Permits: building department and permit sources.",
             "Universal Scout 3 — Codes: adopted codes and local amendments (official publishers).",
         ],
-        "step_jurisdiction": {"query": _append_scope(q1), "results": hits1},
-        "step_building_permits": {"query": _append_scope(q2), "results": hits2},
-        "step_building_codes": {"query": _append_scope(q3), "results": hits3},
+        "step_jurisdiction": _step_payload(hits1, meta1),
+        "step_building_permits": _step_payload(hits2, meta2),
+        "step_building_codes": _step_payload(hits3, meta3),
     }
