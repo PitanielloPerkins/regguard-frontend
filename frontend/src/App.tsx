@@ -44,6 +44,159 @@ function getSpeechCtor(): (new () => SpeechRecognition) | null {
   return window.SpeechRecognition || window.webkitSpeechRecognition || null;
 }
 
+function parseWorkflowBullets(summary: string): string[] {
+  const out: string[] = [];
+  for (const line of summary.split(/\r?\n/)) {
+    const t = line.trim();
+    if (t.startsWith("•")) {
+      out.push(t.replace(/^•\s*/, "").trim());
+    }
+  }
+  return out;
+}
+
+function parsePhotoTipLines(photo: string | null): string[] {
+  if (!photo?.trim()) {
+    return [];
+  }
+  return photo
+    .split(/\r?\n/)
+    .map((l) => l.trim().replace(/^•\s*/, "").trim())
+    .filter(Boolean);
+}
+
+function formatMemoDate(): string {
+  return new Date().toLocaleDateString("en-US", {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function ResearchMemo({
+  result,
+  memoRef,
+}: {
+  result: ResearchJson;
+  memoRef: React.RefObject<HTMLElement | null>;
+}) {
+  const workflowBullets = parseWorkflowBullets(result.summary);
+  const narrativeLines = result.summary.split(/\r?\n/).filter((line) => !line.trim().startsWith("•"));
+  let narrative = narrativeLines.join("\n").trim();
+  if (workflowBullets.length === 0) {
+    narrative = result.summary.trim();
+  }
+  const photoTips = parsePhotoTipLines(result.photo_analysis);
+  const showAppendix =
+    result.enhanced_query.length > 2 && !result.enhanced_query.trim().startsWith("— (no");
+
+  return (
+    <article ref={memoRef} className="rg-memo">
+      <header className="rg-memo__header">
+        <p className="rg-memo__kicker">Technical memorandum</p>
+        <h2 className="rg-memo__title">Regulatory research summary</h2>
+        <dl className="rg-memo__meta">
+          <div className="rg-memo__meta-row">
+            <dt>Subject</dt>
+            <dd>Building code and permit pointers — U.S. ZIP {result.zip}</dd>
+          </div>
+          <div className="rg-memo__meta-row">
+            <dt>Date</dt>
+            <dd>{formatMemoDate()}</dd>
+          </div>
+          <div className="rg-memo__meta-row">
+            <dt>Source</dt>
+            <dd>Reg Guard research (automated; verify with AHJ)</dd>
+          </div>
+        </dl>
+      </header>
+
+      <div className="rg-memo__body">
+        <section className="rg-memo__section">
+          <h3 className="rg-memo__section-head">Applicable Code Sections</h3>
+          <p className="rg-memo__lead">
+            Official and code-library URLs surfaced for this jurisdiction. Confirm adoption,
+            edition year, and amendments with the Authority Having Jurisdiction before relying on
+            them in the field.
+          </p>
+          {result.source_urls.length ? (
+            <ol className="rg-memo__codes">
+              {result.source_urls.map((u) => (
+                <li key={u}>
+                  <a href={u} target="_blank" rel="noreferrer">
+                    {u}
+                  </a>
+                </li>
+              ))}
+            </ol>
+          ) : (
+            <p className="rg-memo__muted">
+              No source URLs were returned for this run. Try a higher results limit or refine job
+              context.
+            </p>
+          )}
+        </section>
+
+        <section className="rg-memo__section">
+          <h3 className="rg-memo__section-head">Key Requirements</h3>
+          {workflowBullets.length > 0 ? (
+            <ul className="rg-memo__list">
+              {workflowBullets.map((b) => (
+                <li key={b}>{b}</li>
+              ))}
+            </ul>
+          ) : null}
+          {narrative ? (
+            <div className="rg-memo__narrative">
+              <pre className="rg-memo__pre">{narrative}</pre>
+            </div>
+          ) : null}
+        </section>
+
+        <section className="rg-memo__section">
+          <h3 className="rg-memo__section-head">Pro-Tips</h3>
+          <ul className="rg-memo__list rg-memo__list--tips">
+            <li>
+              Confirm which code edition is legally in effect; online indexes may lag adopted
+              amendments or local supplements.
+            </li>
+            <li>
+              Keep a dated record (PDFs, permits, inspection approvals) for each code path you rely
+              on during the job.
+            </li>
+            <li>
+              When the site spans municipal boundaries, check city and county (or special district)
+              rules separately.
+            </li>
+            {photoTips.map((t) => (
+              <li key={t}>
+                <span className="rg-memo__tip-label">From site photo: </span>
+                {t}
+              </li>
+            ))}
+          </ul>
+        </section>
+
+        {showAppendix && (
+          <aside className="rg-memo__appendix">
+            <h4 className="rg-memo__subhead">Appendix — research context (verbatim)</h4>
+            <pre className="rg-memo__pre rg-memo__pre--sm">{result.enhanced_query.trim()}</pre>
+          </aside>
+        )}
+      </div>
+
+      <footer className="rg-memo__actions rg-no-print">
+        <button type="button" className="rg-memo__pdf-btn" onClick={() => window.print()}>
+          Download PDF
+        </button>
+        <p className="rg-memo__pdf-hint">
+          Opens print — choose &ldquo;Save as PDF&rdquo; as the destination.
+        </p>
+      </footer>
+    </article>
+  );
+}
+
 function ResearchResultsSkeleton() {
   return (
     <section
@@ -90,6 +243,7 @@ function App() {
   const cameraStreamRef = useRef<MediaStream | null>(null);
   const cameraVideoRef = useRef<HTMLVideoElement | null>(null);
   const locationToastTimerRef = useRef<number | null>(null);
+  const memoPrintRef = useRef<HTMLElement | null>(null);
 
   const showLocationToast = useCallback(
     (kind: "success" | "error", text: string) => {
