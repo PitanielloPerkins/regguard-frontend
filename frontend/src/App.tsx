@@ -562,17 +562,17 @@ function App() {
     setErr(null);
     setResult(null);
     setStreamProgress(null);
-    if (useMapsAddr) {
-      if (!formattedAddress.trim()) {
-        setErr("Choose a full U.S. street address from the suggestions.");
-        return;
-      }
+    if (!useMapsAddr) {
+      setErr("Add VITE_GOOGLE_MAPS_API_KEY to your frontend environment and restart the dev server.");
+      return;
+    }
+    if (!formattedAddress.trim()) {
+      setErr("Choose a full U.S. street address from the suggestions.");
+      return;
     }
     if (!/^\d{5}(-\d{4})?$/.test(zip.replace(/\s/g, ""))) {
       setErr(
-        useMapsAddr
-          ? "The selected address must include a U.S. ZIP. Pick the address again from suggestions."
-          : "Enter a valid U.S. ZIP (5 digits or ZIP+4).",
+        "The selected address must include a U.S. ZIP. Pick the address again from suggestions.",
       );
       return;
     }
@@ -633,6 +633,8 @@ function App() {
         message?: string;
         detail?: string;
         site_address?: string | null;
+        city?: string | null;
+        county?: string | null;
         jurisdiction?: JurisdictionInfo | null;
         profile?: JurisdictionInfo | null;
       };
@@ -748,16 +750,25 @@ function App() {
             };
           });
         } else if (ev.event === "complete") {
+          const ju =
+            ev.jurisdiction && typeof ev.jurisdiction === "object"
+              ? (ev.jurisdiction as JurisdictionInfo)
+              : null;
+          const city =
+            typeof ev.city === "string" && ev.city.trim() ? ev.city.trim() : ju?.city ?? null;
+          const county =
+            typeof ev.county === "string" && ev.county.trim()
+              ? ev.county.trim()
+              : ju?.county ?? null;
           setResult({
             zip: String(ev.zip ?? ""),
             site_address:
               typeof ev.site_address === "string" && ev.site_address.trim()
                 ? ev.site_address.trim()
                 : null,
-            jurisdiction:
-              ev.jurisdiction && typeof ev.jurisdiction === "object"
-                ? (ev.jurisdiction as JurisdictionInfo)
-                : null,
+            city,
+            county,
+            jurisdiction: ju,
             summary: String(ev.summary ?? ""),
             source_urls: ev.source_urls ?? [],
             enhanced_query: String(ev.enhanced_query ?? ""),
@@ -816,19 +827,6 @@ function App() {
 
   return (
     <div className="rg-app">
-      {locationToast && (
-        <div
-          className={
-            (locationToast.kind === "success"
-              ? "rg-toast rg-toast--success"
-              : "rg-toast rg-toast--error") + " rg-no-print"
-          }
-          role={locationToast.kind === "success" ? "status" : "alert"}
-          aria-live={locationToast.kind === "success" ? "polite" : "assertive"}
-        >
-          {locationToast.text}
-        </div>
-      )}
       <header className="rg-hero rg-no-print">
         <h1>Reg Guard</h1>
         <p>Construction compliance desk — voice, photo, and verified code references</p>
@@ -838,71 +836,25 @@ function App() {
         <h2>Request</h2>
         <div className="rg-row rg-grid-2">
           <div>
-            {useMapsAddr ? (
-              <>
-                <span className="rg-label" id="job-site-address-label">
-                  Job site address
-                </span>
-                <AddressAutocomplete
-                  key={addressFieldKey}
-                  disabled={loading}
-                  onSelection={onAddressSelection}
-                />
-                <p
-                  className="rg-memo__muted"
-                  style={{ marginTop: "0.35rem", fontSize: "0.85rem" }}
-                >
-                  Type a U.S. street address and select a result. The server geocodes Google&apos;s
-                  formatted address for city vs county permit routing.
-                </p>
-              </>
+            <span className="rg-label" id="job-site-address-label">
+              Job site address
+            </span>
+            <AddressAutocomplete disabled={loading} onSelection={onAddressSelection} />
+            {!useMapsAddr ? (
+              <p className="rg-err" style={{ marginTop: "0.35rem", fontSize: "0.85rem" }}>
+                Set <code className="rg-code-hint">VITE_GOOGLE_MAPS_API_KEY</code> in{' '}
+                <code className="rg-code-hint">frontend/.env</code> (Places + Geocoding enabled for
+                the key), then restart Vite.
+              </p>
             ) : (
-              <>
-                <label className="rg-label" htmlFor="zip">
-                  ZIP
-                </label>
-                <div className="rg-wrap-zip">
-                  <input
-                    id="zip"
-                    className="rg-input rg-input--has-locate"
-                    value={zip}
-                    onChange={(e) => setZip(e.target.value)}
-                    placeholder="75001"
-                    inputMode="numeric"
-                    autoComplete="postal-code"
-                  />
-                  <button
-                    type="button"
-                    className={`rg-locate${locatingZip ? " locating" : ""}`}
-                    onClick={locateFromDevice}
-                    disabled={locatingZip}
-                    title="Use my location to fill ZIP"
-                    aria-label="Locate me and fill ZIP code"
-                  >
-                    <svg
-                      width="20"
-                      height="20"
-                      viewBox="0 0 24 24"
-                      fill="none"
-                      aria-hidden
-                    >
-                      <circle
-                        cx="12"
-                        cy="12"
-                        r="3"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                      />
-                      <path
-                        d="M12 2.5V6M12 18v3.5M2.5 12H6M18 12h3.5M5.6 5.6l2.1 2.1M16.3 16.3l2.1 2.1M5.6 18.4l2.1-2.1M16.3 7.7l2.1-2.1"
-                        stroke="currentColor"
-                        strokeWidth="2"
-                        strokeLinecap="round"
-                      />
-                    </svg>
-                  </button>
-                </div>
-              </>
+              <p
+                className="rg-memo__muted"
+                style={{ marginTop: "0.35rem", fontSize: "0.85rem" }}
+              >
+                Type a U.S. street address and select a suggestion. The server uses{' '}
+                <code className="rg-code-hint">geocode.py</code> (Google Geocoding) on the formatted
+                line for city vs county permit routing; ZIP is cross-checked with your selection.
+              </p>
             )}
           </div>
           <div>
@@ -1009,7 +961,11 @@ function App() {
           )}
         </div>
         {err && <p className="rg-err">{err}</p>}
-        <button className="rg-btn-primary" type="submit" disabled={loading}>
+        <button
+          className="rg-btn-primary"
+          type="submit"
+          disabled={loading || !useMapsAddr}
+        >
           {loading ? "Researching…" : "Run research"}
         </button>
       </form>
