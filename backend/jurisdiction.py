@@ -226,3 +226,46 @@ def geocode_profile_from_address(address: str) -> JurisdictionProfile:
 
     formatted = str(top.get("formatted_address") or raw)
     return build_profile_from_components(components, formatted)
+
+
+def geocode_profile_from_zip(zip5: str) -> JurisdictionProfile:
+    """Approximate city / county / incorporation heuristic for a U.S. ZIP (Google Geocoding)."""
+    z = "".join(ch for ch in (zip5 or "") if ch.isdigit())[:5]
+    if len(z) != 5:
+        raise ValueError("A 5-digit U.S. ZIP is required for ZIP geocoding.")
+    key = _require_google_maps_key()
+    q = urllib.parse.urlencode(
+        {"components": f"country:US|postal_code:{z}", "key": key},
+        quote_via=urllib.parse.quote,
+    )
+    url = f"https://maps.googleapis.com/maps/api/geocode/json?{q}"
+    req = urllib.request.Request(
+        url,
+        headers={"Accept": "application/json", "User-Agent": "RegGuard/1.0"},
+    )
+    try:
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            if resp.status != 200:
+                raise ValueError("Google Geocoding HTTP error.")
+            payload = json.load(resp)
+    except urllib.error.HTTPError as e:
+        raise ValueError(f"Google Geocoding request failed: {e.code}") from e
+    except (urllib.error.URLError, TimeoutError, OSError, json.JSONDecodeError) as e:
+        raise ValueError("Could not reach Google Geocoding. Try again.") from e
+
+    status = (payload.get("status") or "").strip()
+    if status != "OK":
+        msg = payload.get("error_message") or status or "UNKNOWN"
+        raise ValueError(f"Google Geocoding error: {msg}")
+
+    results = payload.get("results") or []
+    if not results:
+        raise ValueError("Could not geocode that ZIP code.")
+
+    top = results[0]
+    components = top.get("address_components")
+    if not isinstance(components, list):
+        raise ValueError("Invalid Geocoding response (no address_components).")
+
+    formatted = str(top.get("formatted_address") or f"ZIP {z}")
+    return build_profile_from_components(components, formatted)

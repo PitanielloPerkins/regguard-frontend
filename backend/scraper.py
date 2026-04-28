@@ -57,21 +57,25 @@ def _scout_queries_for_location(
     """
     Build (jurisdiction, permits, codes) search lines for Universal Scout.
 
-    When ``jurisdiction`` is present (from Google Places + heuristic), steer explicitly
+    When ``jurisdiction`` is present (from Google Geocoding), steer explicitly
     toward **city** vs **county** building departments; otherwise keep ZIP-centric copy.
     """
     addr = (site_address or "").strip()
-    if not jurisdiction or not addr:
+    ju = jurisdiction
+    if ju:
+        addr = addr or str(ju.get("formatted_address") or "").strip() or f"ZIP {z}"
+
+    if not ju or not addr:
         return (
             f"{_AGENT_JURISDICTION_ZIP.format(zip=z)} (ZIP {z})",
             _AGENT_PERMITS_ZIP.format(zip=z),
             _AGENT_CODES_ZIP.format(zip=z),
         )
 
-    mode = str(jurisdiction.get("mode") or "").strip().lower()
-    city = str(jurisdiction.get("city") or "").strip()
-    county = str(jurisdiction.get("county") or "").strip()
-    st = str(jurisdiction.get("state") or "").strip()
+    mode = str(ju.get("mode") or "").strip().lower()
+    city = str(ju.get("city") or "").strip()
+    county = str(ju.get("county") or "").strip()
+    st = str(ju.get("state") or "").strip()
 
     if mode == "county" or (not city and county):
         county_disp = f"{county} County" if county and not county.lower().endswith("county") else county
@@ -85,8 +89,9 @@ def _scout_queries_for_location(
             f"unincorporated areas, official .gov — ZIP {z}"
         )
         codes = (
-            f"{county_disp} {st} adopted building codes county ordinances amendments "
-            f"official source — area ZIP {z}"
+            f"Building codes adopted specifically for {county_disp} {st}: county building code, "
+            f"IBC IRC local adoption, county code amendments, codified law official .gov Municode "
+            f"— jurisdiction ZIP {z}"
         )
         return (juris, permits, codes)
 
@@ -100,8 +105,9 @@ def _scout_queries_for_location(
         f"official city .gov — ZIP {z}"
     )
     codes = (
-        f"{city_disp} {st} adopted building codes municipal amendments codified "
-        f"official — ZIP {z}"
+        f"Building codes adopted specifically for incorporated {city_disp} {st} "
+        f"(not county-wide): municipal building code, IBC IRC local adoption, city code amendments, "
+        f"official .gov Municode amlegal — area ZIP {z}"
     )
     return (juris, permits, codes)
 
@@ -375,11 +381,21 @@ def _final_scout_response(
     *,
     site_address: Optional[str] = None,
     jurisdiction: Optional[Mapping[str, Any]] = None,
+    ahj_identification: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     addr = (site_address or "").strip()
     ju = dict(jurisdiction) if jurisdiction else None
+    ahj = dict(ahj_identification) if ahj_identification else None
     wf: List[str] = []
-    if ju and ju.get("label"):
+    if ahj:
+        city = (ahj.get("city") or "").strip() or "—"
+        county = (ahj.get("county") or "").strip() or "—"
+        mode = (ahj.get("mode") or "").strip()
+        steer = "municipal/city" if mode == "city" else "county/unincorporated"
+        wf.append(
+            f"AHJ identification — **City**: {city}; **County**: {county} ({steer} building-code steering, ZIP {z})."
+        )
+    elif ju and ju.get("label"):
         wf.append(
             f"Location — {ju['label']}. "
             "Universal Scout search lines target the city vs county building department accordingly."
@@ -390,10 +406,11 @@ def _final_scout_response(
             "with *official* and *city government landing page* to reach the locality's official entry point.",
             "Universal Scout 1 — Jurisdiction: city/county AHJ hints (trusted hosts).",
             "Universal Scout 2 — Permits: **city** or **county** building department (steered from address).",
-            "Universal Scout 3 — Codes: adopted codes and local amendments (official publishers).",
+            "Universal Scout 3 — Building codes: **city-specific** (incorporated) or **county-specific** "
+            "(unincorporated) adopted codes and amendments.",
         ]
     )
-    return {
+    out: Dict[str, Any] = {
         "zip": z,
         "site_address": addr or None,
         "jurisdiction": ju,
@@ -417,6 +434,9 @@ def _final_scout_response(
         "step_building_permits": _step_result_dict(hits2, meta2),
         "step_building_codes": _step_result_dict(hits3, meta3),
     }
+    if ahj:
+        out["step_ahj_identification"] = ahj
+    return out
 
 
 def iter_universal_scout(
@@ -426,6 +446,7 @@ def iter_universal_scout(
     enhanced_context: str = "",
     site_address: Optional[str] = None,
     jurisdiction: Optional[Mapping[str, Any]] = None,
+    ahj_identification: Optional[Mapping[str, Any]] = None,
 ):
     """
     Yield one event dict per Universal Scout step, then a terminal ``complete`` event.
@@ -442,6 +463,7 @@ def iter_universal_scout(
     fc = _get_client()
     addr = (site_address or "").strip() or None
     ju: Optional[Mapping[str, Any]] = jurisdiction if jurisdiction else None
+    ahj_snap: Optional[Mapping[str, Any]] = ahj_identification if ahj_identification else None
 
     q1_core, q2_core, q3_core = _scout_queries_for_location(z, addr, ju)
     q1 = _with_context(q1_core, ctx)
@@ -471,6 +493,7 @@ def iter_universal_scout(
         meta3,
         site_address=addr,
         jurisdiction=ju,
+        ahj_identification=ahj_snap,
     )
     yield {"event": "complete", "raw": full}
 

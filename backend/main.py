@@ -15,7 +15,7 @@ from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from geocode import us_zip_from_lat_lon
-from jurisdiction import geocode_profile_from_address
+from jurisdiction import geocode_profile_from_address, geocode_profile_from_zip
 from scraper import iter_universal_scout, normalize_us_zip
 from vision import iter_job_site_image_text_stream, normalize_vision_text
 
@@ -121,6 +121,18 @@ def _research_summary(
     return "\n".join(lines)
 
 
+def _ahj_identification_payload(ju: Dict[str, Any]) -> Dict[str, Any]:
+    return {
+        "city": ju.get("city") or "",
+        "county": ju.get("county") or "",
+        "state": ju.get("state") or "",
+        "mode": ju.get("mode") or "",
+        "zip": ju.get("zip") or "",
+        "formatted_address": ju.get("formatted_address") or "",
+        "label": ju.get("label") or "",
+    }
+
+
 def _scout_iter_next(it: Iterator[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
     try:
         return next(it)
@@ -193,8 +205,9 @@ async def research(
     Emits immediately to avoid proxy/client JSON timeouts, then streams Claude vision (if any),
     Firecrawl scout steps, and word chunks of the final summary.
 
-    Events include: ``open``, ``vision_delta``, ``context``, ``jurisdiction`` (from geocoded address),
-    ``step``, ``summary_delta``, ``complete``.
+    Events include: ``open``, ``vision_delta``, ``context``, ``jurisdiction`` (when geocoded),
+    ``step`` (including ``step_ahj_identification`` before Universal Scout), ``step`` (scout),
+    ``summary_delta``, ``complete``.
     """
     try:
         lim = _parse_search_limit(search_limit)
@@ -244,6 +257,14 @@ async def research(
         except ValueError as e:
             raise HTTPException(status_code=400, detail=str(e)) from e
 
+    if scout_jurisdiction is None and zip_for_scout:
+        try:
+            prof = await run_in_threadpool(geocode_profile_from_zip, zip_for_scout)
+            scout_jurisdiction = prof.to_scout_dict()
+            scout_site = (scout_site or "").strip() or prof.formatted_address or f"ZIP {zip_for_scout}"
+        except ValueError:
+            pass
+
     async def ndjson_bytes():
         yield _line({"event": "open"})
 
@@ -290,6 +311,21 @@ async def research(
                 }
             )
 
+        ahj_for_scout: Optional[Dict[str, Any]] = None
+        if scout_jurisdiction:
+            ahj_for_scout = _ahj_identification_payload(scout_jurisdiction)
+            yield _line(
+                {
+                    "event": "step",
+                    "step": "step_ahj_identification",
+                    "data": {
+                        "query": "Identify city and county from site address / ZIP (Google Geocoding)",
+                        "results": [],
+                        **ahj_for_scout,
+                    },
+                }
+            )
+
         it = iter(
             iter_universal_scout(
                 zip_for_scout,
@@ -297,6 +333,7 @@ async def research(
                 enhanced_context=enhanced_query,
                 site_address=scout_site,
                 jurisdiction=scout_jurisdiction,
+                ahj_identification=ahj_for_scout,
             )
         )
         final_raw: Optional[Dict[str, Any]] = None
