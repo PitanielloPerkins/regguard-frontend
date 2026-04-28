@@ -715,9 +715,9 @@ function App() {
       {locationToast && (
         <div
           className={
-            locationToast.kind === "success"
+            (locationToast.kind === "success"
               ? "rg-toast rg-toast--success"
-              : "rg-toast rg-toast--error"
+              : "rg-toast rg-toast--error") + " rg-no-print"
           }
           role={locationToast.kind === "success" ? "status" : "alert"}
           aria-live={locationToast.kind === "success" ? "polite" : "assertive"}
