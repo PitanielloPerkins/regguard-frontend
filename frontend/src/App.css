@@ -142,6 +142,8 @@
 
 /* google.maps.places.PlaceAutocompleteElement (gmp-place-autocomplete) */
 .rg-place-autocomplete-host {
+  position: relative;
+  z-index: 40;
   width: 100%;
   min-height: 2.85rem;
 }
