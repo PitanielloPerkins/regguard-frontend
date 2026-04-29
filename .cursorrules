@@ -1,0 +1,8 @@
+# Reg Guard: Agentic Compliance Assistant for Contractors
+
+This workspace is the **Reg Guard** project: an agentic compliance assistant for contractors, combining a FastAPI backend and a Vite/React frontend.
+
+- **Backend** (`backend/`): FastAPI, API routes, compliance/research logic.
+- **Frontend** (`frontend/`): Vite, React, contractor-facing UI.
+
+Match existing code style, keep changes focused, and prefer extending existing patterns over one-off abstractions.
