@@ -141,9 +141,14 @@
 }
 
 /* google.maps.places.PlaceAutocompleteElement (gmp-place-autocomplete) */
+/* Google's Places suggestions panel is portaled to body as .pac-container */
+.pac-container {
+  z-index: 9999 !important;
+}
+
 .rg-place-autocomplete-host {
   position: relative;
-  z-index: 40;
+  z-index: 1000;
   width: 100%;
   min-height: 2.85rem;
 }
