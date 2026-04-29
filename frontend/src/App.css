@@ -1105,3 +1105,14 @@
     color: #0f2744 !important;
   }
 }
+
+.pac-container {
+  background-color: white !important;
+  border: 1px solid #ccc !important;
+  display: block !important;
+}
+
+.pac-item {
+  color: black !important;
+  padding: 10px !important;
+}
