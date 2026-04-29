@@ -1,7 +1,0 @@
-fastapi
-uvicorn[standard]
-firecrawl-py
-python-dotenv
-pydantic
-python-multipart
-anthropic

@@ -13,8 +13,10 @@ type Props = {
   onSelection: (sel: AddressSelection | null) => void;
 };
 
+/** Maps Places/JS key — must live in `.env` as `VITE_GOOGLE_MAPS_API_KEY`. */
 function mapsKey(): string {
-  return (import.meta.env.VITE_GOOGLE_MAPS_API_KEY || "").trim();
+  const raw = import.meta.env.VITE_GOOGLE_MAPS_API_KEY;
+  return typeof raw === "string" ? raw.trim() : "";
 }
 
 function extractZip5FromPlaceComponents(
