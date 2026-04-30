@@ -432,8 +432,11 @@ export default function App() {
         if (!alive || !r.ok) {
           return;
         }
-        const j = (await r.json()) as { revision?: string };
-        const rev = typeof j.revision === "string" ? j.revision : "";
+        const j = (await r.json()) as { revision?: string; version?: string };
+        let rev = typeof j.revision === "string" && j.revision.length > 0 ? j.revision : "";
+        if (!rev && typeof j.version === "string") {
+          rev = `version:${j.version}`;
+        }
         if (!rev) {
           return;
         }
@@ -450,7 +453,7 @@ export default function App() {
       }
     };
     void poll();
-    const id = window.setInterval(() => void poll(), 45_000);
+    const id = window.setInterval(() => void poll(), 30_000);
     return () => {
       alive = false;
       window.clearInterval(id);
