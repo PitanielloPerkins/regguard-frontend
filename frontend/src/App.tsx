@@ -130,6 +130,13 @@ export default function App() {
     county?: string | null;
   } | null>(null);
 
+  const setJobDescriptionRef = useRef(setJobDescription);
+  setJobDescriptionRef.current = setJobDescription;
+  const setSpeechHintRef = useRef(setSpeechHint);
+  setSpeechHintRef.current = setSpeechHint;
+  const setDictationActiveRef = useRef(setDictationActive);
+  setDictationActiveRef.current = setDictationActive;
+
   const canSubmit = useMemo(() => {
     return Boolean(selection?.formattedAddress && selection.zip && !busy);
   }, [selection, busy]);
@@ -311,19 +318,111 @@ export default function App() {
     );
   }, [geoSupported, mapsOk]);
 
-  const speechSupported = useMemo(() => Boolean(speechRecognitionCtor()), []);
+  const speechCtor = useMemo(() => speechRecognitionCtor(), []);
+  const speechSupported = Boolean(speechCtor);
 
   useEffect(() => {
+    if (!speechCtor) {
+      recognitionRef.current = null;
+      return;
+    }
+
+    const transcriptFor = (r: SpeechRecognitionResult): string => {
+      try {
+        const a = typeof r.item === "function" ? r.item(0) : undefined;
+        const alt = (a ?? r[0]) as SpeechRecognitionAlternative | undefined;
+        return typeof alt?.transcript === "string" ? alt.transcript : "";
+      } catch {
+        return "";
+      }
+    };
+
+    const rec = new speechCtor();
+
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = "en-US";
+
+    rec.onresult = (ev) => {
+      console.log("[RegGuard speech] onresult", {
+        resultIndex: ev.resultIndex,
+        resultsLength: ev.results.length,
+      });
+
+      let newFinalChunk = "";
+      let interimChunk = "";
+
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const r = ev.results[i];
+        const txt = transcriptFor(r);
+        console.log("[RegGuard speech] segment", i, { isFinal: r.isFinal, transcript: txt });
+        if (r.isFinal) {
+          newFinalChunk += txt;
+        } else {
+          interimChunk += txt;
+        }
+      }
+
+      dictationFinalAccumRef.current += newFinalChunk;
+      const nextText =
+        dictationAnchorRef.current + dictationFinalAccumRef.current + interimChunk;
+
+      console.log("[RegGuard speech] setJobDescription", {
+        mergedLength: nextText.length,
+        preview: nextText.slice(-120),
+      });
+
+      setJobDescriptionRef.current(nextText);
+    };
+
+    rec.onerror = (ev) => {
+      if (ev.error === "audio-capture" || ev.error === "not-allowed") {
+        window.alert(
+          `Speech recognition: ${ev.error}\n${(ev.message && String(ev.message).trim()) || "Microphone unavailable or blocked for this site."}`,
+        );
+      }
+
+      if (ev.error === "aborted" || ev.error === "no-speech") {
+        return;
+      }
+      if (ev.error === "not-allowed") {
+        setSpeechHintRef.current(
+          "Microphone permission denied. Use site settings to allow the microphone, then try dictation again.",
+        );
+      } else if (ev.error === "audio-capture") {
+        setSpeechHintRef.current("No microphone found or it is busy in another app.");
+      } else {
+        setSpeechHintRef.current(`Voice input paused (${ev.error}). You can keep typing.`);
+      }
+      listeningRef.current = false;
+      setDictationActiveRef.current(false);
+    };
+
+    rec.onend = () => {
+      if (!listeningRef.current) {
+        setDictationActiveRef.current(false);
+        return;
+      }
+      try {
+        recognitionRef.current?.start();
+      } catch {
+        listeningRef.current = false;
+        setDictationActiveRef.current(false);
+      }
+    };
+
+    recognitionRef.current = rec;
+
     return () => {
       listeningRef.current = false;
       try {
-        recognitionRef.current?.abort();
+        rec.abort();
       } catch {
         /* noop */
       }
       recognitionRef.current = null;
     };
-  }, []);
+  }, [speechCtor]);
 
   useEffect(() => {
     let alive = true;
@@ -382,18 +481,23 @@ export default function App() {
   }, []);
 
   const toggleDictation = useCallback(() => {
-    const Ctor = speechRecognitionCtor();
-    if (!Ctor) {
+    if (!speechCtor) {
       setSpeechHint("Voice dictation is not supported in this browser. Try Chrome or Edge.");
       return;
     }
 
-    if (listeningRef.current || dictationActive) {
+    const rec = recognitionRef.current;
+    if (!rec) {
+      setSpeechHint("Speech engine is not ready yet. Reload the page and try again.");
+      return;
+    }
+
+    if (listeningRef.current) {
       listeningRef.current = false;
       try {
-        recognitionRef.current?.stop();
+        rec.stop();
       } catch {
-        recognitionRef.current?.abort();
+        rec.abort();
       }
       setDictationActive(false);
       return;
@@ -412,88 +516,11 @@ export default function App() {
       dictationAnchorRef.current = jobDescription;
       dictationFinalAccumRef.current = "";
       listeningRef.current = true;
+
       try {
-        recognitionRef.current?.abort();
-      } catch {
-        /* noop */
-      }
-
-      const rec = new Ctor();
-      rec.continuous = true;
-      rec.interimResults = true;
-      rec.lang = "en-US";
-      rec.onresult = (ev) => {
-        const transcriptFor = (r: SpeechRecognitionResult): string => {
-          try {
-            const a = typeof r.item === "function" ? r.item(0) : undefined;
-            const alt = (a ?? r[0]) as SpeechRecognitionAlternative | undefined;
-            return typeof alt?.transcript === "string" ? alt.transcript : "";
-          } catch {
-            return "";
-          }
-        };
-
-        console.log("[RegGuard speech] onresult", {
-          resultIndex: ev.resultIndex,
-          resultsLength: ev.results.length,
-        });
-
-        let newFinalChunk = "";
-        let interimChunk = "";
-
-        for (let i = ev.resultIndex; i < ev.results.length; i++) {
-          const r = ev.results[i];
-          const txt = transcriptFor(r);
-          console.log("[RegGuard speech] segment", i, { isFinal: r.isFinal, transcript: txt });
-          if (r.isFinal) {
-            newFinalChunk += txt;
-          } else {
-            interimChunk += txt;
-          }
-        }
-
-        dictationFinalAccumRef.current += newFinalChunk;
-        const nextText =
-          dictationAnchorRef.current + dictationFinalAccumRef.current + interimChunk;
-
-        console.log("[RegGuard speech] setJobDescription", {
-          mergedLength: nextText.length,
-          preview: nextText.slice(-120),
-          finalAccumLen: dictationFinalAccumRef.current.length,
-        });
-
-        setJobDescription(nextText);
-      };
-      rec.onerror = (ev) => {
-        if (ev.error === "aborted" || ev.error === "no-speech") {
-          return;
-        }
-        if (ev.error === "not-allowed") {
-          setSpeechHint(
-            "Microphone permission denied. Use the lock or site-settings icon, allow the microphone, then try dictation again.",
-          );
-        } else if (ev.error === "audio-capture") {
-          setSpeechHint("No microphone found or it is busy in another app.");
-        } else {
-          setSpeechHint(`Voice input paused (${ev.error}). You can keep typing.`);
-        }
-        listeningRef.current = false;
-        setDictationActive(false);
-      };
-      rec.onend = () => {
-        if (!listeningRef.current) {
-          setDictationActive(false);
-          return;
-        }
-        try {
-          rec.start();
-        } catch {
-          listeningRef.current = false;
-          setDictationActive(false);
-        }
-      };
-      recognitionRef.current = rec;
-      try {
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = "en-US";
         rec.start();
         setDictationActive(true);
       } catch {
@@ -502,7 +529,7 @@ export default function App() {
         setDictationActive(false);
       }
     })();
-  }, [dictationActive, jobDescription]);
+  }, [jobDescription, speechCtor]);
 
   return (
     <div className="app-shell">
