@@ -1,4 +1,4 @@
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import "./App.css";
 
@@ -77,9 +77,33 @@ function parseNdjsonObjects(buffer: string): { lines: NdjsonLine[]; rest: string
   return { lines, rest };
 }
 
+function speechRecognitionCtor(): (new () => SpeechRecognition) | undefined {
+  if (typeof window === "undefined") {
+    return undefined;
+  }
+  return window.SpeechRecognition ?? window.webkitSpeechRecognition;
+}
+
+async function warmMicrophonePermission(): Promise<void> {
+  if (!navigator.mediaDevices?.getUserMedia) {
+    return;
+  }
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  for (const track of stream.getTracks()) {
+    track.stop();
+  }
+}
+
 export default function App() {
   const mapsOk = mapsAutocompleteEnabled();
   const addressRef = useRef<AddressAutocompleteHandle>(null);
+  const dictationAnchorRef = useRef("");
+  const dictationFinalAccumRef = useRef("");
+  const listeningRef = useRef(false);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const initialRevisionRef = useRef<string | null>(null);
+  const lastPollRevisionRef = useRef<string | null>(null);
+  const dismissedRevisionRef = useRef<string | null>(null);
 
   const [selection, setSelection] = useState<AddressSelection | null>(null);
   const [jobDescription, setJobDescription] = useState("");
@@ -95,6 +119,10 @@ export default function App() {
   const [sourceUrls, setSourceUrls] = useState<string[]>([]);
   const [locatingMe, setLocatingMe] = useState(false);
   const [locateMessage, setLocateMessage] = useState<string | null>(null);
+  const [dictationActive, setDictationActive] = useState(false);
+  const [speechHint, setSpeechHint] = useState<string | null>(null);
+  const [backendStale, setBackendStale] = useState(false);
+  const [autoRefreshSec, setAutoRefreshSec] = useState<number | null>(null);
   const [meta, setMeta] = useState<{
     site?: string | null;
     zip?: string;
@@ -283,6 +311,199 @@ export default function App() {
     );
   }, [geoSupported, mapsOk]);
 
+  const speechSupported = useMemo(() => Boolean(speechRecognitionCtor()), []);
+
+  useEffect(() => {
+    return () => {
+      listeningRef.current = false;
+      try {
+        recognitionRef.current?.abort();
+      } catch {
+        /* noop */
+      }
+      recognitionRef.current = null;
+    };
+  }, []);
+
+  useEffect(() => {
+    let alive = true;
+    const poll = async () => {
+      try {
+        const r = await fetch("/api/dashboard-revision", { cache: "no-store" });
+        if (!alive || !r.ok) {
+          return;
+        }
+        const j = (await r.json()) as { revision?: string };
+        const rev = typeof j.revision === "string" ? j.revision : "";
+        if (!rev) {
+          return;
+        }
+        lastPollRevisionRef.current = rev;
+        if (initialRevisionRef.current === null) {
+          initialRevisionRef.current = rev;
+          return;
+        }
+        if (rev !== initialRevisionRef.current && rev !== dismissedRevisionRef.current) {
+          setBackendStale(true);
+        }
+      } catch {
+        /* proxy down or offline */
+      }
+    };
+    void poll();
+    const id = window.setInterval(() => void poll(), 45_000);
+    return () => {
+      alive = false;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    if (!backendStale) {
+      setAutoRefreshSec(null);
+      return;
+    }
+    let sec = 12;
+    setAutoRefreshSec(sec);
+    const id = window.setInterval(() => {
+      sec -= 1;
+      setAutoRefreshSec(sec);
+      if (sec <= 0) {
+        window.clearInterval(id);
+        window.location.reload();
+      }
+    }, 1000);
+    return () => window.clearInterval(id);
+  }, [backendStale]);
+
+  const dismissBackendNotice = useCallback(() => {
+    dismissedRevisionRef.current = lastPollRevisionRef.current;
+    setBackendStale(false);
+  }, []);
+
+  const toggleDictation = useCallback(() => {
+    const Ctor = speechRecognitionCtor();
+    if (!Ctor) {
+      setSpeechHint("Voice dictation is not supported in this browser. Try Chrome or Edge.");
+      return;
+    }
+
+    if (listeningRef.current || dictationActive) {
+      listeningRef.current = false;
+      try {
+        recognitionRef.current?.stop();
+      } catch {
+        recognitionRef.current?.abort();
+      }
+      setDictationActive(false);
+      return;
+    }
+
+    setSpeechHint(null);
+    void (async () => {
+      try {
+        await warmMicrophonePermission();
+      } catch {
+        setSpeechHint(
+          "Microphone warmup was blocked—you may still get a browser prompt; choose Allow to dictate.",
+        );
+      }
+
+      dictationAnchorRef.current = jobDescription;
+      dictationFinalAccumRef.current = "";
+      listeningRef.current = true;
+      try {
+        recognitionRef.current?.abort();
+      } catch {
+        /* noop */
+      }
+
+      const rec = new Ctor();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = "en-US";
+      rec.onresult = (ev) => {
+        const transcriptFor = (r: SpeechRecognitionResult): string => {
+          try {
+            const a = typeof r.item === "function" ? r.item(0) : undefined;
+            const alt = (a ?? r[0]) as SpeechRecognitionAlternative | undefined;
+            return typeof alt?.transcript === "string" ? alt.transcript : "";
+          } catch {
+            return "";
+          }
+        };
+
+        console.log("[RegGuard speech] onresult", {
+          resultIndex: ev.resultIndex,
+          resultsLength: ev.results.length,
+        });
+
+        let newFinalChunk = "";
+        let interimChunk = "";
+
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          const r = ev.results[i];
+          const txt = transcriptFor(r);
+          console.log("[RegGuard speech] segment", i, { isFinal: r.isFinal, transcript: txt });
+          if (r.isFinal) {
+            newFinalChunk += txt;
+          } else {
+            interimChunk += txt;
+          }
+        }
+
+        dictationFinalAccumRef.current += newFinalChunk;
+        const nextText =
+          dictationAnchorRef.current + dictationFinalAccumRef.current + interimChunk;
+
+        console.log("[RegGuard speech] setJobDescription", {
+          mergedLength: nextText.length,
+          preview: nextText.slice(-120),
+          finalAccumLen: dictationFinalAccumRef.current.length,
+        });
+
+        setJobDescription(nextText);
+      };
+      rec.onerror = (ev) => {
+        if (ev.error === "aborted" || ev.error === "no-speech") {
+          return;
+        }
+        if (ev.error === "not-allowed") {
+          setSpeechHint(
+            "Microphone permission denied. Use the lock or site-settings icon, allow the microphone, then try dictation again.",
+          );
+        } else if (ev.error === "audio-capture") {
+          setSpeechHint("No microphone found or it is busy in another app.");
+        } else {
+          setSpeechHint(`Voice input paused (${ev.error}). You can keep typing.`);
+        }
+        listeningRef.current = false;
+        setDictationActive(false);
+      };
+      rec.onend = () => {
+        if (!listeningRef.current) {
+          setDictationActive(false);
+          return;
+        }
+        try {
+          rec.start();
+        } catch {
+          listeningRef.current = false;
+          setDictationActive(false);
+        }
+      };
+      recognitionRef.current = rec;
+      try {
+        rec.start();
+        setDictationActive(true);
+      } catch {
+        listeningRef.current = false;
+        setSpeechHint("Could not start the microphone. Confirm permissions and try again.");
+        setDictationActive(false);
+      }
+    })();
+  }, [dictationActive, jobDescription]);
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -364,14 +585,56 @@ export default function App() {
           </div>
 
           <div className="rg-field">
-            <label htmlFor="job-desc">Job description</label>
+            <div className="rg-job-desc-head">
+              <label htmlFor="job-desc">Job description</label>
+              <button
+                type="button"
+                className={`rg-btn rg-btn--ghost rg-mic-btn${dictationActive ? " rg-mic-btn--active" : ""}`}
+                title={dictationActive ? "Stop dictation" : "Dictate with microphone"}
+                aria-label={dictationActive ? "Stop voice dictation" : "Start voice dictation"}
+                aria-pressed={dictationActive}
+                disabled={busy || !speechSupported}
+                onClick={() => toggleDictation()}
+              >
+                {dictationActive ? (
+                  <span className="rg-mic-pulse" aria-hidden />
+                ) : (
+                  <svg
+                    className="rg-mic-icon"
+                    viewBox="0 0 24 24"
+                    fill="none"
+                    stroke="currentColor"
+                    strokeWidth="2"
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    aria-hidden
+                  >
+                    <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 1 1-6 0V5a3 3 0 0 1 3-3Z" />
+                    <path d="M19 10v1a7 7 0 1 1-14 0v-1" />
+                    <line x1="12" x2="12" y1="19" y2="22" />
+                    <line x1="8" x2="16" y1="22" y2="22" />
+                  </svg>
+                )}
+              </button>
+            </div>
+            {!speechSupported ? (
+              <p className="field-hint">
+                Voice dictation requires a Chromium-based desktop browser (speech recognition APIs).
+              </p>
+            ) : null}
+            {speechHint ? (
+              <p id="job-desc-speech-hint" className="field-hint rg-speech-hint" role="status">
+                {speechHint}
+              </p>
+            ) : null}
             <textarea
               id="job-desc"
-              className="rg-input"
-              placeholder="Voice-style notes or scope: trades, AHJ concerns, timelines…"
+              className={`rg-input${dictationActive ? " rg-input--dictating" : ""}`}
+              placeholder="Type or use the microphone: trades, scope, timelines, AHJ questions…"
               value={jobDescription}
               disabled={busy}
               onChange={(e) => setJobDescription(e.target.value)}
+              aria-describedby={speechHint ? "job-desc-speech-hint" : undefined}
             />
           </div>
 
@@ -495,6 +758,22 @@ export default function App() {
           ) : null}
         </section>
       </div>
+
+      {backendStale ? (
+        <div className="rg-update-toast" role="status" aria-live="polite">
+          <div className="rg-update-toast-inner">
+            <span>A newer API build was detected.{autoRefreshSec !== null ? ` Refreshing in ${autoRefreshSec}s…` : ""}</span>
+            <span className="rg-update-actions">
+              <button type="button" className="rg-btn rg-btn--primary rg-btn--compact" onClick={() => window.location.reload()}>
+                Refresh now
+              </button>
+              <button type="button" className="rg-btn rg-btn--ghost rg-btn--compact" onClick={dismissBackendNotice}>
+                Skip once
+              </button>
+            </span>
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

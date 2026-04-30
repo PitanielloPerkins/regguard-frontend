@@ -3,9 +3,13 @@ Reg Guard — FastAPI application entry point.
 """
 from __future__ import annotations
 
+import hashlib
 import json
+import os
 import re
 import threading
+import uuid
+from pathlib import Path
 from queue import Queue
 from typing import Any, Dict, Iterator, List, Optional, Tuple, cast
 
@@ -18,6 +22,29 @@ from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
 from jurisdiction import JurisdictionProfile, geocode_profile_from_address
 from scraper import iter_universal_scout, normalize_us_zip
 from vision import iter_job_site_image_text_stream, normalize_vision_text
+
+_BACKEND_DIR = Path(__file__).resolve().parent
+_BACKEND_BOOT_ID = uuid.uuid4().hex[:10]
+
+
+def compute_backend_source_fingerprint() -> str:
+    """Short hash of backend ``.py`` mtimes — changes when sources change on disk."""
+    h = hashlib.sha256()
+    try:
+        paths = sorted(_BACKEND_DIR.rglob("*.py"))
+    except OSError:
+        return "unknown"
+    for p in paths:
+        if "__pycache__" in p.parts:
+            continue
+        try:
+            rel = p.relative_to(_BACKEND_DIR).as_posix()
+            h.update(rel.encode("utf-8", errors="replace"))
+            h.update(str(p.stat().st_mtime_ns).encode("ascii", errors="ignore"))
+        except OSError:
+            continue
+    return h.hexdigest()[:16]
+
 
 app = FastAPI(
     title="Reg Guard",
@@ -173,6 +200,19 @@ def root() -> Dict[str, str]:
         "name": "Reg Guard",
         "tagline": "Agentic Compliance Assistant for Contractors",
     }
+
+
+@app.get("/dashboard-revision")
+def dashboard_revision() -> Dict[str, str]:
+    """
+    Polling endpoint: revision string changes when this process restarts or backend ``.py`` changes.
+    """
+    explicit = (os.environ.get("REG_GUARD_REVISION") or "").strip()
+    if explicit:
+        rev = explicit
+    else:
+        rev = f"{_BACKEND_BOOT_ID}-{compute_backend_source_fingerprint()}"
+    return {"revision": rev, "pid": str(os.getpid())}
 
 
 @app.get("/geocode-zip")
