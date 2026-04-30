@@ -72,12 +72,23 @@
   margin-bottom: 0;
 }
 
-.rg-field label {
+.rg-field label,
+.rg-field-label-text {
   display: block;
   font-size: 0.8rem;
   font-weight: 600;
   margin-bottom: 0.35rem;
   color: var(--rg-accent-dim);
+}
+
+.rg-subheading {
+  font-size: 0.72rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--rg-accent-dim);
+  display: block;
+  margin-bottom: 0.35rem;
 }
 
 .field-hint {
@@ -202,7 +213,7 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
     #2d4666 100%
   );
   color: var(--rg-accent);
-  border-color: var(--rg-strong-border, #527498);
+  border-color: #527498;
 }
 
 .rg-btn--primary:not(:disabled):hover {
