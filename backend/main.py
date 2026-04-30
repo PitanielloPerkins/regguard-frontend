@@ -205,14 +205,16 @@ def root() -> Dict[str, str]:
 @app.get("/dashboard-revision")
 def dashboard_revision() -> Dict[str, str]:
     """
-    Polling endpoint: revision string changes when this process restarts or backend ``.py`` changes.
+    Lightweight JSON for dashboard polling. ``version`` is static (env); ``revision`` changes
+    when this process restarts or backend sources change on disk.
     """
-    explicit = (os.environ.get("REG_GUARD_REVISION") or "").strip()
-    if explicit:
-        rev = explicit
-    else:
-        rev = f"{_BACKEND_BOOT_ID}-{compute_backend_source_fingerprint()}"
-    return {"revision": rev, "pid": str(os.getpid())}
+    app_version = (os.environ.get("REG_GUARD_APP_VERSION") or "1.0.0").strip() or "1.0.0"
+    explicit_rev = (os.environ.get("REG_GUARD_REVISION") or "").strip()
+    revision = explicit_rev or f"{_BACKEND_BOOT_ID}-{compute_backend_source_fingerprint()}"
+    return {
+        "version": app_version,
+        "revision": revision,
+    }
 
 
 @app.get("/geocode-zip")
