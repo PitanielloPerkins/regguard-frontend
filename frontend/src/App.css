@@ -144,6 +144,10 @@
 /* Google's Places suggestions panel is portaled to body as .pac-container */
 .pac-container {
   z-index: 9999 !important;
+  display: block !important;
+  visibility: visible !important;
+  background-color: white !important;
+  border: 1px solid #ccc !important;
 }
 
 .rg-place-autocomplete-host {
@@ -1104,12 +1108,6 @@
   .rg-cm-table a {
     color: #0f2744 !important;
   }
-}
-
-.pac-container {
-  background-color: white !important;
-  border: 1px solid #ccc !important;
-  display: block !important;
 }
 
 .pac-item {
