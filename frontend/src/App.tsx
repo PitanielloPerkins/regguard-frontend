@@ -379,9 +379,7 @@ export default function App() {
           ) : null}
 
           <div>
-            <strong style={{ fontSize: "0.72rem", textTransform: "uppercase", color: "var(--rg-accent-dim)" }}>
-              Summary
-            </strong>
+            <strong className="rg-subheading">Summary</strong>
             <div className="rg-summary">{summary}</div>
           </div>
 
