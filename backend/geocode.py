@@ -104,6 +104,7 @@ def require_google_maps_key() -> str:
 
 
 def _google_geocode_get(payload: dict[str, Any]) -> dict[str, Any]:
+    """Server-side Geocoding Web Service (no HTTP Referer — use an unrestricted/API-key server credential)."""
     q = urllib.parse.urlencode(payload, quote_via=urllib.parse.quote)
     url = f"https://maps.googleapis.com/maps/api/geocode/json?{q}"
     req = urllib.request.Request(
@@ -121,6 +122,69 @@ def _google_geocode_get(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Could not reach Google Geocoding. Try again.") from e
 
 
+def _denied_hint(extra: str) -> str:
+    if "REQUEST_DENIED" in extra.upper():
+        return (
+            " Browser keys restricted to Websites often block REST Geocoding. "
+            "Use GOOGLE_MAPS_API_KEY in backend .env without HTTP referrer restriction "
+            "(or restrict by IP only) and enable \"Geocoding API\" on the GCP project."
+        )
+    return ""
+
+
+def google_reverse_geocode_us_latlng(lat: float, lon: float) -> Tuple[str, str]:
+    """
+    Reverse geocode WGS‑84 coords to formatted U.S. address + ZIP (Geocoding API, server-side key).
+    """
+    key = require_google_maps_key()
+    lat_f = round(float(lat), 7)
+    lon_f = round(float(lon), 7)
+    payload = _google_geocode_get(
+        {"latlng": f"{lat_f},{lon_f}", "key": key},
+    )
+    status = (payload.get("status") or "").strip()
+    if status != "OK":
+        msg = str(payload.get("error_message") or status or "UNKNOWN").strip()
+        denied = _denied_hint(msg + " " + status)
+        raise ValueError(
+            f"Google Geocoding error: {msg}.{denied}" if denied else f"Google Geocoding error: {msg}",
+        )
+
+    results = payload.get("results") or []
+    if not results:
+        raise ValueError("Reverse geocode returned no addresses for this pin.")
+
+    for top in results:
+        components = top.get("address_components")
+        if not isinstance(components, list):
+            continue
+        is_us = any(
+            "country" in set(c.get("types") or [])
+            and ((c.get("short_name") or "").upper() == "US")
+            for c in components
+        )
+        if not is_us:
+            continue
+        formatted = str(top.get("formatted_address") or "").strip()
+        postcode = ""
+        for c in components:
+            types = set(c.get("types") or [])
+            if "postal_code" in types:
+                postcode = str((c.get("short_name") or c.get("long_name") or "")).strip()
+                break
+        z = _first_us_zip5(postcode or None) or ""
+        if len(z) < 5 and formatted:
+            m = re.search(r"\b(\d{5})(?:-\d{4})?\b", formatted)
+            if m:
+                z = m.group(1)
+        if formatted and len(z) == 5:
+            return formatted, z
+
+    raise ValueError(
+        "This location is outside the United States or has no postal code — pick an address manually."
+    )
+
+
 def google_geocode_us_address(address: str) -> Tuple[List[dict[str, Any]], str]:
     """
     Forward geocode a U.S. postal address string (e.g. Places formatted_address).
@@ -136,8 +200,11 @@ def google_geocode_us_address(address: str) -> Tuple[List[dict[str, Any]], str]:
     )
     status = (payload.get("status") or "").strip()
     if status != "OK":
-        msg = payload.get("error_message") or status or "UNKNOWN"
-        raise ValueError(f"Google Geocoding error: {msg}")
+        msg = str(payload.get("error_message") or status or "UNKNOWN").strip()
+        denied = _denied_hint(msg + " " + status)
+        raise ValueError(
+            f"Google Geocoding error: {msg}.{denied}" if denied else f"Google Geocoding error: {msg}",
+        )
 
     results = payload.get("results") or []
     if not results:
@@ -170,8 +237,11 @@ def google_geocode_us_zip(zip5: str) -> Tuple[List[dict[str, Any]], str]:
     )
     status = (payload.get("status") or "").strip()
     if status != "OK":
-        msg = payload.get("error_message") or status or "UNKNOWN"
-        raise ValueError(f"Google Geocoding error: {msg}")
+        msg = str(payload.get("error_message") or status or "UNKNOWN").strip()
+        denied = _denied_hint(msg + " " + status)
+        raise ValueError(
+            f"Google Geocoding error: {msg}.{denied}" if denied else f"Google Geocoding error: {msg}",
+        )
 
     results = payload.get("results") or []
     if not results:

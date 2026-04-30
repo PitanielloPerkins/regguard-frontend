@@ -14,7 +14,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
-from geocode import us_zip_from_lat_lon
+from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
 from jurisdiction import JurisdictionProfile, geocode_profile_from_address
 from scraper import iter_universal_scout, normalize_us_zip
 from vision import iter_job_site_image_text_stream, normalize_vision_text
@@ -185,6 +185,18 @@ def geocode_zip(latitude: float, longitude: float) -> Dict[str, str]:
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     return {"zip": z}
+
+
+@app.get("/reverse-geocode-address")
+def reverse_geocode_address(latitude: float, longitude: float) -> Dict[str, str]:
+    """
+    Server-side reverse geocode (Google Geocoding API, no HTTP Referer) for Locate Me UX.
+    """
+    try:
+        formatted, zip5 = google_reverse_geocode_us_latlng(latitude, longitude)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    return {"formatted_address": formatted, "zip": zip5}
 
 
 @app.post("/research")
@@ -369,3 +381,9 @@ async def research(
             "X-Accel-Buffering": "no",
         },
     )
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    uvicorn.run(app, host="127.0.0.1", port=8000)

@@ -133,6 +133,51 @@ textarea.rg-input {
   color: var(--rg-danger);
 }
 
+.rg-address-bar {
+  display: flex;
+  gap: 0.5rem;
+  align-items: stretch;
+}
+
+.rg-address-slot {
+  flex: 1;
+  min-width: 0;
+}
+
+.rg-locate-btn {
+  flex-shrink: 0;
+  min-width: 2.65rem;
+  padding: 0.45rem 0.65rem;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rg-locate-btn .rg-locate-icon {
+  width: 1.35rem;
+  height: 1.35rem;
+  color: var(--rg-accent-dim);
+}
+
+.rg-locate-btn:not(:disabled):hover .rg-locate-icon {
+  color: var(--rg-link);
+}
+
+.rg-locate-loading {
+  width: 1.1rem;
+  height: 1.1rem;
+  border-radius: 50%;
+  border: 2px solid rgba(168, 197, 232, 0.35);
+  border-top-color: var(--rg-link);
+  animation: rg-spin 0.7s linear infinite;
+}
+
+@keyframes rg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
 .rg-place-autocomplete-host {
   min-height: 2.65rem;
   position: relative;

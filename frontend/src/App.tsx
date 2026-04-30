@@ -1,9 +1,10 @@
-import { useCallback, useMemo, useState } from "react";
+import { useCallback, useMemo, useRef, useState } from "react";
 
 import "./App.css";
 
 import {
   AddressAutocomplete,
+  type AddressAutocompleteHandle,
   mapsAutocompleteEnabled,
   type AddressSelection,
 } from "./AddressAutocomplete";
@@ -78,6 +79,7 @@ function parseNdjsonObjects(buffer: string): { lines: NdjsonLine[]; rest: string
 
 export default function App() {
   const mapsOk = mapsAutocompleteEnabled();
+  const addressRef = useRef<AddressAutocompleteHandle>(null);
 
   const [selection, setSelection] = useState<AddressSelection | null>(null);
   const [jobDescription, setJobDescription] = useState("");
@@ -91,6 +93,8 @@ export default function App() {
   const [visionText, setVisionText] = useState("");
   const [summary, setSummary] = useState("");
   const [sourceUrls, setSourceUrls] = useState<string[]>([]);
+  const [locatingMe, setLocatingMe] = useState(false);
+  const [locateMessage, setLocateMessage] = useState<string | null>(null);
   const [meta, setMeta] = useState<{
     site?: string | null;
     zip?: string;
@@ -227,6 +231,58 @@ export default function App() {
     }
   }, [selection, jobDescription, searchLimit, imageFile, resetOutput]);
 
+  const geoSupported =
+    typeof navigator !== "undefined" && Boolean(navigator.geolocation);
+
+  const handleLocateMe = useCallback(() => {
+    setLocateMessage(null);
+    if (!geoSupported || !mapsOk) {
+      return;
+    }
+    setLocatingMe(true);
+    navigator.geolocation.getCurrentPosition(
+      async (position) => {
+        const lat = position.coords.latitude;
+        const lon = position.coords.longitude;
+        try {
+          const q = new URLSearchParams({
+            latitude: String(lat),
+            longitude: String(lon),
+          });
+          const res = await fetch(`/api/reverse-geocode-address?${q}`, { method: "GET" });
+          if (!res.ok) {
+            setLocateMessage(await detailFromBadResponse(res.clone()));
+            setLocatingMe(false);
+            return;
+          }
+          const data = (await res.json()) as { formatted_address?: string; zip?: string };
+          const formattedAddress =
+            typeof data.formatted_address === "string" ? data.formatted_address.trim() : "";
+          const zip = typeof data.zip === "string" ? data.zip.trim() : "";
+          if (!formattedAddress || zip.length !== 5) {
+            setLocateMessage("Could not decode that location into a U.S. address with ZIP.");
+            setLocatingMe(false);
+            return;
+          }
+          const sel = { formattedAddress, zip };
+          setSelection(sel);
+          addressRef.current?.setLocatedAddress(sel);
+          setLocateMessage(null);
+        } catch (e) {
+          setLocateMessage(e instanceof Error ? e.message : String(e));
+        }
+        setLocatingMe(false);
+      },
+      (err) => {
+        setLocateMessage(
+          err.message ? `Location unavailable: ${err.message}` : "Location permission denied.",
+        );
+        setLocatingMe(false);
+      },
+      { enableHighAccuracy: false, timeout: 18_000, maximumAge: 60_000 },
+    );
+  }, [geoSupported, mapsOk]);
+
   return (
     <div className="app-shell">
       <header className="app-header">
@@ -254,7 +310,47 @@ export default function App() {
             <div id="job-site-address-label" className="rg-field-label-text">
               Address (Google Places)
             </div>
-            <AddressAutocomplete disabled={busy} onSelection={setSelection} />
+            <div className="rg-address-bar">
+              <div className="rg-address-slot">
+                <AddressAutocomplete
+                  ref={addressRef}
+                  disabled={busy || locatingMe}
+                  onSelection={setSelection}
+                />
+              </div>
+              <button
+                type="button"
+                className="rg-btn rg-btn--ghost rg-locate-btn"
+                title="Use current location"
+                aria-label="Locate me with GPS"
+                disabled={busy || locatingMe || !mapsOk || !geoSupported}
+                onClick={() => handleLocateMe()}
+              >
+                {locatingMe ? (
+                  <span className="rg-locate-loading" aria-hidden />
+                ) : (
+                  <svg className="rg-locate-icon" viewBox="0 0 24 24" aria-hidden>
+                    <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="2" />
+                    <path
+                      fill="none"
+                      stroke="currentColor"
+                      strokeWidth="2"
+                      d="M12 19v3M12 2v3M21 11h3M3 11h3M17.657 17.657l2.121 2.121M6.344 17.657l-2.12 2.121M17.657 6.344l2.121-2.12M6.344 6.344L4.223 4.223"
+                    />
+                  </svg>
+                )}
+              </button>
+            </div>
+            {!geoSupported ? (
+              <p className="field-hint">
+                Locate Me isn’t supported in this browser — use search or enter an address manually.
+              </p>
+            ) : null}
+            {locateMessage ? (
+              <div className="rg-banner rg-banner--warn" role="alert">
+                {locateMessage}
+              </div>
+            ) : null}
             {selection ? (
               <p className="field-hint">
                 Selected ZIP <strong>{selection.zip}</strong> — must match Places result for{' '}
