@@ -11,6 +11,7 @@ import {
 
 type NdjsonLine =
   | { event: "open" }
+  | { event: "heartbeat"; ts?: number }
   | { event: "vision_delta"; text: string }
   | {
       event: "context";
@@ -216,6 +217,8 @@ export default function App() {
           switch (row.event) {
             case "open":
               setPhase("Started");
+              break;
+            case "heartbeat":
               break;
             case "vision_delta":
               setPhase("Analyzing photo");

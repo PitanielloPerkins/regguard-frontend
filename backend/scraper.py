@@ -142,6 +142,18 @@ def normalize_us_zip(zip_code: str) -> str:
     return m.group(1)
 
 
+def clear_scout_run_caches() -> None:
+    """
+    Best-effort memory cleanup after a Universal Scout run.
+
+    Universal Scout holds large Firecrawl payloads; nudging the cyclic GC helps release
+    those graphs promptly on long-running uvicorn workers.
+    """
+    import gc
+
+    gc.collect()
+
+
 def _hostname(url: str) -> str:
     try:
         p = urlparse(url)

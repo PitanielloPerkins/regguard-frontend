@@ -178,7 +178,7 @@ export const AddressAutocomplete = forwardRef<AddressAutocompleteHandle, Props>(
             onSelRef.current(null);
             return;
           }
-          let zip =
+          const zip =
             extractZip5FromPlaceComponents(comp) ??
             extractZip5FromFormattedAddress(formatted);
           if (!zip) {

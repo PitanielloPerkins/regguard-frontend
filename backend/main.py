@@ -3,10 +3,12 @@ Reg Guard — FastAPI application entry point.
 """
 from __future__ import annotations
 
+import asyncio
 import hashlib
 import json
 import os
 import re
+import time
 import threading
 import uuid
 from pathlib import Path
@@ -20,11 +22,15 @@ from starlette.concurrency import run_in_threadpool
 
 from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
 from jurisdiction import JurisdictionProfile, geocode_profile_from_address
-from scraper import iter_universal_scout, normalize_us_zip
+from scraper import clear_scout_run_caches, iter_universal_scout, normalize_us_zip
 from vision import iter_job_site_image_text_stream, normalize_vision_text
 
 _BACKEND_DIR = Path(__file__).resolve().parent
 _BACKEND_BOOT_ID = uuid.uuid4().hex[:10]
+
+# Chunked NDJSON stream: yield heartbeats while Firecrawl / vision block in threadpool
+# so proxies and browsers keep the connection open during long scans.
+_STREAM_HEARTBEAT_SEC = 15.0
 
 
 def compute_backend_source_fingerprint() -> str:
@@ -194,6 +200,21 @@ def _line(obj: Dict[str, Any]) -> bytes:
     return (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
 
 
+async def _with_heartbeats(threadpool_coro):
+    """
+    Await one threadpool call (Vision queue pull or Universal Scout step) without
+    stalling the asyncio event loop; emit NDJSON heartbeats if the call is slow
+    so intermediaries keep the stream alive.
+    """
+    task = asyncio.create_task(threadpool_coro)
+    while not task.done():
+        try:
+            await asyncio.wait_for(asyncio.shield(task), timeout=_STREAM_HEARTBEAT_SEC)
+        except asyncio.TimeoutError:
+            yield _line({"event": "heartbeat", "ts": time.time()})
+    yield ("__done__", task.result())
+
+
 @app.get("/")
 def root() -> Dict[str, str]:
     return {
@@ -261,7 +282,8 @@ async def research(
     Emits immediately to avoid proxy/client JSON timeouts, then streams Claude vision (if any),
     Firecrawl scout steps, and word chunks of the final summary.
 
-    Events include: ``open``, ``vision_delta``, ``context``, ``jurisdiction`` (when geocoded),
+    Events include: ``open``, ``heartbeat`` (during slow Firecrawl/vision work), ``vision_delta``,
+    ``context``, ``jurisdiction`` (when geocoded),
     ``step`` (including ``step_ahj_identification`` before Universal Scout), ``step`` (scout),
     ``summary_delta``, ``complete``.
     """
@@ -307,113 +329,127 @@ async def research(
     scout_site = profile.formatted_address or site_line
 
     async def ndjson_bytes():
-        yield _line({"event": "open"})
+        try:
+            yield _line({"event": "open"})
 
-        photo_analysis: Optional[str] = None
-        if image_bytes:
-            content_type, filename = image_meta
-            q: Queue = Queue()
-            thread = threading.Thread(
-                target=_vision_queue_producer,
-                args=(q, image_bytes, content_type, filename),
-                daemon=True,
+            photo_analysis: Optional[str] = None
+            if image_bytes:
+                content_type, filename = image_meta
+                q: Queue = Queue()
+                thread = threading.Thread(
+                    target=_vision_queue_producer,
+                    args=(q, image_bytes, content_type, filename),
+                    daemon=True,
+                )
+                thread.start()
+                raw_parts: List[str] = []
+                while True:
+                    kind: str
+                    val: Any
+                    async for pkt in _with_heartbeats(run_in_threadpool(q.get)):
+                        if isinstance(pkt, tuple) and pkt[0] == "__done__":
+                            kind, val = pkt[1]
+                            break
+                        yield pkt
+                    if kind == "delta":
+                        raw_parts.append(cast(str, val))
+                        yield _line({"event": "vision_delta", "text": cast(str, val)})
+                    elif kind == "done":
+                        break
+                    else:
+                        err = cast(Exception, val)
+                        yield _line({"event": "error", "message": str(err)})
+                        return
+                photo_analysis = normalize_vision_text("".join(raw_parts))
+
+            enhanced_query = _build_enhanced_query(job_description, photo_analysis)
+            yield _line(
+                {
+                    "event": "context",
+                    "enhanced_query": enhanced_query,
+                    "job_description": jd,
+                    "photo_analysis": photo_analysis,
+                }
             )
-            thread.start()
-            raw_parts: List[str] = []
+
+            if scout_jurisdiction and scout_site:
+                yield _line(
+                    {
+                        "event": "jurisdiction",
+                        "site_address": scout_site,
+                        "profile": scout_jurisdiction,
+                    }
+                )
+
+            ahj_for_scout: Optional[Dict[str, Any]] = None
+            if scout_jurisdiction:
+                ahj_for_scout = _ahj_identification_payload(scout_jurisdiction)
+                yield _line(
+                    {
+                        "event": "step",
+                        "step": "step_ahj_identification",
+                        "data": {
+                            "query": "Identify city and county from formatted address (geocode.py → Google Geocoding API)",
+                            "results": [],
+                            **ahj_for_scout,
+                        },
+                    }
+                )
+
+            it = iter(
+                iter_universal_scout(
+                    zip_for_scout,
+                    search_limit=lim,
+                    enhanced_context=enhanced_query,
+                    site_address=scout_site,
+                    jurisdiction=scout_jurisdiction,
+                    ahj_identification=ahj_for_scout,
+                )
+            )
+            final_raw: Optional[Dict[str, Any]] = None
             while True:
-                kind, val = await run_in_threadpool(q.get)
-                if kind == "delta":
-                    raw_parts.append(cast(str, val))
-                    yield _line({"event": "vision_delta", "text": cast(str, val)})
-                elif kind == "done":
+                ev: Optional[Dict[str, Any]] = None
+                async for pkt in _with_heartbeats(run_in_threadpool(_scout_iter_next, it)):
+                    if isinstance(pkt, tuple) and pkt[0] == "__done__":
+                        ev = pkt[1]
+                        break
+                    yield pkt
+                if ev is None:
                     break
-                else:
-                    err = cast(Exception, val)
-                    yield _line({"event": "error", "message": str(err)})
-                    return
-            photo_analysis = normalize_vision_text("".join(raw_parts))
+                if ev.get("event") == "complete":
+                    final_raw = ev["raw"]
+                    break
+                yield _line(ev)
 
-        enhanced_query = _build_enhanced_query(job_description, photo_analysis)
-        yield _line(
-            {
-                "event": "context",
-                "enhanced_query": enhanced_query,
-                "job_description": jd,
-                "photo_analysis": photo_analysis,
-            }
-        )
+            if final_raw is None:
+                yield _line({"event": "error", "message": "Research finished without complete payload."})
+                return
 
-        if scout_jurisdiction and scout_site:
+            raw = final_raw
+            source_urls = _collect_source_urls(raw)
+            summary = _research_summary(raw, source_urls, enhanced_query)
+
+            for chunk in _iter_summary_word_chunks(summary):
+                yield _line({"event": "summary_delta", "text": chunk})
+
+            ju_complete = scout_jurisdiction or {}
             yield _line(
                 {
-                    "event": "jurisdiction",
-                    "site_address": scout_site,
-                    "profile": scout_jurisdiction,
+                    "event": "complete",
+                    "zip": raw["zip"],
+                    "site_address": raw.get("site_address"),
+                    "city": ju_complete.get("city") or None,
+                    "county": ju_complete.get("county") or None,
+                    "jurisdiction": raw.get("jurisdiction"),
+                    "summary": summary,
+                    "source_urls": source_urls,
+                    "enhanced_query": enhanced_query,
+                    "job_description": jd,
+                    "photo_analysis": photo_analysis,
                 }
             )
-
-        ahj_for_scout: Optional[Dict[str, Any]] = None
-        if scout_jurisdiction:
-            ahj_for_scout = _ahj_identification_payload(scout_jurisdiction)
-            yield _line(
-                {
-                    "event": "step",
-                    "step": "step_ahj_identification",
-                    "data": {
-                        "query": "Identify city and county from formatted address (geocode.py → Google Geocoding API)",
-                        "results": [],
-                        **ahj_for_scout,
-                    },
-                }
-            )
-
-        it = iter(
-            iter_universal_scout(
-                zip_for_scout,
-                search_limit=lim,
-                enhanced_context=enhanced_query,
-                site_address=scout_site,
-                jurisdiction=scout_jurisdiction,
-                ahj_identification=ahj_for_scout,
-            )
-        )
-        final_raw: Optional[Dict[str, Any]] = None
-        while True:
-            ev = await run_in_threadpool(_scout_iter_next, it)
-            if ev is None:
-                break
-            if ev.get("event") == "complete":
-                final_raw = ev["raw"]
-                break
-            yield _line(ev)
-
-        if final_raw is None:
-            yield _line({"event": "error", "message": "Research finished without complete payload."})
-            return
-
-        raw = final_raw
-        source_urls = _collect_source_urls(raw)
-        summary = _research_summary(raw, source_urls, enhanced_query)
-
-        for chunk in _iter_summary_word_chunks(summary):
-            yield _line({"event": "summary_delta", "text": chunk})
-
-        ju_complete = scout_jurisdiction or {}
-        yield _line(
-            {
-                "event": "complete",
-                "zip": raw["zip"],
-                "site_address": raw.get("site_address"),
-                "city": ju_complete.get("city") or None,
-                "county": ju_complete.get("county") or None,
-                "jurisdiction": raw.get("jurisdiction"),
-                "summary": summary,
-                "source_urls": source_urls,
-                "enhanced_query": enhanced_query,
-                "job_description": jd,
-                "photo_analysis": photo_analysis,
-            }
-        )
+        finally:
+            clear_scout_run_caches()
 
     return StreamingResponse(
         ndjson_bytes(),
@@ -421,6 +457,8 @@ async def research(
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
+            "Connection": "keep-alive",
+            "Keep-Alive": "timeout=600, max=1000",
         },
     )
 
