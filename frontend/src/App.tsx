@@ -95,6 +95,28 @@ async function warmMicrophonePermission(): Promise<void> {
 }
 
 export default function App() {
+  const geoSupported =
+    typeof navigator !== "undefined" &&
+    navigator.geolocation != null &&
+    typeof navigator.geolocation.getCurrentPosition === "function";
+
+  const speechCtorMounted =
+    typeof window !== "undefined"
+      ? (window.SpeechRecognition ?? window.webkitSpeechRecognition)
+      : undefined;
+  const speechSupportedOnMount =
+    typeof speechCtorMounted === "function";
+
+  useEffect(() => {
+    console.log("[RegGuard handshake]", {
+      geolocation: geoSupported,
+      navigatorGeolocationPresent: !!navigator.geolocation,
+      SpeechRecognitionCtor: speechSupportedOnMount,
+      SpeechRecognition_standard: !!window.SpeechRecognition,
+      webkitSpeechRecognition: !!window.webkitSpeechRecognition,
+    });
+  }, [geoSupported, speechSupportedOnMount]);
+
   const mapsOk = mapsAutocompleteEnabled();
   const addressRef = useRef<AddressAutocompleteHandle>(null);
   const dictationAnchorRef = useRef("");
@@ -266,9 +288,6 @@ export default function App() {
     }
   }, [selection, jobDescription, searchLimit, imageFile, resetOutput]);
 
-  const geoSupported =
-    typeof navigator !== "undefined" && Boolean(navigator.geolocation);
-
   const handleLocateMe = useCallback(() => {
     setLocateMessage(null);
     if (!geoSupported || !mapsOk) {
@@ -314,12 +333,12 @@ export default function App() {
         );
         setLocatingMe(false);
       },
-      { enableHighAccuracy: false, timeout: 18_000, maximumAge: 60_000 },
+      { enableHighAccuracy: false, timeout: 18_000, maximumAge: 0 },
     );
   }, [geoSupported, mapsOk]);
 
   const speechCtor = useMemo(() => speechRecognitionCtor(), []);
-  const speechSupported = Boolean(speechCtor);
+  const speechSupported = Boolean(speechCtor) && speechSupportedOnMount;
 
   useEffect(() => {
     if (!speechCtor) {
@@ -342,6 +361,10 @@ export default function App() {
     rec.continuous = true;
     rec.interimResults = true;
     rec.lang = "en-US";
+
+    rec.onstart = () => {
+      console.log("[RegGuard speech] onstart — browser is listening");
+    };
 
     rec.onresult = (ev) => {
       console.log("[RegGuard speech] onresult", {
@@ -399,6 +422,7 @@ export default function App() {
     };
 
     rec.onend = () => {
+      console.log("[RegGuard speech] onend — recognition session ended");
       if (!listeningRef.current) {
         setDictationActiveRef.current(false);
         return;
