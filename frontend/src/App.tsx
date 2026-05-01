@@ -127,6 +127,8 @@ export default function App() {
   const initialRevisionRef = useRef<string | null>(null);
   const lastPollRevisionRef = useRef<string | null>(null);
   const dismissedRevisionRef = useRef<string | null>(null);
+  const researchSawChunkRef = useRef(false);
+  const researchCompleteRef = useRef(false);
 
   const [selection, setSelection] = useState<AddressSelection | null>(null);
   const [jobDescription, setJobDescription] = useState("");
@@ -146,6 +148,7 @@ export default function App() {
   const [speechHint, setSpeechHint] = useState<string | null>(null);
   const [backendStale, setBackendStale] = useState(false);
   const [autoRefreshSec, setAutoRefreshSec] = useState<number | null>(null);
+  const [streamBroken, setStreamBroken] = useState(false);
   const [meta, setMeta] = useState<{
     site?: string | null;
     zip?: string;
@@ -172,6 +175,7 @@ export default function App() {
     setSummary("");
     setSourceUrls([]);
     setMeta(null);
+    setStreamBroken(false);
   }, []);
 
   const runResearch = useCallback(async () => {
@@ -179,6 +183,9 @@ export default function App() {
       return;
     }
     resetOutput();
+    setStreamBroken(false);
+    researchSawChunkRef.current = false;
+    researchCompleteRef.current = false;
     setBusy(true);
     setPhase("Connecting…");
 
@@ -192,7 +199,11 @@ export default function App() {
     }
 
     try {
-      const res = await fetch("/api/research", { method: "POST", body: form });
+      const res = await fetch("/api/research", {
+        method: "POST",
+        body: form,
+        cache: "no-store",
+      });
       if (!res.ok) {
         throw new Error(await detailFromBadResponse(res));
       }
@@ -209,6 +220,9 @@ export default function App() {
         if (done) {
           break;
         }
+        if (value && value.byteLength > 0) {
+          researchSawChunkRef.current = true;
+        }
         buf += dec.decode(value, { stream: true });
         const { lines, rest } = parseNdjsonObjects(buf);
         buf = rest;
@@ -219,6 +233,9 @@ export default function App() {
               setPhase("Started");
               break;
             case "heartbeat":
+              setPhase((p) =>
+                p.startsWith("Research:") || p === "Writing summary" ? p : "Research scan in progress…",
+              );
               break;
             case "vision_delta":
               setPhase("Analyzing photo");
@@ -249,6 +266,8 @@ export default function App() {
               setSummary((prev) => prev + row.text);
               break;
             case "complete": {
+              researchCompleteRef.current = true;
+              setStreamBroken(false);
               setPhase("Complete");
               if (typeof row.summary === "string" && row.summary.length > 0) {
                 setSummary(row.summary);
@@ -283,9 +302,18 @@ export default function App() {
           /* ignore incomplete tail */
         }
       }
+
+      if (researchSawChunkRef.current && !researchCompleteRef.current) {
+        setStreamBroken(true);
+        setError((prev) => prev ?? "Research stream ended before completion.");
+      }
     } catch (e) {
-      setError(e instanceof Error ? e.message : String(e));
+      const msg = e instanceof Error ? e.message : String(e);
+      setError(msg);
       setPhase("");
+      if (researchSawChunkRef.current && !researchCompleteRef.current) {
+        setStreamBroken(true);
+      }
     } finally {
       setBusy(false);
     }
@@ -774,6 +802,20 @@ export default function App() {
           {error ? (
             <div className="rg-banner rg-banner--warn" role="alert">
               {error}
+            </div>
+          ) : null}
+
+          {streamBroken && !busy ? (
+            <div className="rg-banner rg-banner--muted" role="status">
+              <span>The research stream stopped before completion. Partial results may appear above.</span>{" "}
+              <button
+                type="button"
+                className="rg-btn rg-btn--primary rg-btn--compact"
+                disabled={!selection?.formattedAddress || !selection.zip}
+                onClick={() => void runResearch()}
+              >
+                Resume Research
+              </button>
             </div>
           ) : null}
 

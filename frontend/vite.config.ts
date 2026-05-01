@@ -17,9 +17,12 @@ export default defineConfig({
     strictPort: true,
     proxy: {
       '/api': {
-        target: 'http://localhost:8000',
+        target: 'http://127.0.0.1:8000',
         changeOrigin: true,
         rewrite: (path) => path.replace(/^\/api/, ''),
+        /** Long-running NDJSON stream from POST /research — avoid dev-proxy idle timeouts. */
+        timeout: 600_000,
+        proxyTimeout: 600_000,
       },
     },
   },

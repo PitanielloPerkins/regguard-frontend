@@ -30,7 +30,7 @@ _BACKEND_BOOT_ID = uuid.uuid4().hex[:10]
 
 # Chunked NDJSON stream: yield heartbeats while Firecrawl / vision block in threadpool
 # so proxies and browsers keep the connection open during long scans.
-_STREAM_HEARTBEAT_SEC = 15.0
+_STREAM_HEARTBEAT_SEC = 2.0
 
 
 def compute_backend_source_fingerprint() -> str:
@@ -211,6 +211,8 @@ async def _with_heartbeats(threadpool_coro):
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=_STREAM_HEARTBEAT_SEC)
         except asyncio.TimeoutError:
+            # Wire-level padding so intermediaries flush; empty lines are ignored by the NDJSON client.
+            yield b"\n"
             yield _line({"event": "heartbeat", "ts": time.time()})
     yield ("__done__", task.result())
 
