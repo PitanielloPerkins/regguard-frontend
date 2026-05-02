@@ -121,6 +121,10 @@ DISCOVERY_SCRAPE_OPTIONS = ScrapeOptions(
     only_main_content=True,
 )
 
+# Discovery search asks Firecrawl for SERP hits + scrape; keep limit modest so billing
+# does not treat the request like a maximal batch (see Firecrawl pricing/reservation quirks).
+_FIRECRAWL_SEARCH_BATCH_LIMIT = 20
+
 
 def _require_firecrawl_key() -> str:
     key = (os.environ.get("FIRECRAWL_API_KEY") or "").strip()
@@ -290,11 +294,6 @@ def _jurisdiction_spelling_hint(hits: List[Dict[str, Optional[str]]]) -> str:
     return ""
 
 
-def _scout_api_limit(user_limit: int) -> int:
-    """Ask Firecrawl for extra rows so post-filtering to trusted hosts still fills `user_limit`."""
-    return min(100, max(user_limit, user_limit * 4))
-
-
 def _fallback_official_query(base: str) -> str:
     """
     Unscoped follow-up (no `site:`): bias toward the municipality's own official entry point.
@@ -339,7 +338,6 @@ def _scout_search(
     adding *official* (if absent) and *city government landing page* so the SERP targets
     the locality's official municipal entry page; return unfiltered web hits (deduped).
     """
-    api_limit = _scout_api_limit(user_limit)
     primary_q = _append_scope(query)
     meta: Dict[str, Any] = {
         "primary_query": primary_q,
@@ -349,7 +347,7 @@ def _scout_search(
 
     r = fc.search(
         primary_q,
-        limit=api_limit,
+        limit=_FIRECRAWL_SEARCH_BATCH_LIMIT,
         location="US",
         scrape_options=DISCOVERY_SCRAPE_OPTIONS,
     )
@@ -362,7 +360,7 @@ def _scout_search(
     meta["fallback_query"] = fb
     r2 = fc.search(
         fb,
-        limit=api_limit,
+        limit=_FIRECRAWL_SEARCH_BATCH_LIMIT,
         location="US",
         scrape_options=DISCOVERY_SCRAPE_OPTIONS,
     )

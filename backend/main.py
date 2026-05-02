@@ -6,6 +6,7 @@ from __future__ import annotations
 import asyncio
 import hashlib
 import json
+import logging
 import os
 import re
 import time
@@ -32,6 +33,12 @@ _BACKEND_BOOT_ID = uuid.uuid4().hex[:10]
 # so proxies and browsers keep the connection open during long scans.
 _STREAM_HEARTBEAT_SEC = 2.0
 
+_RESEARCH_STALL_FIRECRAWL_MESSAGE = (
+    "Research stalled. Check Firecrawl usage at firecrawl.dev/app"
+)
+
+logger = logging.getLogger("reg_guard")
+
 
 def compute_backend_source_fingerprint() -> str:
     """Short hash of backend ``.py`` mtimes — changes when sources change on disk."""
@@ -56,6 +63,14 @@ app = FastAPI(
     title="Reg Guard",
     description="Agentic Compliance Assistant for Contractors",
 )
+
+
+@app.on_event("startup")
+async def _log_firecrawl_key_prefix() -> None:
+    k = os.getenv("FIRECRAWL_API_KEY") or ""
+    prefix = k[:5] if k else "(not set)"
+    print(f"Using Firecrawl Key: {prefix}...")
+
 
 app.add_middleware(
     CORSMiddleware,
@@ -398,30 +413,35 @@ async def research(
                     }
                 )
 
-            it = iter(
-                iter_universal_scout(
-                    zip_for_scout,
-                    search_limit=lim,
-                    enhanced_context=enhanced_query,
-                    site_address=scout_site,
-                    jurisdiction=scout_jurisdiction,
-                    ahj_identification=ahj_for_scout,
-                )
-            )
             final_raw: Optional[Dict[str, Any]] = None
-            while True:
-                ev: Optional[Dict[str, Any]] = None
-                async for pkt in _with_heartbeats(run_in_threadpool(_scout_iter_next, it)):
-                    if isinstance(pkt, tuple) and pkt[0] == "__done__":
-                        ev = pkt[1]
+            try:
+                it = iter(
+                    iter_universal_scout(
+                        zip_for_scout,
+                        search_limit=lim,
+                        enhanced_context=enhanced_query,
+                        site_address=scout_site,
+                        jurisdiction=scout_jurisdiction,
+                        ahj_identification=ahj_for_scout,
+                    )
+                )
+                while True:
+                    ev: Optional[Dict[str, Any]] = None
+                    async for pkt in _with_heartbeats(run_in_threadpool(_scout_iter_next, it)):
+                        if isinstance(pkt, tuple) and pkt[0] == "__done__":
+                            ev = pkt[1]
+                            break
+                        yield pkt
+                    if ev is None:
                         break
-                    yield pkt
-                if ev is None:
-                    break
-                if ev.get("event") == "complete":
-                    final_raw = ev["raw"]
-                    break
-                yield _line(ev)
+                    if ev.get("event") == "complete":
+                        final_raw = ev["raw"]
+                        break
+                    yield _line(ev)
+            except Exception:
+                logger.exception("Firecrawl / Universal Scout crawl failed")
+                yield _line({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})
+                return
 
             if final_raw is None:
                 yield _line({"event": "error", "message": "Research finished without complete payload."})
