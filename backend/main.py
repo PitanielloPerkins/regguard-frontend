@@ -227,7 +227,7 @@ def _research_action_plan_fallback_markdown(
     enhanced_query: str,
 ) -> str:
     """Deterministic Markdown memo when ANTHROPIC_API_KEY is unavailable."""
-    zip_str = raw.get("zip", "")
+    zip_str = str(raw.get("zip") or "")
     site = (raw.get("site_address") or "").strip()
     ju = raw.get("jurisdiction")
     ju_line = ""
@@ -242,40 +242,93 @@ def _research_action_plan_fallback_markdown(
         else f"Research context: US ZIP **{zip_str}**."
     )
     has_ctx = (enhanced_query or "").strip() and not enhanced_query.strip().startswith("— (no")
+    in_plano = _digest_suggests_plano_tx(raw, enhanced_query)
 
-    lines = [
-        "## Contractor Action Plan",
+    permit_scope = (
+        "Pull an **electrical / building permit** for the service or panel upgrade (confirm trade and "
+        "sub-type with the City of Plano). Typical panel / service changes require a permit."
+        if in_plano
+        else "Pull permits required for the **service or panel upgrade**; confirm exact permit type with the local AHJ."
+    )
+
+    permit_logistics_body = (
+        [
+            "### Permit logistics (City of Plano, Texas)",
+            "",
+            "- [ ] Open the City of Plano building / electrical permit portal and confirm **current** "
+            "instructions for residential or commercial electrical work.",
+            "- [ ] Budget the **minimum permit fee of $45** (Plano has cited this minimum — "
+            "**re-verify** the fee table on the official city site before paying).",
+            "- [ ] Confirm that a **licensed electrician / eligible electrical contractor** is the "
+            "**applicant of record** to pull the permit (verify exact wording on the Plano application).",
+            "- [ ] Upload or bring single-line diagrams, load calculations, and manufacturer cut sheets the city requests.",
+            "",
+        ]
+        if in_plano
+        else [
+            "### Permit logistics (local AHJ)",
+            "",
+            "- [ ] Confirm minimum permit fees and acceptable payment methods on the jurisdiction's **current** fee schedule.",
+            "- [ ] Confirm **who may apply** for the electrical permit (owner, contractor license class, etc.).",
+            "- [ ] Submit plans, load calculations, and cut sheets per local checklist.",
+            "",
+        ]
+    )
+
+    inspection_body = (
+        [
+            "### Inspection prep — Service / Final (Plano)",
+            "",
+            "- [ ] **Service / Final inspection**: panel **circuit directory** complete and matches breakers; "
+            "neutrals and EGCs landed only on listed buses.",
+            "- [ ] **Torque marking**: follow manufacturer torque specs; add inspector-visible **torque marks** "
+            "where required by spec or local practice.",
+            "- [ ] **Grounding electrode** visible and accessible — e.g. ground rod: verify **top of rod depth / cover** "
+            "meets **NEC 250.53(G)** (typically **8 ft** driven length with minimal cover; confirm on site and local amendment).",
+            "- [ ] Bonding jumpers / GEC clamps tight, corrosion-resistant, and accessible for inspection photos.",
+            "- [ ] Working space in front of the panel clear per **NEC 110.26** (depth, width, height, free from storage).",
+            "",
+        ]
+        if in_plano
+        else [
+            "### Inspection prep — Service / Final",
+            "",
+            "- [ ] Panel **labeling**, **torque marks** (per manufacturer / AHJ), and **grounding electrode system** "
+            "ready for inspection (depth / routing per **NEC 250** — confirm local amendments).",
+            "- [ ] Working space clear per **NEC 110.26**.",
+            "",
+        ]
+    )
+
+    lines: List[str] = [
+        "## Contractor Action Plan — Panel / service upgrade punch list",
         "",
-        "### Permit Status",
-        "**Uncertain — verify with AHJ.** Most structural or mechanical scopes require permits; "
-        "confirm against your trade and scope with the jurisdiction below.",
+        "_Generated without Claude — enable ANTHROPIC_API_KEY for a tailored memo._",
         "",
-        "### Key Constraints",
-        "- **Insufficient detail in sources** — confirm setbacks, allowed construction hours, "
-        "noise ordinances, and staging rules with the Authority Having Jurisdiction.",
+        "### Permit status & scope",
         "",
-        "### Action Items",
+        permit_scope,
+        "",
+        "- [ ] **Verify AHJ**"
+        + (f" — **{ju_line}**." if ju_line else f" for ZIP **{zip_str}**."),
+        "- [ ] Match permit type to scope on the official permit checklist.",
+        "",
+        "### 2023 NEC — technical checkpoints (panel / relocated circuits)",
+        "",
+        "- [ ] **GFCI** — Where **new or relocated** branch circuits extend into kitchen, bathroom, garage, exterior, "
+        "basement, etc., confirm **210.8** protection on appropriate circuits.",
+        "- [ ] **AFCI** — Where **new or relocated** 120 V branch circuits supply family rooms, bedrooms, etc., confirm **210.12** device type.",
+        "- [ ] **Grounding & bonding (Art. 250)** — Main bonding jumper, neutral bus separation in subpanels, EGC run with every circuit, "
+        "and electrode system continuous to service.",
+        "- [ ] **Working space (110.26)** — 30 in. width, 36 in. depth, 6.5 ft height (or as required for equipment); "
+        "panel not blocked by shelving or equipment.",
+        "- [ ] Confirm **adopted NEC cycle and local amendments** on the AHJ website.",
+        "",
     ]
-    n = 1
-    if ju_line:
-        lines.append(f"{n}. Confirm AHJ and permit desk for: **{ju_line}**.")
-        n += 1
-    lines.append(
-        f"{n}. Call or portal-check the city/county building department for ZIP **{zip_str}** "
-        "with your job description and plans."
-    )
-    n += 1
-    lines.append(
-        f"{n}. Gather site photos, scope of work, and property records before filing applications."
-    )
-    n += 1
-    ctx_note = (
-        "Enhanced job context (voice/photo/text) was merged into the scout queries."
-        if has_ctx
-        else "Run research again with voice or typed scope for tighter steering."
-    )
-    lines.append(f"{n}. {ctx_note}")
-    lines.extend(["", "### Reference Links"])
+    lines.extend(permit_logistics_body)
+    lines.extend(inspection_body)
+    lines.append("### Reference Links")
+    lines.append("")
     if source_urls:
         for u in source_urls:
             lines.append(f"- {u}")
