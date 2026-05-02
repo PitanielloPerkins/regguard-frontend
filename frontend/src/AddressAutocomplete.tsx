@@ -20,6 +20,8 @@ export type AddressAutocompleteHandle = {
   setLocatedAddress: (sel: AddressSelection) => void;
   /** Current text in the Places widget (typing or committed). */
   getInputValue: () => string;
+  /** Clear field and parent selection — used by “New Job”. */
+  clearForNewJob: () => void;
 };
 
 type Props = {
@@ -77,6 +79,14 @@ export const AddressAutocomplete = forwardRef<AddressAutocompleteHandle, Props>(
       getInputValue() {
         const w = widgetRef.current as unknown as { value?: string } | null;
         return w && typeof w.value === "string" ? w.value : "";
+      },
+      clearForNewJob() {
+        lastCommittedAddr.current = null;
+        const w = widgetRef.current as unknown as { value?: string } | null;
+        if (w && typeof w.value === "string") {
+          w.value = "";
+        }
+        onSelRef.current(null);
       },
     }));
 

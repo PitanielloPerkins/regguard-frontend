@@ -1,12 +1,21 @@
 /**
  * Expert Brain: Contractor Action Plan → printable Reg Guard punch list PDF (jsPDF).
+ *
+ * Typography: jsPDF ships with Helvetica/Times/Courier only. We use **Helvetica** as the embedded
+ * professional sans-serif (metrically similar to Inter/Roboto) so the PDF stays lightweight without TTF.
  */
 import { jsPDF } from "jspdf";
+
+/** Standard PDF sans — aligns with Inter/Roboto styling intent. */
+const PDF_SANS = "helvetica";
 
 /** Reg Guard “construction navy” — matches index.css */
 const RG_NAVY: [number, number, number] = [13, 27, 42];
 const RG_LINK: [number, number, number] = [168, 197, 232];
 const RG_BODY_TEXT: [number, number, number] = [33, 38, 48];
+
+const LEGAL_DISCLAIMER =
+  "REG GUARD DISCLAIMER: This report is an AI-generated compliance aid. All technical requirements and fees must be verified with the AHJ before work commences. Reg Guard is not liable for errors or omissions in local code interpretations.";
 
 function stripInlineMd(line: string): string {
   let s = line;
@@ -112,6 +121,7 @@ export function downloadActionPlanPdf(options: {
   siteAddress?: string | null;
   zip?: string | null;
   city?: string | null;
+  county?: string | null;
 }): void {
   let trimmed = markdownForPdfBody(options.markdown);
   if (isPlanoTexas(options)) {
@@ -126,7 +136,9 @@ export function downloadActionPlanPdf(options: {
   const pageH = pdf.internal.pageSize.getHeight();
   const margin = 16;
   const innerW = pageW - 2 * margin;
+  /** Footer line + optional legal block */
   const footerReserve = 14;
+  const disclaimerMinReserve = 42;
 
   let y = 0;
 
@@ -149,7 +161,7 @@ export function downloadActionPlanPdf(options: {
     }
     const loc = locBits.join(" · ");
 
-    pdf.setFont("helvetica", "bold");
+    pdf.setFont(PDF_SANS, "bold");
     pdf.setFontSize(14);
     const reportTitle = "RegGuard Professional Compliance Report";
     const titleLines = pdf.splitTextToSize(reportTitle, titleMaxW);
@@ -157,7 +169,7 @@ export function downloadActionPlanPdf(options: {
     ty += titleLines.length * 5.2;
     ty += 1.5 + 5.5;
     if (loc) {
-      pdf.setFont("helvetica", "bold");
+      pdf.setFont(PDF_SANS, "bold");
       pdf.setFontSize(10);
       const locLinesMeasure = pdf.splitTextToSize(loc.slice(0, 280), titleMaxW);
       ty += 4.5 + locLinesMeasure.length * 4.35;
@@ -170,12 +182,12 @@ export function downloadActionPlanPdf(options: {
     pdf.setFillColor(...RG_LINK);
     pdf.roundedRect(markX, markY, 12, 12, 2.2, 2.2, "F");
     pdf.setTextColor(...RG_NAVY);
-    pdf.setFont("helvetica", "bold");
+    pdf.setFont(PDF_SANS, "bold");
     pdf.setFontSize(8.2);
     pdf.text("RG", markX + 2.6, markY + 8.2);
 
     pdf.setTextColor(224, 225, 221);
-    pdf.setFont("helvetica", "bold");
+    pdf.setFont(PDF_SANS, "bold");
     pdf.setFontSize(14);
     let titleY = 13;
     for (const ln of titleLines) {
@@ -183,13 +195,13 @@ export function downloadActionPlanPdf(options: {
       titleY += 5.2;
     }
 
-    pdf.setFont("helvetica", "normal");
+    pdf.setFont(PDF_SANS, "normal");
     pdf.setFontSize(8.8);
     pdf.setTextColor(...RG_LINK);
     pdf.text("Agentic compliance assistant for contractors", textX, titleY + 1.5);
 
     if (loc) {
-      pdf.setFont("helvetica", "bold");
+      pdf.setFont(PDF_SANS, "bold");
       pdf.setFontSize(9);
       pdf.setTextColor(235, 237, 242);
       pdf.text("Project address", textX, titleY + 8.5);
@@ -216,24 +228,43 @@ export function downloadActionPlanPdf(options: {
     pdf.setDrawColor(190, 195, 205);
     pdf.setLineWidth(0.25);
     pdf.line(margin, 14, pageW - margin, 14);
-    pdf.setFont("helvetica", "bold");
+    pdf.setFont(PDF_SANS, "bold");
     pdf.setFontSize(9);
     pdf.setTextColor(...RG_NAVY);
     pdf.text("RegGuard Professional Compliance Report (continued)", margin, 21);
-    pdf.setFont("helvetica", "normal");
+    pdf.setFont(PDF_SANS, "normal");
     pdf.setTextColor(...RG_BODY_TEXT);
     y = 28;
   };
 
   const checkBreak = (nextBlockMm: number) => {
-    if (y + nextBlockMm > pageH - footerReserve) {
+    if (y + nextBlockMm > pageH - footerReserve - disclaimerMinReserve) {
       startContinuedPage();
     }
   };
 
   drawFirstPageHeader();
 
-  const rawLines = trimmed.split(/\r?\n/);
+  /* ----- PROJECT SUMMARY (two columns) ----- */
+  const colGap = 5;
+  const sumColW = (innerW - colGap) / 2;
+  const sumX0 = margin;
+  const sumX1 = margin + sumColW + colGap;
+  const stampShort = new Date().toLocaleString(undefined, {
+    dateStyle: "medium",
+    timeStyle: "short",
+  });
+  const projAddr = (options.siteAddress || "").trim() || "—";
+  const projZip = (options.zip || "").trim() || "—";
+  const projCity = (options.city || "").trim();
+  const projCounty = (options.county || "").trim();
+  const localityLabel = projCity
+    ? projCounty
+      ? `${projCity} · ${projCounty}`
+      : projCity
+    : projCounty || "—";
+
+  pdf.setFont(PDF_SAINS, "bold");
   for (const raw of rawLines) {
     const line = raw.trimEnd();
     const t = line.trim();
