@@ -24,13 +24,50 @@ function slugDate(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
+/** Strip internal fallback / API error prose so it never lands in client PDFs. */
+function shouldDropPdfLine(line: string): boolean {
+  const lower = line.toLowerCase();
+  return (
+    lower.includes("claude action plan unavailable") || lower.includes("failed: error code")
+  );
+}
+
+/**
+ * First line of live Universal Scout blocks: Jurisdiction → Permits → Codes (see App.tsx headings).
+ * PDF body starts here so preamble / error banners / narrative titles are omitted.
+ */
+function findFirstTechnicalSectionIndex(lines: string[]): number {
+  for (let i = 0; i < lines.length; i++) {
+    const t = lines[i].trim();
+    if (!t.startsWith("###")) {
+      continue;
+    }
+    const afterHashes = t.replace(/^#+\s*/, "").toLowerCase();
+    if (
+      afterHashes.startsWith("jurisdiction") ||
+      afterHashes.startsWith("building permits") ||
+      afterHashes.startsWith("building codes")
+    ) {
+      return i;
+    }
+  }
+  return -1;
+}
+
+function markdownForPdfBody(raw: string): string {
+  const lines = raw.split(/\r?\n/).filter((ln) => !shouldDropPdfLine(ln));
+  const start = findFirstTechnicalSectionIndex(lines);
+  const bodyLines = start >= 0 ? lines.slice(start) : lines;
+  return bodyLines.join("\n").trim();
+}
+
 export function downloadActionPlanPdf(options: {
   markdown: string;
   siteAddress?: string | null;
   zip?: string | null;
   city?: string | null;
 }): void {
-  const trimmed = options.markdown.trim();
+  const trimmed = markdownForPdfBody(options.markdown);
   if (!trimmed) {
     return;
   }
@@ -45,8 +82,9 @@ export function downloadActionPlanPdf(options: {
   let y = 0;
 
   const drawFirstPageHeader = () => {
+    const headerBandMm = 42;
     pdf.setFillColor(...RG_NAVY);
-    pdf.rect(0, 0, pageW, 34, "F");
+    pdf.rect(0, 0, pageW, headerBandMm, "F");
 
     const markX = margin;
     const markY = 7.5;
@@ -58,44 +96,57 @@ export function downloadActionPlanPdf(options: {
     pdf.text("RG", markX + 2.6, markY + 8.2);
 
     const textX = margin + 16;
+    const titleMaxW = innerW - 16;
     pdf.setTextColor(224, 225, 221);
     pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(22);
-    pdf.text("Reg Guard", textX, 15);
+    pdf.setFontSize(14);
+    const reportTitle = "RegGuard Professional Compliance Report";
+    const titleLines = pdf.splitTextToSize(reportTitle, titleMaxW);
+    let ty = 13;
+    for (const ln of titleLines) {
+      pdf.text(ln, textX, ty);
+      ty += 5.2;
+    }
 
     pdf.setFont("helvetica", "normal");
     pdf.setFontSize(8.8);
     pdf.setTextColor(...RG_LINK);
-    pdf.text("Agentic compliance assistant for contractors", textX, 21);
+    pdf.text("Agentic compliance assistant for contractors", textX, ty + 1.5);
 
     const locBits: string[] = [];
     if (options.siteAddress?.trim()) {
       locBits.push(options.siteAddress.trim());
-    }
-    if (options.city?.trim()) {
-      locBits.push(options.city.trim());
-    }
-    if (options.zip?.trim()) {
-      locBits.push(`ZIP ${options.zip.trim()}`);
+    } else if (options.city?.trim() || options.zip?.trim()) {
+      if (options.city?.trim()) {
+        locBits.push(options.city.trim());
+      }
+      if (options.zip?.trim()) {
+        locBits.push(`ZIP ${options.zip.trim()}`);
+      }
     }
     const loc = locBits.join(" · ");
     if (loc) {
-      pdf.setFontSize(7.6);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(8.4);
+      pdf.setTextColor(235, 237, 242);
+      pdf.text("Project address", textX, ty + 8.5);
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8.2);
       pdf.setTextColor(200, 206, 220);
-      const locLines = pdf.splitTextToSize(loc.slice(0, 200), innerW - 16);
-      let ly = 27;
+      const locLines = pdf.splitTextToSize(loc.slice(0, 280), titleMaxW);
+      let ly = ty + 12.5;
       for (const ln of locLines) {
         pdf.text(ln, textX, ly);
-        ly += 3.6;
+        ly += 3.8;
       }
     }
 
     pdf.setDrawColor(...RG_LINK);
     pdf.setLineWidth(0.35);
-    pdf.line(margin, 31.5, pageW - margin, 31.5);
+    pdf.line(margin, headerBandMm - 2.5, pageW - margin, headerBandMm - 2.5);
 
     pdf.setTextColor(...RG_BODY_TEXT);
-    y = 40;
+    y = headerBandMm + 6;
   };
 
   const startContinuedPage = () => {
@@ -106,7 +157,7 @@ export function downloadActionPlanPdf(options: {
     pdf.setFont("helvetica", "bold");
     pdf.setFontSize(9);
     pdf.setTextColor(...RG_NAVY);
-    pdf.text("Reg Guard · Contractor punch list (continued)", margin, 21);
+    pdf.text("RegGuard Professional Compliance Report (continued)", margin, 21);
     pdf.setFont("helvetica", "normal");
     pdf.setTextColor(...RG_BODY_TEXT);
     y = 28;
