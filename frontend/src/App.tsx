@@ -210,6 +210,7 @@ export default function App() {
           }
         },
         onmessage(ev) {
+          console.log("Stream chunk:", ev.data);
           const raw = typeof ev.data === "string" ? ev.data : "";
           if (!raw.trim()) {
             return;

@@ -31,9 +31,8 @@ from vision import iter_job_site_image_text_stream, normalize_vision_text
 _BACKEND_DIR = Path(__file__).resolve().parent
 _BACKEND_BOOT_ID = uuid.uuid4().hex[:10]
 
-# Chunked SSE stream: yield heartbeats while Firecrawl / vision block in threadpool
-# so proxies and browsers keep the connection open during long scans.
-_STREAM_HEARTBEAT_SEC = 2.0
+# Chunked SSE stream: poll threadpool work every ~0.01s so we can emit heartbeats and flush often.
+_STREAM_HEARTBEAT_SEC = 0.01
 
 _RESEARCH_STALL_FIRECRAWL_MESSAGE = (
     "Research stalled. Check Firecrawl usage at firecrawl.dev/app"
@@ -307,10 +306,9 @@ def _vision_queue_producer(
         q.put(("error", e))
 
 
-def _sse_event_str(obj: Dict[str, Any]) -> str:
-    """One SSE frame: ``data:`` line + blank line (browser / fetch-event-source protocol)."""
-    payload = json.dumps(obj, ensure_ascii=False)
-    return f"data: {payload}\n\n"
+def _sse_data_frame(chunk: Dict[str, Any]) -> str:
+    """SSE frame: required ``\\n\\n`` so the client parses an event boundary immediately."""
+    return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
 
 
 def _log_research_step(label: str, *, detail: str = "") -> None:
@@ -336,7 +334,8 @@ async def _with_heartbeats(threadpool_coro):
             await asyncio.wait_for(asyncio.shield(task), timeout=_STREAM_HEARTBEAT_SEC)
         except asyncio.TimeoutError:
             yield ": ping\n\n"
-            yield _sse_event_str({"event": "heartbeat", "ts": time.time()})
+            yield _sse_data_frame({"event": "heartbeat", "ts": time.time()})
+            await asyncio.sleep(0)
     yield ("__done__", task.result())
 
 
@@ -440,7 +439,7 @@ async def research(
 
     async def research_sse():
         try:
-            yield _sse_event_str({"event": "open"})
+            yield _sse_data_frame({"event": "open"})
             _log_research_step("open", detail="SSE stream started")
 
             try:
@@ -449,17 +448,17 @@ async def research(
                     site_line,
                 )
             except ValueError as e:
-                yield _sse_event_str({"event": "error", "message": str(e)})
+                yield _sse_data_frame({"event": "error", "message": str(e)})
                 return
 
             if (zip_code or "").strip():
                 try:
                     client_z = normalize_us_zip(zip_code)
                 except ValueError as e:
-                    yield _sse_event_str({"event": "error", "message": str(e)})
+                    yield _sse_data_frame({"event": "error", "message": str(e)})
                     return
                 if client_z != profile.zip5:
-                    yield _sse_event_str(
+                    yield _sse_data_frame(
                         {
                             "event": "error",
                             "message": "ZIP does not match the selected address. Pick the address again from suggestions.",
@@ -493,18 +492,18 @@ async def research(
                         yield pkt
                     if kind == "delta":
                         raw_parts.append(cast(str, val))
-                        yield _sse_event_str({"event": "vision_delta", "text": cast(str, val)})
+                        yield _sse_data_frame({"event": "vision_delta", "text": cast(str, val)})
                     elif kind == "done":
                         break
                     else:
                         err = cast(Exception, val)
-                        yield _sse_event_str({"event": "error", "message": str(err)})
+                        yield _sse_data_frame({"event": "error", "message": str(err)})
                         return
                 photo_analysis = normalize_vision_text("".join(raw_parts))
                 _log_research_step("vision", detail="Claude vision — done")
 
             enhanced_query = _build_enhanced_query(job_description, photo_analysis)
-            yield _sse_event_str(
+            yield _sse_data_frame(
                 {
                     "event": "context",
                     "enhanced_query": enhanced_query,
@@ -515,7 +514,7 @@ async def research(
             _log_research_step("context", detail="enhanced query ready for scout")
 
             if scout_jurisdiction and scout_site:
-                yield _sse_event_str(
+                yield _sse_data_frame(
                     {
                         "event": "jurisdiction",
                         "site_address": scout_site,
@@ -531,7 +530,7 @@ async def research(
                     "AHJ identification",
                     detail="city/county/state from geocode (before Universal Scout)",
                 )
-                yield _sse_event_str(
+                yield _sse_data_frame(
                     {
                         "event": "step",
                         "step": "step_ahj_identification",
@@ -583,14 +582,14 @@ async def research(
                             "Universal Scout",
                             detail=_scout_labels.get(key, key),
                         )
-                    yield _sse_event_str(ev)
+                    yield _sse_data_frame(ev)
             except Exception:
                 logger.exception("Firecrawl / Universal Scout crawl failed")
-                yield _sse_event_str({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})
+                yield _sse_data_frame({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})
                 return
 
             if final_raw is None:
-                yield _sse_event_str(
+                yield _sse_data_frame(
                     {"event": "error", "message": "Research finished without complete payload."}
                 )
                 return
@@ -621,7 +620,8 @@ async def research(
                         yield pkt
                     if kind == "delta":
                         raw_parts.append(cast(str, val))
-                        yield _sse_event_str({"event": "summary_delta", "text": cast(str, val)})
+                        yield _sse_data_frame({"event": "summary_delta", "text": cast(str, val)})
+                        await asyncio.sleep(0)
                     elif kind == "done":
                         summary = "".join(raw_parts)
                         break
@@ -632,9 +632,11 @@ async def research(
                             f"*Claude action plan unavailable ({err!s}); "
                             "showing structured fallback memo.*\n\n"
                         )
-                        yield _sse_event_str({"event": "summary_delta", "text": banner})
+                        yield _sse_data_frame({"event": "summary_delta", "text": banner})
+                        await asyncio.sleep(0)
                         for chunk in _iter_summary_word_chunks(stub):
-                            yield _sse_event_str({"event": "summary_delta", "text": chunk})
+                            yield _sse_data_frame({"event": "summary_delta", "text": chunk})
+                            await asyncio.sleep(0)
                         summary = banner + stub
                         _log_research_step("action plan", detail="fallback memo (Claude error)")
                         break
@@ -642,11 +644,12 @@ async def research(
                 _log_research_step("action plan", detail="structured fallback memo — no ANTHROPIC_API_KEY")
                 summary = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
                 for chunk in _iter_summary_word_chunks(summary):
-                    yield _sse_event_str({"event": "summary_delta", "text": chunk})
+                    yield _sse_data_frame({"event": "summary_delta", "text": chunk})
+                    await asyncio.sleep(0)
 
             _log_research_step("complete", detail="streaming final payload to client")
             ju_complete = scout_jurisdiction or {}
-            yield _sse_event_str(
+            yield _sse_data_frame(
                 {
                     "event": "complete",
                     "zip": raw["zip"],
