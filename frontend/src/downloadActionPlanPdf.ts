@@ -246,10 +246,10 @@ export function downloadActionPlanPdf(options: {
   drawFirstPageHeader();
 
   /* ----- PROJECT SUMMARY (two columns) ----- */
-  const colGap = 5;
-  const sumColW = (innerW - colGap) / 2;
+  const summaryColGap = 5;
+  const sumColW = (innerW - summaryColGap) / 2;
   const sumX0 = margin;
-  const sumX1 = margin + sumColW + colGap;
+  const sumX1 = margin + sumColW + summaryColGap;
   const stampShort = new Date().toLocaleString(undefined, {
     dateStyle: "medium",
     timeStyle: "short",
@@ -264,7 +264,71 @@ export function downloadActionPlanPdf(options: {
       : projCity
     : projCounty || "—";
 
-  pdf.setFont(PDF_SAINS, "bold");
+  checkBreak(36);
+  pdf.setFont(PDF_SANS, "bold");
+  pdf.setFontSize(11);
+  pdf.setTextColor(...RG_NAVY);
+  pdf.text("PROJECT SUMMARY", margin, y);
+  y += 7;
+
+  let yLeft = y;
+  let yRight = y;
+
+  pdf.setFont(PDF_SANS, "bold");
+  pdf.setFontSize(8.2);
+  pdf.setTextColor(55, 65, 80);
+  pdf.text("Project address", sumX0, yLeft);
+  yLeft += 4.2;
+  pdf.setFont(PDF_SANS, "normal");
+  pdf.setFontSize(9);
+  pdf.setTextColor(...RG_BODY_TEXT);
+  for (const ln of pdf.splitTextToSize(projAddr, sumColW)) {
+    pdf.text(ln, sumX0, yLeft);
+    yLeft += 4.15;
+  }
+  yLeft += 2;
+  pdf.setFont(PDF_SANS, "bold");
+  pdf.setFontSize(8.2);
+  pdf.setTextColor(55, 65, 80);
+  pdf.text("ZIP", sumX0, yLeft);
+  yLeft += 4.2;
+  pdf.setFont(PDF_SANS, "normal");
+  pdf.setFontSize(9);
+  pdf.setTextColor(...RG_BODY_TEXT);
+  pdf.text(projZip, sumX0, yLeft);
+  yLeft += 6;
+
+  pdf.setFont(PDF_SANS, "bold");
+  pdf.setFontSize(8.2);
+  pdf.setTextColor(55, 65, 80);
+  pdf.text("City / county", sumX1, yRight);
+  yRight += 4.2;
+  pdf.setFont(PDF_SANS, "normal");
+  pdf.setFontSize(9);
+  pdf.setTextColor(...RG_BODY_TEXT);
+  for (const ln of pdf.splitTextToSize(localityLabel, sumColW)) {
+    pdf.text(ln, sumX1, yRight);
+    yRight += 4.15;
+  }
+  yRight += 2;
+  pdf.setFont(PDF_SANS, "bold");
+  pdf.setFontSize(8.2);
+  pdf.setTextColor(55, 65, 80);
+  pdf.text("Report generated", sumX1, yRight);
+  yRight += 4.2;
+  pdf.setFont(PDF_SANS, "normal");
+  pdf.setFontSize(9);
+  pdf.setTextColor(...RG_BODY_TEXT);
+  pdf.text(stampShort, sumX1, yRight);
+  yRight += 6;
+
+  y = Math.max(yLeft, yRight) + 3;
+  pdf.setDrawColor(210, 215, 222);
+  pdf.setLineWidth(0.25);
+  pdf.line(margin, y, pageW - margin, y);
+  y += 6;
+
+  const rawLines = trimmed.split(/\r?\n/);
   for (const raw of rawLines) {
     const line = raw.trimEnd();
     const t = line.trim();
@@ -286,7 +350,7 @@ export function downloadActionPlanPdf(options: {
 
     if (t.startsWith("# ") && !t.startsWith("##")) {
       checkBreak(10);
-      pdf.setFont("helvetica", "bold");
+      pdf.setFont(PDF_SANS, "bold");
       pdf.setFontSize(15);
       pdf.setTextColor(...RG_NAVY);
       const lines2 = pdf.splitTextToSize(stripInlineMd(t.slice(2)), innerW);
@@ -295,7 +359,7 @@ export function downloadActionPlanPdf(options: {
         pdf.text(ln, margin, y);
         y += 7;
       }
-      pdf.setFont("helvetica", "normal");
+      pdf.setFont(PDF_SANS, "normal");
       pdf.setTextColor(...RG_BODY_TEXT);
       y += 1.2;
       continue;
@@ -303,7 +367,7 @@ export function downloadActionPlanPdf(options: {
 
     if (t.startsWith("## ") && !t.startsWith("###")) {
       checkBreak(8);
-      pdf.setFont("helvetica", "bold");
+      pdf.setFont(PDF_SANS, "bold");
       pdf.setFontSize(12.5);
       pdf.setTextColor(...RG_NAVY);
       const lines2 = pdf.splitTextToSize(stripInlineMd(t.slice(3)), innerW);
@@ -312,7 +376,7 @@ export function downloadActionPlanPdf(options: {
         pdf.text(ln, margin, y);
         y += 5.8;
       }
-      pdf.setFont("helvetica", "normal");
+      pdf.setFont(PDF_SANS, "normal");
       pdf.setTextColor(...RG_BODY_TEXT);
       y += 1.5;
       continue;
@@ -320,7 +384,7 @@ export function downloadActionPlanPdf(options: {
 
     if (t.startsWith("### ")) {
       checkBreak(7);
-      pdf.setFont("helvetica", "bold");
+      pdf.setFont(PDF_SANS, "bold");
       pdf.setFontSize(10.6);
       pdf.setTextColor(55, 65, 80);
       const lines2 = pdf.splitTextToSize(stripInlineMd(t.slice(4)), innerW);
@@ -329,13 +393,13 @@ export function downloadActionPlanPdf(options: {
         pdf.text(ln, margin, y);
         y += 5.2;
       }
-      pdf.setFont("helvetica", "normal");
+      pdf.setFont(PDF_SANS, "normal");
       pdf.setTextColor(...RG_BODY_TEXT);
       y += 1;
       continue;
     }
 
-    pdf.setFont("helvetica", "normal");
+    pdf.setFont(PDF_SANS, "normal");
     pdf.setFontSize(9.5);
     pdf.setTextColor(...RG_BODY_TEXT);
     const plain = stripInlineMd(t);
@@ -348,6 +412,33 @@ export function downloadActionPlanPdf(options: {
     }
   }
 
+  /* ----- Legal disclaimer (professional deployment) ----- */
+  checkBreak(36);
+  y += 2;
+  const discPad = 3;
+  const discW = innerW;
+  pdf.setFont(PDF_SANS, "normal");
+  pdf.setFontSize(8);
+  const discLines = pdf.splitTextToSize(LEGAL_DISCLAIMER, discW - 2 * discPad);
+  const discH = 11 + discLines.length * 4;
+  pdf.setFillColor(250, 251, 253);
+  pdf.setDrawColor(188, 195, 208);
+  pdf.setLineWidth(0.25);
+  pdf.roundedRect(margin, y, discW, discH, 1.2, 1.2, "FD");
+  pdf.setFont(PDF_SANS, "bold");
+  pdf.setFontSize(9);
+  pdf.setTextColor(...RG_NAVY);
+  pdf.text("Legal Disclaimer", margin + discPad, y + 6);
+  pdf.setFont(PDF_SANS, "normal");
+  pdf.setFontSize(8);
+  pdf.setTextColor(...RG_BODY_TEXT);
+  let dyy = y + 11;
+  for (const ln of discLines) {
+    pdf.text(ln, margin + discPad, dyy);
+    dyy += 4;
+  }
+  y += discH + 4;
+
   const totalPages = pdf.getNumberOfPages();
   const stamp = new Date().toLocaleString(undefined, {
     dateStyle: "medium",
@@ -355,7 +446,7 @@ export function downloadActionPlanPdf(options: {
   });
   for (let i = 1; i <= totalPages; i++) {
     pdf.setPage(i);
-    pdf.setFont("helvetica", "normal");
+    pdf.setFont(PDF_SANS, "normal");
     pdf.setFontSize(7.2);
     pdf.setTextColor(115, 120, 130);
     pdf.text(
