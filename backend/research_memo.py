@@ -115,6 +115,15 @@ def _merge_tagged_hits(
     return out
 
 
+def scout_has_no_trusted_results(raw: Dict[str, Any]) -> bool:
+    """True when all three Universal Scout steps have zero ``results`` rows (no SERP hits in batch)."""
+    for key in ("step_jurisdiction", "step_building_permits", "step_building_codes"):
+        block = raw.get(key)
+        if isinstance(block, dict) and (block.get("results") or []):
+            return False
+    return True
+
+
 def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
     ju = raw.get("jurisdiction") if isinstance(raw.get("jurisdiction"), dict) else {}
     city = str(ju.get("city") or "").strip()
@@ -138,6 +147,8 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             loc_focus = "this jurisdiction (see `jurisdiction` and `site_address` in this digest)"
 
     is_plano_tx = city.lower() == "plano" and (state or "").strip().upper() in ("TX",)
+    is_dallas_tx = city.lower() == "dallas" and (state or "").strip().upper() in ("TX",)
+    empty_scout = scout_has_no_trusted_results(raw)
 
     consultant_role = (
         f"Act as a Master Electrician for **{loc_focus}** (the specific city or county for this job). "
@@ -148,6 +159,12 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
         consultant_role += (
             " For **Plano, Texas**, use only **City of Plano** **.gov** and **Municode** hits in this digest when stating local rules; "
             f"anchor tasks to {addr} and Plano, TX."
+        )
+    if empty_scout:
+        consultant_role += (
+            " **Empty scout:** there are no trusted `.gov` / Municode rows in this digest—complete **Technical Punch List** "
+            "and **Inspection Must-Haves** using **NEC 2023** model knowledge for a **200A** service/panel upgrade, "
+            "with each relevant `- [ ]` line noting verification of adopted edition with the AHJ."
         )
 
     if city:
@@ -181,9 +198,25 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             "using **MANDATORY GOTCHA:** plus `- [ ]` tasks—only when the digest supports it."
         )
 
-    return {
-        "consultant_role": consultant_role,
-        "logic_steps": [
+    logic_steps: List[Any] = (
+        [
+            (
+                "Step 1 — Extraction: Use only scout hits whose URLs are **.gov** or **Municode** and that clearly apply "
+                f"to **{loc_focus}** (and {addr}). Prefer `tagged_priority_hits`. Discard other states or unrelated cities."
+            ),
+            (
+                "Step 2 — Synthesis: Map `enhanced_job_context` to **permit costs**, **NEC vs local amendment deltas**, "
+                "and inspection expectations **only** as stated in results—unless `empty_scout_nec_2023_fallback` is true "
+                "in the digest JSON, in which case treat **NEC 2023** training knowledge as allowed for **200A** technical "
+                "and inspection tasks (with AHJ-verify tagging), not for inventing local fees."
+            ),
+            (
+                "Step 3 — Output: Under **Permit Costs**, **Technical Punch List** (apply `gotchas_guidance` here), and "
+                "**Inspection Must-Haves**, use **only** `- [ ] ` lines. No narrative paragraphs."
+            ),
+        ]
+        if empty_scout
+        else [
             (
                 "Step 1 — Extraction: Use only scout hits whose URLs are **.gov** or **Municode** and that clearly apply "
                 f"to **{loc_focus}** (and {addr}). Prefer `tagged_priority_hits`. Discard other states or unrelated cities."
@@ -196,7 +229,23 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
                 "Step 3 — Output: Under **Permit Costs**, **Technical Punch List** (apply `gotchas_guidance` here), and "
                 "**Inspection Must-Haves**, use **only** `- [ ] ` lines. No narrative paragraphs."
             ),
-        ],
+        ]
+    )
+
+    fee_extra = ""
+    if is_plano_tx:
+        fee_extra = " For Plano, prioritize **Plano building fee schedule** language found in the digest."
+    elif is_dallas_tx:
+        fee_extra = (
+            " **Reg Guard sync (Dallas, TX):** Minimum **trade** permit total is **$167.00** including **administrative fees** "
+            "(floor for planning—confirm on official Dallas permit / fee pages)."
+        )
+    else:
+        fee_extra = " Base technical items on the NEC/adoption language in the digest."
+
+    return {
+        "consultant_role": consultant_role,
+        "logic_steps": logic_steps,
         "required_checklist_headings": [
             "### Permit Costs",
             "### Technical Punch List",
@@ -212,11 +261,7 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             "Identify **specific permit fees** and **fee schedules** (e.g. 2026 updates when present in results) "
             "and **local NEC adoptions** only when explicitly stated for this jurisdiction. "
             + fee_verify_exact
-            + (
-                " For Plano, prioritize **Plano building fee schedule** language found in the digest."
-                if is_plano_tx
-                else " Base technical items on the NEC/adoption language in the digest."
-            )
+            + fee_extra
         ),
     }
 
@@ -261,6 +306,13 @@ def build_research_digest(raw: Dict[str, Any], source_urls: List[str], enhanced_
         "enhanced_job_context": (enhanced_query or "").strip(),
         "inspector_digest_directive": _build_inspector_digest_directive(raw),
     }
+    if scout_has_no_trusted_results(raw):
+        payload["empty_scout_nec_2023_fallback"] = True
+    if city_guess.lower() == "dallas" and (state_guess or "").strip().upper() in ("TX",):
+        payload["dallas_minimum_trade_permit_usd"] = 167.0
+        payload["dallas_minimum_trade_permit_note"] = (
+            "Reg Guard sync: Dallas, TX minimum trade permit $167.00 including administrative fees (confirm on official city pages)."
+        )
     if city_guess.lower() == "plano" and (state_guess or "").strip().upper() in ("TX",):
         payload["plano_ord_250_50_requirement"] = (
             "HARD REQUIREMENT (Plano, TX): Under **Technical Punch List**, include **MANDATORY GOTCHA: Plano Ordinance 250.50** "
@@ -286,10 +338,15 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                     "role": "user",
                     "content": (
                         "Read `inspector_digest_directive` first (`consultant_role`, `logic_steps`, `fee_and_code_guidance`, "
-                        "`gotchas_guidance`, `output_format`), then `plano_ord_250_50_requirement` if present, then "
+                        "`gotchas_guidance`, `output_format`), then `plano_ord_250_50_requirement`, "
+                        "`dallas_minimum_trade_permit_usd` / `dallas_minimum_trade_permit_note`, and "
+                        "`empty_scout_nec_2023_fallback` if present, then "
                         "`tagged_priority_hits` and the rest of the JSON. "
                         "Follow the role and logic steps; obey `output_format` and `gotchas_guidance`. "
                         "When `plano_ord_250_50_requirement` is set, you MUST satisfy it under **Technical Punch List**. "
+                        "When `empty_scout_nec_2023_fallback` is true, apply the system prompt: fill Technical + Inspection "
+                        "using NEC 2023 training knowledge for 200A scope. "
+                        "When Dallas fee fields are set, include the $167.00 floor in **Permit Costs**. "
                         "Use ONLY checklist lines (`- [ ] `) under the headings in `required_checklist_headings`, "
                         "then add **### Reference Links** listing `unique_source_urls`. "
                         "Apply `fee_and_code_guidance` in **Permit Costs**.\n\n"

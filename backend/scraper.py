@@ -44,8 +44,8 @@ def _is_plano_texas(city: str, state: str) -> bool:
 
 def _locality_data_fence(city: str, county: str, st: str, mode: str) -> str:
     """
-    Repeat ``{city}, {state}`` (or county + state) on every scout line to bias SERP away from other states
-    (e.g. Washington). Documented from ``main`` as the **data fence**.
+    Append a **looser** locality cue on every scout line (still names City, ST or County, ST) so queries read like
+    official permit/code discovery—not a harsh ``ONLY …`` filter that can zero-out SERP. Documented from ``main``.
     """
     stx = (st or "").strip()
     if not stx:
@@ -57,11 +57,9 @@ def _locality_data_fence(city: str, county: str, st: str, mode: str) -> str:
         county_disp = f"{co} County" if not co.lower().endswith("county") else co
     m = (mode or "").strip().lower()
     if county_disp and (m == "county" or not c):
-        return (
-            f" | LOCALITY_LOCK {county_disp}, {stx} ONLY — exclude Washington State and all other states"
-        )
+        return f" | LOCALITY_LOCK {county_disp}, {stx} official county building permits and adopted code"
     if c:
-        return f" | LOCALITY_LOCK {c}, {stx} ONLY — exclude Washington State and all other states"
+        return f" | LOCALITY_LOCK {c}, {stx} official city code and building permits"
     return ""
 
 

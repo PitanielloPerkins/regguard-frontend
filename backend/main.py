@@ -2,8 +2,9 @@
 Reg Guard — FastAPI application entry point.
 
 Research memo: ``research_memo.build_research_digest``. **Universal Scout** applies a **data fence**
-in ``scraper.py``: every query line appends resolved **City, ST** or **County, ST** (``LOCALITY_LOCK`` …) so SERP
-stays in-state. **Plano, TX** also appends ``PLANO_SCOUT_*`` strings there.
+in ``scraper.py``: every query line appends **City, ST** or **County, ST** via ``LOCALITY_LOCK`` using phrasing such as
+**``{city}, {state} official city code and building permits``** (looser than a strict in-state-only SERP lock).
+**Plano, TX** also appends ``PLANO_SCOUT_*`` strings there.
 """
 from __future__ import annotations
 
@@ -28,9 +29,17 @@ from starlette.concurrency import run_in_threadpool
 
 from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
 from jurisdiction import JurisdictionProfile, geocode_profile_from_address
+from research_memo import (
+    build_research_digest,
+    iter_contractor_action_plan_stream,
+    scout_has_no_trusted_results,
+)
 # Firecrawl Universal Scout (/v2/search, tight caps) — see ``scraper.py``.
 from scraper import clear_scout_run_caches, iter_universal_scout, normalize_us_zip
 from vision import iter_job_site_image_text_stream, normalize_vision_text
+
+# Sync reference: Dallas Building Inspection — minimum trade permit (incl. admin) used in digest/fallback prompts.
+_DALLAS_TX_MIN_TRADE_PERMIT_USD = 167.00
 
 _BACKEND_DIR = Path(__file__).resolve().parent
 _BACKEND_BOOT_ID = uuid.uuid4().hex[:10]
@@ -58,6 +67,10 @@ When the digest locality is **Plano, Texas**, you **MUST** include under **Techn
 
 When the digest locality is **Plano, Texas**, also prioritize City of Plano amendments vs base NEC, fee schedules (including **2026** when cited), and inspection nuance from **only** Plano-applicable hits.
 
+When the digest locality is **Dallas, Texas**, under **Permit Costs** include a `- [ ]` line stating the **Reg Guard sync reference**: minimum **trade** permit total **$167.00** including **administrative fees** (floor only — contractor must confirm on official Dallas permit pages).
+
+When the JSON field ``empty_scout_nec_2023_fallback`` is **true**, Universal Scout returned **no** trusted rows. You MUST still fill **Technical Punch List** and **Inspection Must-Haves** using **NFPA 70 — NEC (2023 edition)** from your **training data** for a **200 amp service / panel upgrade** (conductor ampacity & OCPD sizing, grounding/bonding per Art. 250, workspace 110.26, surge where applicable, GFCI/AFCI for dwelling-branch requirements in 2023, etc.). Each such line must be a `- [ ]` task that explicitly notes **(NEC 2023 — verify adopted edition and amendments with the AHJ)**. Do not leave those sections blank.
+
 The JSON includes ``inspector_digest_directive`` and may include ``plano_ord_250_50_requirement``:
 - **consultant_role**, **gotchas_guidance**, **fee_and_code_guidance**, **output_format**
 - Obey **required_checklist_headings** exactly. If ``plano_ord_250_50_requirement`` is present, satisfy it.
@@ -79,6 +92,7 @@ Each URL in ``unique_source_urls`` once (markdown link when title known, else ba
 Rules:
 - Imperative checklist tone; **no long prose**.
 - Cite details **only** when traceable to the digest; otherwise `- [ ]` to verify on official **.gov** / **Municode**.
+- If ``empty_scout_nec_2023_fallback`` is true, the prior rule is waived **only** for the NEC-2023 model-knowledge tasks above (still tag them as verify-with-AHJ).
 """
 
 
@@ -239,6 +253,12 @@ def _research_action_plan_fallback_markdown(
             1,
             "- [ ] Scout targets: **Plano building fee schedule 2026** and **Plano TX electrical amendments 2023 NEC** — confirm figures on the official city fee table / code adoption pages.",
         )
+    if city.lower() == "dallas" and (state or "").strip().upper() == "TX":
+        permit_block.insert(
+            1,
+            f"- [ ] **Reg Guard sync (Dallas, TX):** Minimum **trade** permit **${_DALLAS_TX_MIN_TRADE_PERMIT_USD:.2f}** "
+            "including **administrative fees** (planning floor only — confirm on official Dallas permit / fee pages).",
+        )
 
     inspection_body = [
         "- [ ] **Service / Final inspection**: panel **circuit directory** complete and matches breakers; "
@@ -275,11 +295,25 @@ def _research_action_plan_fallback_markdown(
             "- [ ] **MANDATORY GOTCHA: Plano Ordinance 250.50** — Confirm **two 8-foot ground rods** with **20 feet** "
             "separation between rods per Plano (**not** the **6-foot** spacing assumption from generic NEC discussion); verify wording on official Plano / Municode sources.",
         )
+
+    nec_200a_fallback: List[str] = []
+    if scout_has_no_trusted_results(raw):
+        nec_200a_fallback = [
+            "- [ ] **Empty scout — use NEC 2023 baseline knowledge for 200A upgrade** (tag every bullet for AHJ adoption check):",
+            "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** Service **supply conductors** ampacity & **main OCPD** sizing for **200A** (incl. Art. 230, applicable tap/length rules).",
+            "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** **Grounding & bonding** — electrode system, GEC, N-G bond, **Art. 250**.",
+            "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** **Working space** clear in front of service/panel equipment — **110.26**.",
+            "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** **GFCI** / **AFCI** requirements for **dwelling** branch or feeder circuits where 2023 mandates.",
+            "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** Panelboard / equipment ratings, **EGC**s with feeders, neutral & EGC separation **200.4(B)**.",
+            "",
+        ]
+
     lines.extend(
         [
             "### Technical Punch List",
             "",
         ]
+        + nec_200a_fallback
         + punch_core
         + [
             "- [ ] **GFCI / AFCI** — align with **adopted code + amendments** from results, not NEC alone.",
