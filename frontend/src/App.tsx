@@ -845,7 +845,7 @@ export default function App() {
       setPlanToolbarMsg("Copied action plan to clipboard.");
       window.setTimeout(() => setPlanToolbarMsg(null), 3500);
     } catch {
-      window.alert("Could not copy — your browser blocked clipboard access.");
+      toast.error("Could not copy — your browser blocked clipboard access.");
     }
   }, [actionPlan]);
 
@@ -868,7 +868,7 @@ export default function App() {
       window.setTimeout(() => setPlanToolbarMsg(null), 3500);
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
-      window.alert(`Could not generate PDF: ${msg}`);
+      toast.error(`Could not generate PDF: ${msg}`);
     }
   }, [actionPlan, meta, selection]);
 
@@ -1193,6 +1193,12 @@ export default function App() {
             <div className="rg-phase" aria-live="polite">
               <span className="rg-dot-pulse" aria-hidden />
               {phase}
+              {sseConnectionLive ? (
+                <span className="rg-sse-live" title="Event stream connected">
+                  <span className="rg-sse-live__dot" aria-hidden />
+                  Connection active
+                </span>
+              ) : null}
             </div>
           ) : null}
 
