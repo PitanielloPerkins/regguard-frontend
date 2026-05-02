@@ -350,8 +350,8 @@ export default function App() {
   const geolocationReadOptions = useMemo<PositionOptions>(
     () => ({
       enableHighAccuracy: true,
-      timeout: 25_000,
-      /** Do not return a cached macOS / browser position; require a fresh fix. */
+      /** Fast fail; combined with maximumAge 0 to push a fresh hardware fix on Mac. */
+      timeout: 5_000,
       maximumAge: 0,
     }),
     [],
@@ -366,6 +366,13 @@ export default function App() {
     (recenter: boolean) => {
       setLocateMessage(null);
       if (!geoSupported || !mapsOk) {
+        return;
+      }
+      const typed = (addressRef.current?.getInputValue() ?? "").trim();
+      if (!selection && typed) {
+        setLocateMessage(
+          "Choose an address from the suggestions list, or clear the field to use Locate Me / Recenter.",
+        );
         return;
       }
       cancelPendingLocateApplyRef.current = false;
@@ -439,7 +446,7 @@ export default function App() {
         geolocationReadOptions,
       );
     },
-    [geoSupported, mapsOk, geolocationReadOptions],
+    [geoSupported, mapsOk, geolocationReadOptions, selection],
   );
 
   const handleLocateMe = useCallback(() => runDeviceLocate(false), [runDeviceLocate]);

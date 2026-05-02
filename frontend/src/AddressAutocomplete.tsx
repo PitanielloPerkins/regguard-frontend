@@ -18,6 +18,8 @@ export type AddressSelection = {
 export type AddressAutocompleteHandle = {
   /** Fills widget text after server / GPS locate (Places selection path unchanged). */
   setLocatedAddress: (sel: AddressSelection) => void;
+  /** Current text in the Places widget (typing or committed). */
+  getInputValue: () => string;
 };
 
 type Props = {
@@ -71,6 +73,10 @@ export const AddressAutocomplete = forwardRef<AddressAutocompleteHandle, Props>(
         if (w && typeof w.value === "string") {
           w.value = sel.formattedAddress;
         }
+      },
+      getInputValue() {
+        const w = widgetRef.current as unknown as { value?: string } | null;
+        return w && typeof w.value === "string" ? w.value : "";
       },
     }));
 

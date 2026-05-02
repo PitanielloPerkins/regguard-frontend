@@ -9,6 +9,7 @@ import json
 import logging
 import os
 import re
+import sys
 import time
 import threading
 import uuid
@@ -18,8 +19,7 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, cast
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from sse_starlette.event import JSONServerSentEvent, ServerSentEvent
-from sse_starlette.sse import EventSourceResponse
+from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
@@ -307,9 +307,10 @@ def _vision_queue_producer(
         q.put(("error", e))
 
 
-def _sse_json(obj: Dict[str, Any]) -> JSONServerSentEvent:
-    """One SSE ``data`` frame with a JSON object (same shape the frontend parser expects)."""
-    return JSONServerSentEvent(obj)
+def _sse_event_bytes(obj: Dict[str, Any]) -> bytes:
+    """SSE ``data:`` line + blank line, UTF-8 (matches frontend ``parseSseDataEvents``)."""
+    payload = json.dumps(obj, ensure_ascii=False)
+    return f"data: {payload}\n\n".encode("utf-8")
 
 
 def _log_research_step(label: str, *, detail: str = "") -> None:
@@ -319,6 +320,7 @@ def _log_research_step(label: str, *, detail: str = "") -> None:
     else:
         line = f"research step: {label}"
     print(line, flush=True)
+    sys.stdout.flush()
     logger.info(line)
 
 
@@ -333,8 +335,8 @@ async def _with_heartbeats(threadpool_coro):
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=_STREAM_HEARTBEAT_SEC)
         except asyncio.TimeoutError:
-            yield ServerSentEvent(comment="ping")
-            yield _sse_json({"event": "heartbeat", "ts": time.time()})
+            yield b": ping\n\n"
+            yield _sse_event_bytes({"event": "heartbeat", "ts": time.time()})
     yield ("__done__", task.result())
 
 
@@ -435,7 +437,7 @@ async def research(
 
     async def research_sse():
         try:
-            yield _sse_json({"event": "open"})
+            yield _sse_event_bytes({"event": "open"})
             _log_research_step("open", detail="SSE stream started")
 
             try:
@@ -444,17 +446,17 @@ async def research(
                     site_line,
                 )
             except ValueError as e:
-                yield _sse_json({"event": "error", "message": str(e)})
+                yield _sse_event_bytes({"event": "error", "message": str(e)})
                 return
 
             if (zip_code or "").strip():
                 try:
                     client_z = normalize_us_zip(zip_code)
                 except ValueError as e:
-                    yield _sse_json({"event": "error", "message": str(e)})
+                    yield _sse_event_bytes({"event": "error", "message": str(e)})
                     return
                 if client_z != profile.zip5:
-                    yield _sse_json(
+                    yield _sse_event_bytes(
                         {
                             "event": "error",
                             "message": "ZIP does not match the selected address. Pick the address again from suggestions.",
@@ -488,18 +490,18 @@ async def research(
                         yield pkt
                     if kind == "delta":
                         raw_parts.append(cast(str, val))
-                        yield _sse_json({"event": "vision_delta", "text": cast(str, val)})
+                        yield _sse_event_bytes({"event": "vision_delta", "text": cast(str, val)})
                     elif kind == "done":
                         break
                     else:
                         err = cast(Exception, val)
-                        yield _sse_json({"event": "error", "message": str(err)})
+                        yield _sse_event_bytes({"event": "error", "message": str(err)})
                         return
                 photo_analysis = normalize_vision_text("".join(raw_parts))
                 _log_research_step("vision", detail="Claude vision — done")
 
             enhanced_query = _build_enhanced_query(job_description, photo_analysis)
-            yield _sse_json(
+            yield _sse_event_bytes(
                 {
                     "event": "context",
                     "enhanced_query": enhanced_query,
@@ -510,7 +512,7 @@ async def research(
             _log_research_step("context", detail="enhanced query ready for scout")
 
             if scout_jurisdiction and scout_site:
-                yield _sse_json(
+                yield _sse_event_bytes(
                     {
                         "event": "jurisdiction",
                         "site_address": scout_site,
@@ -526,7 +528,7 @@ async def research(
                     "AHJ identification",
                     detail="city/county/state from geocode (before Universal Scout)",
                 )
-                yield _sse_json(
+                yield _sse_event_bytes(
                     {
                         "event": "step",
                         "step": "step_ahj_identification",
@@ -578,14 +580,14 @@ async def research(
                             "Universal Scout",
                             detail=_scout_labels.get(key, key),
                         )
-                    yield _sse_json(ev)
+                    yield _sse_event_bytes(ev)
             except Exception:
                 logger.exception("Firecrawl / Universal Scout crawl failed")
-                yield _sse_json({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})
+                yield _sse_event_bytes({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})
                 return
 
             if final_raw is None:
-                yield _sse_json(
+                yield _sse_event_bytes(
                     {"event": "error", "message": "Research finished without complete payload."}
                 )
                 return
@@ -616,7 +618,7 @@ async def research(
                         yield pkt
                     if kind == "delta":
                         raw_parts.append(cast(str, val))
-                        yield _sse_json({"event": "summary_delta", "text": cast(str, val)})
+                        yield _sse_event_bytes({"event": "summary_delta", "text": cast(str, val)})
                     elif kind == "done":
                         summary = "".join(raw_parts)
                         break
@@ -627,9 +629,9 @@ async def research(
                             f"*Claude action plan unavailable ({err!s}); "
                             "showing structured fallback memo.*\n\n"
                         )
-                        yield _sse_json({"event": "summary_delta", "text": banner})
+                        yield _sse_event_bytes({"event": "summary_delta", "text": banner})
                         for chunk in _iter_summary_word_chunks(stub):
-                            yield _sse_json({"event": "summary_delta", "text": chunk})
+                            yield _sse_event_bytes({"event": "summary_delta", "text": chunk})
                         summary = banner + stub
                         _log_research_step("action plan", detail="fallback memo (Claude error)")
                         break
@@ -637,11 +639,11 @@ async def research(
                 _log_research_step("action plan", detail="structured fallback memo — no ANTHROPIC_API_KEY")
                 summary = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
                 for chunk in _iter_summary_word_chunks(summary):
-                    yield _sse_json({"event": "summary_delta", "text": chunk})
+                    yield _sse_event_bytes({"event": "summary_delta", "text": chunk})
 
             _log_research_step("complete", detail="streaming final payload to client")
             ju_complete = scout_jurisdiction or {}
-            yield _sse_json(
+            yield _sse_event_bytes(
                 {
                     "event": "complete",
                     "zip": raw["zip"],
@@ -659,7 +661,7 @@ async def research(
         finally:
             clear_scout_run_caches()
 
-    return EventSourceResponse(
+    return StreamingResponse(
         research_sse(),
         media_type="text/event-stream; charset=utf-8",
         headers={
