@@ -17,7 +17,7 @@ from pathlib import Path
 from queue import Queue
 from typing import Any, Dict, Iterator, List, Optional, Tuple, cast
 
-from fastapi import FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
@@ -31,8 +31,12 @@ from vision import iter_job_site_image_text_stream, normalize_vision_text
 _BACKEND_DIR = Path(__file__).resolve().parent
 _BACKEND_BOOT_ID = uuid.uuid4().hex[:10]
 
-# Chunked SSE stream: poll threadpool work every ~0.01s so we can emit heartbeats and flush often.
-_STREAM_HEARTBEAT_SEC = 0.01
+# Temporarily off: very fast heartbeats were suspected of flooding the stream.
+_SSE_HEARTBEATS_ENABLED = False
+# Used only when _SSE_HEARTBEATS_ENABLED is True.
+_STREAM_HEARTBEAT_SEC = 2.0
+
+_ORIGIN_RE = re.compile(r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$")
 
 _RESEARCH_STALL_FIRECRAWL_MESSAGE = (
     "Research stalled. Check Firecrawl usage at firecrawl.dev/app"
@@ -117,6 +121,16 @@ app.add_middleware(
         "X-Accel-Buffering",
     ],
 )
+
+
+def _research_sse_cors_headers(request: Request) -> Dict[str, str]:
+    """Explicit CORS for the streaming body (middleware also applies; this duplicates Allow-Origin)."""
+    origin = (request.headers.get("origin") or "").strip()
+    allow = origin if origin and _ORIGIN_RE.match(origin) else "http://127.0.0.1:5173"
+    return {
+        "Access-Control-Allow-Origin": allow,
+        "Access-Control-Allow-Credentials": "true",
+    }
 
 
 def _build_enhanced_query(job_description: str, photo_analysis: Optional[str]) -> str:
@@ -306,9 +320,13 @@ def _vision_queue_producer(
         q.put(("error", e))
 
 
-def _sse_data_frame(chunk: Dict[str, Any]) -> str:
-    """SSE frame: required ``\\n\\n`` so the client parses an event boundary immediately."""
-    return f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+def _safe_sse_data_frame(chunk: Dict[str, Any]) -> str:
+    """SSE frame with ``data: …\\n\\n``. Fallback to a plain-text line if JSON cannot encode."""
+    try:
+        return f"data: {json.dumps(chunk, ensure_ascii=False, default=str)}\n\n"
+    except (TypeError, ValueError) as e:
+        plain = f"SSE_JSON_FAILED: {e!s}".replace("\n", " ").replace("\r", " ")[:800]
+        return f"data: {plain}\n\n"
 
 
 def _log_research_step(label: str, *, detail: str = "") -> None:
@@ -324,17 +342,20 @@ def _log_research_step(label: str, *, detail: str = "") -> None:
 
 async def _with_heartbeats(threadpool_coro):
     """
-    Await one threadpool call (Vision queue pull or Universal Scout step) without
-    stalling the asyncio event loop; emit SSE comments + JSON heartbeats if the call is slow
-    so intermediaries keep the stream alive.
+    Await one threadpool call without blocking the event loop.
+    Heartbeats are optional (_SSE_HEARTBEATS_ENABLED) to avoid flooding the client.
     """
+    if not _SSE_HEARTBEATS_ENABLED:
+        res = await threadpool_coro
+        yield ("__done__", res)
+        return
     task = asyncio.create_task(threadpool_coro)
     while not task.done():
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=_STREAM_HEARTBEAT_SEC)
         except asyncio.TimeoutError:
             yield ": ping\n\n"
-            yield _sse_data_frame({"event": "heartbeat", "ts": time.time()})
+            yield _safe_safe_sse_data_frame({"event": "heartbeat", "ts": time.time()})
             await asyncio.sleep(0)
     yield ("__done__", task.result())
 
@@ -388,6 +409,7 @@ def reverse_geocode_address(latitude: float, longitude: float) -> Dict[str, str]
 
 @app.post("/research")
 async def research(
+    request: Request,
     zip_code: str = Form(
         "",
         description="5-digit ZIP from address selection (cross-check with geocode.py)",
@@ -439,7 +461,7 @@ async def research(
 
     async def research_sse():
         try:
-            yield _sse_data_frame({"event": "open"})
+            yield _safe_sse_data_frame({"event": "open"})
             _log_research_step("open", detail="SSE stream started")
 
             try:
@@ -448,17 +470,17 @@ async def research(
                     site_line,
                 )
             except ValueError as e:
-                yield _sse_data_frame({"event": "error", "message": str(e)})
+                yield _safe_sse_data_frame({"event": "error", "message": str(e)})
                 return
 
             if (zip_code or "").strip():
                 try:
                     client_z = normalize_us_zip(zip_code)
                 except ValueError as e:
-                    yield _sse_data_frame({"event": "error", "message": str(e)})
+                    yield _safe_sse_data_frame({"event": "error", "message": str(e)})
                     return
                 if client_z != profile.zip5:
-                    yield _sse_data_frame(
+                    yield _safe_sse_data_frame(
                         {
                             "event": "error",
                             "message": "ZIP does not match the selected address. Pick the address again from suggestions.",
@@ -492,18 +514,18 @@ async def research(
                         yield pkt
                     if kind == "delta":
                         raw_parts.append(cast(str, val))
-                        yield _sse_data_frame({"event": "vision_delta", "text": cast(str, val)})
+                        yield _safe_sse_data_frame({"event": "vision_delta", "text": cast(str, val)})
                     elif kind == "done":
                         break
                     else:
                         err = cast(Exception, val)
-                        yield _sse_data_frame({"event": "error", "message": str(err)})
+                        yield _safe_sse_data_frame({"event": "error", "message": str(err)})
                         return
                 photo_analysis = normalize_vision_text("".join(raw_parts))
                 _log_research_step("vision", detail="Claude vision — done")
 
             enhanced_query = _build_enhanced_query(job_description, photo_analysis)
-            yield _sse_data_frame(
+            yield _safe_sse_data_frame(
                 {
                     "event": "context",
                     "enhanced_query": enhanced_query,
@@ -514,7 +536,7 @@ async def research(
             _log_research_step("context", detail="enhanced query ready for scout")
 
             if scout_jurisdiction and scout_site:
-                yield _sse_data_frame(
+                yield _safe_sse_data_frame(
                     {
                         "event": "jurisdiction",
                         "site_address": scout_site,
@@ -530,7 +552,7 @@ async def research(
                     "AHJ identification",
                     detail="city/county/state from geocode (before Universal Scout)",
                 )
-                yield _sse_data_frame(
+                yield _safe_sse_data_frame(
                     {
                         "event": "step",
                         "step": "step_ahj_identification",
@@ -582,14 +604,14 @@ async def research(
                             "Universal Scout",
                             detail=_scout_labels.get(key, key),
                         )
-                    yield _sse_data_frame(ev)
+                    yield _safe_sse_data_frame(ev)
             except Exception:
                 logger.exception("Firecrawl / Universal Scout crawl failed")
-                yield _sse_data_frame({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})
+                yield _safe_sse_data_frame({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})
                 return
 
             if final_raw is None:
-                yield _sse_data_frame(
+                yield _safe_sse_data_frame(
                     {"event": "error", "message": "Research finished without complete payload."}
                 )
                 return
@@ -620,7 +642,7 @@ async def research(
                         yield pkt
                     if kind == "delta":
                         raw_parts.append(cast(str, val))
-                        yield _sse_data_frame({"event": "summary_delta", "text": cast(str, val)})
+                        yield _safe_sse_data_frame({"event": "summary_delta", "text": cast(str, val)})
                         await asyncio.sleep(0)
                     elif kind == "done":
                         summary = "".join(raw_parts)
@@ -632,10 +654,10 @@ async def research(
                             f"*Claude action plan unavailable ({err!s}); "
                             "showing structured fallback memo.*\n\n"
                         )
-                        yield _sse_data_frame({"event": "summary_delta", "text": banner})
+                        yield _safe_sse_data_frame({"event": "summary_delta", "text": banner})
                         await asyncio.sleep(0)
                         for chunk in _iter_summary_word_chunks(stub):
-                            yield _sse_data_frame({"event": "summary_delta", "text": chunk})
+                            yield _safe_sse_data_frame({"event": "summary_delta", "text": chunk})
                             await asyncio.sleep(0)
                         summary = banner + stub
                         _log_research_step("action plan", detail="fallback memo (Claude error)")
@@ -644,12 +666,12 @@ async def research(
                 _log_research_step("action plan", detail="structured fallback memo — no ANTHROPIC_API_KEY")
                 summary = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
                 for chunk in _iter_summary_word_chunks(summary):
-                    yield _sse_data_frame({"event": "summary_delta", "text": chunk})
+                    yield _safe_sse_data_frame({"event": "summary_delta", "text": chunk})
                     await asyncio.sleep(0)
 
             _log_research_step("complete", detail="streaming final payload to client")
             ju_complete = scout_jurisdiction or {}
-            yield _sse_data_frame(
+            yield _safe_sse_data_frame(
                 {
                     "event": "complete",
                     "zip": raw["zip"],
@@ -675,6 +697,7 @@ async def research(
             "X-Accel-Buffering": "no",
             "Connection": "keep-alive",
             "Keep-Alive": "timeout=600, max=1000",
+            **_research_sse_cors_headers(request),
         },
     )
 
