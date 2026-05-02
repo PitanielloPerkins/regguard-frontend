@@ -24,13 +24,58 @@ function slugDate(): string {
   return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}`;
 }
 
-/** Strip internal fallback / API error prose so it never lands in client PDFs. */
+/** Strip internal fallback / API error / dev-only prose so it never lands in client PDFs. */
 function shouldDropPdfLine(line: string): boolean {
   const lower = line.toLowerCase();
   return (
-    lower.includes("claude action plan unavailable") || lower.includes("failed: error code")
+    lower.includes("claude action plan unavailable") ||
+    lower.includes("failed: error code") ||
+    lower.includes("enable anthropic_api_key") ||
+    lower.includes("generated without claude") ||
+    lower.includes("workflow trace")
   );
 }
+
+/** Remove the backend **Workflow trace** block (bullets often omit the trigger phrase). */
+function stripWorkflowTraceSection(text: string): string {
+  const lines = text.split(/\r?\n/);
+  const out: string[] = [];
+  let skip = false;
+  for (const line of lines) {
+    const trim = line.trim();
+    if (!skip && /workflow\s*trace/i.test(line)) {
+      skip = true;
+      continue;
+    }
+    if (skip) {
+      if (trim === "---" || /^#{1,6}\s/.test(trim)) {
+        skip = false;
+        if (trim !== "---") {
+          out.push(line);
+        }
+      }
+      continue;
+    }
+    out.push(line);
+  }
+  return out.join("\n");
+}
+
+function isPlanoTexas(options: { city?: string | null; siteAddress?: string | null }): boolean {
+  if ((options.city || "").trim().toLowerCase() === "plano") {
+    return true;
+  }
+  const addr = (options.siteAddress || "").toLowerCase();
+  return /\bplano\b/.test(addr) && /\b(tx|texas)\b/.test(addr);
+}
+
+/** Plano Building Inspection — synced total for PDF Permit Costs (base + laborer). */
+const PLANO_ELECTRICAL_PERMIT_PDF_LINES = [
+  "### Permit Costs",
+  "",
+  "- [ ] **Electrical permit (Plano, TX — Reg Guard fee sync):** **$75.00** total — **$65.00** base permit + **$10.00** laborer fee. Confirm on the official City of Plano fee schedule before posting fees.",
+  "",
+].join("\n");
 
 /**
  * First line of live Universal Scout blocks: Jurisdiction → Permits → Codes (see App.tsx headings).
@@ -55,7 +100,8 @@ function findFirstTechnicalSectionIndex(lines: string[]): number {
 }
 
 function markdownForPdfBody(raw: string): string {
-  const lines = raw.split(/\r?\n/).filter((ln) => !shouldDropPdfLine(ln));
+  let text = stripWorkflowTraceSection(raw);
+  const lines = text.split(/\r?\n/).filter((ln) => !shouldDropPdfLine(ln));
   const start = findFirstTechnicalSectionIndex(lines);
   const bodyLines = start >= 0 ? lines.slice(start) : lines;
   return bodyLines.join("\n").trim();
@@ -67,7 +113,10 @@ export function downloadActionPlanPdf(options: {
   zip?: string | null;
   city?: string | null;
 }): void {
-  const trimmed = markdownForPdfBody(options.markdown);
+  let trimmed = markdownForPdfBody(options.markdown);
+  if (isPlanoTexas(options)) {
+    trimmed = `${PLANO_ELECTRICAL_PERMIT_PDF_LINES}\n${trimmed}`.trim();
+  }
   if (!trimmed) {
     return;
   }
@@ -108,10 +157,10 @@ export function downloadActionPlanPdf(options: {
     ty += titleLines.length * 5.2;
     ty += 1.5 + 5.5;
     if (loc) {
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8.2);
+      pdf.setFont("helvetica", "bold");
+      pdf.setFontSize(10);
       const locLinesMeasure = pdf.splitTextToSize(loc.slice(0, 280), titleMaxW);
-      ty += 4 + locLinesMeasure.length * 3.8;
+      ty += 4.5 + locLinesMeasure.length * 4.35;
     }
     const headerBandMm = Math.max(44, ty + 8);
 
@@ -141,17 +190,16 @@ export function downloadActionPlanPdf(options: {
 
     if (loc) {
       pdf.setFont("helvetica", "bold");
-      pdf.setFontSize(8.4);
+      pdf.setFontSize(9);
       pdf.setTextColor(235, 237, 242);
       pdf.text("Project address", textX, titleY + 8.5);
-      pdf.setFont("helvetica", "normal");
-      pdf.setFontSize(8.2);
-      pdf.setTextColor(200, 206, 220);
+      pdf.setFontSize(10.2);
+      pdf.setTextColor(255, 255, 255);
       const locLines = pdf.splitTextToSize(loc.slice(0, 280), titleMaxW);
-      let ly = titleY + 12.5;
+      let ly = titleY + 13;
       for (const ln of locLines) {
         pdf.text(ln, textX, ly);
-        ly += 3.8;
+        ly += 4.35;
       }
     }
 
