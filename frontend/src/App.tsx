@@ -351,6 +351,7 @@ export default function App() {
     () => ({
       enableHighAccuracy: true,
       timeout: 25_000,
+      /** Do not return a cached macOS / browser position; require a fresh fix. */
       maximumAge: 0,
     }),
     [],

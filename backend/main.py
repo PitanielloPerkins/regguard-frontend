@@ -18,7 +18,8 @@ from typing import Any, Dict, Iterator, List, Optional, Tuple, cast
 
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from sse_starlette.event import JSONServerSentEvent, ServerSentEvent
+from sse_starlette.sse import EventSourceResponse
 from starlette.concurrency import run_in_threadpool
 
 from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
@@ -105,9 +106,17 @@ app.add_middleware(
         "http://127.0.0.1:5174",
         "http://localhost:5174",
     ],
+    allow_origin_regex=r"https?://(127\.0\.0\.1|localhost)(:\d+)?$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
+    expose_headers=[
+        "Content-Type",
+        "Cache-Control",
+        "Connection",
+        "Transfer-Encoding",
+        "X-Accel-Buffering",
+    ],
 )
 
 
@@ -298,10 +307,9 @@ def _vision_queue_producer(
         q.put(("error", e))
 
 
-def _sse_data_event(obj: Dict[str, Any]) -> bytes:
-    """One SSE message: a single JSON object in the data field (newline-safe via JSON escaping)."""
-    payload = json.dumps(obj, ensure_ascii=False)
-    return f"data: {payload}\n\n".encode("utf-8")
+def _sse_json(obj: Dict[str, Any]) -> JSONServerSentEvent:
+    """One SSE ``data`` frame with a JSON object (same shape the frontend parser expects)."""
+    return JSONServerSentEvent(obj)
 
 
 def _log_research_step(label: str, *, detail: str = "") -> None:
@@ -325,8 +333,8 @@ async def _with_heartbeats(threadpool_coro):
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=_STREAM_HEARTBEAT_SEC)
         except asyncio.TimeoutError:
-            yield b": ping\n\n"
-            yield _sse_data_event({"event": "heartbeat", "ts": time.time()})
+            yield ServerSentEvent(comment="ping")
+            yield _sse_json({"event": "heartbeat", "ts": time.time()})
     yield ("__done__", task.result())
 
 
@@ -425,30 +433,38 @@ async def research(
             detail="Select a U.S. job site address from the address search field.",
         )
 
-    profile: JurisdictionProfile
-    try:
-        profile = await run_in_threadpool(geocode_profile_from_address, site_line)
-    except ValueError as e:
-        raise HTTPException(status_code=400, detail=str(e)) from e
-
-    if (zip_code or "").strip():
+    async def research_sse():
         try:
-            client_z = normalize_us_zip(zip_code)
-        except ValueError as e:
-            raise HTTPException(status_code=400, detail=str(e)) from e
-        if client_z != profile.zip5:
-            raise HTTPException(
-                status_code=400,
-                detail="ZIP does not match the selected address. Pick the address again from suggestions.",
-            )
-    zip_for_scout = profile.zip5
-    scout_jurisdiction = profile.to_scout_dict()
-    scout_site = profile.formatted_address or site_line
-
-    async def sse_bytes():
-        try:
-            yield _sse_data_event({"event": "open"})
+            yield _sse_json({"event": "open"})
             _log_research_step("open", detail="SSE stream started")
+
+            try:
+                profile: JurisdictionProfile = await run_in_threadpool(
+                    geocode_profile_from_address,
+                    site_line,
+                )
+            except ValueError as e:
+                yield _sse_json({"event": "error", "message": str(e)})
+                return
+
+            if (zip_code or "").strip():
+                try:
+                    client_z = normalize_us_zip(zip_code)
+                except ValueError as e:
+                    yield _sse_json({"event": "error", "message": str(e)})
+                    return
+                if client_z != profile.zip5:
+                    yield _sse_json(
+                        {
+                            "event": "error",
+                            "message": "ZIP does not match the selected address. Pick the address again from suggestions.",
+                        }
+                    )
+                    return
+
+            zip_for_scout = profile.zip5
+            scout_jurisdiction = profile.to_scout_dict()
+            scout_site = profile.formatted_address or site_line
 
             photo_analysis: Optional[str] = None
             if image_bytes:
@@ -472,18 +488,18 @@ async def research(
                         yield pkt
                     if kind == "delta":
                         raw_parts.append(cast(str, val))
-                        yield _sse_data_event({"event": "vision_delta", "text": cast(str, val)})
+                        yield _sse_json({"event": "vision_delta", "text": cast(str, val)})
                     elif kind == "done":
                         break
                     else:
                         err = cast(Exception, val)
-                        yield _sse_data_event({"event": "error", "message": str(err)})
+                        yield _sse_json({"event": "error", "message": str(err)})
                         return
                 photo_analysis = normalize_vision_text("".join(raw_parts))
                 _log_research_step("vision", detail="Claude vision — done")
 
             enhanced_query = _build_enhanced_query(job_description, photo_analysis)
-            yield _sse_data_event(
+            yield _sse_json(
                 {
                     "event": "context",
                     "enhanced_query": enhanced_query,
@@ -494,7 +510,7 @@ async def research(
             _log_research_step("context", detail="enhanced query ready for scout")
 
             if scout_jurisdiction and scout_site:
-                yield _sse_data_event(
+                yield _sse_json(
                     {
                         "event": "jurisdiction",
                         "site_address": scout_site,
@@ -510,7 +526,7 @@ async def research(
                     "AHJ identification",
                     detail="city/county/state from geocode (before Universal Scout)",
                 )
-                yield _sse_data_event(
+                yield _sse_json(
                     {
                         "event": "step",
                         "step": "step_ahj_identification",
@@ -562,14 +578,14 @@ async def research(
                             "Universal Scout",
                             detail=_scout_labels.get(key, key),
                         )
-                    yield _sse_data_event(ev)
+                    yield _sse_json(ev)
             except Exception:
                 logger.exception("Firecrawl / Universal Scout crawl failed")
-                yield _sse_data_event({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})
+                yield _sse_json({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})
                 return
 
             if final_raw is None:
-                yield _sse_data_event(
+                yield _sse_json(
                     {"event": "error", "message": "Research finished without complete payload."}
                 )
                 return
@@ -600,7 +616,7 @@ async def research(
                         yield pkt
                     if kind == "delta":
                         raw_parts.append(cast(str, val))
-                        yield _sse_data_event({"event": "summary_delta", "text": cast(str, val)})
+                        yield _sse_json({"event": "summary_delta", "text": cast(str, val)})
                     elif kind == "done":
                         summary = "".join(raw_parts)
                         break
@@ -611,9 +627,9 @@ async def research(
                             f"*Claude action plan unavailable ({err!s}); "
                             "showing structured fallback memo.*\n\n"
                         )
-                        yield _sse_data_event({"event": "summary_delta", "text": banner})
+                        yield _sse_json({"event": "summary_delta", "text": banner})
                         for chunk in _iter_summary_word_chunks(stub):
-                            yield _sse_data_event({"event": "summary_delta", "text": chunk})
+                            yield _sse_json({"event": "summary_delta", "text": chunk})
                         summary = banner + stub
                         _log_research_step("action plan", detail="fallback memo (Claude error)")
                         break
@@ -621,11 +637,11 @@ async def research(
                 _log_research_step("action plan", detail="structured fallback memo — no ANTHROPIC_API_KEY")
                 summary = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
                 for chunk in _iter_summary_word_chunks(summary):
-                    yield _sse_data_event({"event": "summary_delta", "text": chunk})
+                    yield _sse_json({"event": "summary_delta", "text": chunk})
 
             _log_research_step("complete", detail="streaming final payload to client")
             ju_complete = scout_jurisdiction or {}
-            yield _sse_data_event(
+            yield _sse_json(
                 {
                     "event": "complete",
                     "zip": raw["zip"],
@@ -643,8 +659,8 @@ async def research(
         finally:
             clear_scout_run_caches()
 
-    return StreamingResponse(
-        sse_bytes(),
+    return EventSourceResponse(
+        research_sse(),
         media_type="text/event-stream; charset=utf-8",
         headers={
             "Cache-Control": "no-cache",

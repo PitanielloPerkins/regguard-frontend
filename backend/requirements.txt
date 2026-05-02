@@ -1,5 +1,6 @@
 fastapi
 uvicorn[standard]
+sse-starlette>=2.0.0
 firecrawl-py
 python-dotenv
 pydantic
