@@ -7,7 +7,9 @@ import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
+import { ToastContainer, toast } from "react-toastify";
 
+import "react-toastify/dist/ReactToastify.css";
 import "./App.css";
 
 import {
@@ -202,6 +204,8 @@ export default function App() {
   const [backendStale, setBackendStale] = useState(false);
   const [autoRefreshSec, setAutoRefreshSec] = useState<number | null>(null);
   const [streamBroken, setStreamBroken] = useState(false);
+  const sseErrorToastedRef = useRef(false);
+  const [sseConnectionLive, setSseConnectionLive] = useState(false);
   const [meta, setMeta] = useState<{
     site?: string | null;
     zip?: string;
@@ -233,6 +237,7 @@ export default function App() {
     setMeta(null);
     setStreamBroken(false);
     setPlanToolbarMsg(null);
+    setSseConnectionLive(false);
   }, []);
 
   const handleNewJob = useCallback(() => {
@@ -273,6 +278,7 @@ export default function App() {
     researchSawChunkRef.current = false;
     researchCompleteRef.current = false;
     const epochAtStart = researchEpochRef.current;
+    sseErrorToastedRef.current = false;
     setBusy(true);
     setPhase("Connecting…");
 
@@ -295,16 +301,18 @@ export default function App() {
         async onopen(response) {
           if (!response.ok) {
             const detail = await detailFromBadResponse(response);
-            window.alert(
-              `RegGuard research (onopen): FAILED\nHTTP ${response.status}\n\n${detail}`,
+            toast.error(
+              `Research failed to start (HTTP ${response.status}). ${detail.length > 220 ? `${detail.slice(0, 220)}…` : detail}`,
             );
             console.error("[RegGuard research] HTTP error", response.status, detail);
             throw new Error(detail);
           }
+          setSseConnectionLive(true);
+          toast.success("Connection active", {
+            autoClose: 2000,
+            hideProgressBar: true,
+          });
           const ct = response.headers.get("content-type") ?? "";
-          window.alert(
-            `RegGuard research (onopen): OK\nHTTP ${response.status} ${response.statusText}\nContent-Type: ${ct || "(none)"}`,
-          );
           if (!ct.toLowerCase().includes("text/event-stream")) {
             console.warn("[RegGuard research] expected text/event-stream; got:", ct);
           }
@@ -458,18 +466,16 @@ export default function App() {
           }
         },
         onclose() {
-          window.alert(
-            "RegGuard research (onclose): Server finished sending the SSE response body (stream ended).",
-          );
+          setSseConnectionLive(false);
           console.info("[RegGuard research] SSE connection closed");
         },
         onerror(err) {
+          setSseConnectionLive(false);
           const msg = err instanceof Error ? err.message : String(err);
           const stack = err instanceof Error ? (err.stack ?? "") : "";
-          window.alert(
-            `RegGuard research (onerror — connection / parse failure):\n${msg}\n\n${stack.slice(0, 800)}`,
-          );
-          console.error("[RegGuard research] SSE transport error (not retrying)", err);
+          sseErrorToastedRef.current = true;
+          toast.error("Connection interrupted. Retrying...");
+          console.error("[RegGuard research] SSE transport error (not retrying)", err, stack.slice(0, 800));
           throw err;
         },
       });
@@ -501,6 +507,11 @@ export default function App() {
       } else {
         const msg = e instanceof Error ? e.message : String(e);
         console.error("[RegGuard research] failed", e);
+        if (!sseErrorToastedRef.current) {
+          toast.error(msg.length > 180 ? `${msg.slice(0, 180)}…` : msg);
+        } else {
+          sseErrorToastedRef.current = false;
+        }
         setError(msg);
         setPhase("");
         if (researchSawChunkRef.current && !researchCompleteRef.current) {
@@ -707,8 +718,8 @@ export default function App() {
     rec.onerror = (ev) => {
       clearDictationSilenceTimer(dictationSilenceTimerRef);
       if (ev.error === "audio-capture" || ev.error === "not-allowed") {
-        window.alert(
-          `Speech recognition: ${ev.error}\n${(ev.message && String(ev.message).trim()) || "Microphone unavailable or blocked for this site."}`,
+        toast.error(
+          `Speech recognition: ${ev.error}. ${(ev.message && String(ev.message).trim()) || "Microphone unavailable or blocked for this site."}`,
         );
       }
 
