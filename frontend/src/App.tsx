@@ -168,6 +168,7 @@ export default function App() {
   const dismissedRevisionRef = useRef<string | null>(null);
   const researchSawChunkRef = useRef(false);
   const researchCompleteRef = useRef(false);
+  const researchEpochRef = useRef(0);
 
   const [selection, setSelection] = useState<AddressSelection | null>(null);
   const [jobDescription, setJobDescription] = useState("");
@@ -196,6 +197,7 @@ export default function App() {
   } | null>(null);
   const [planToolbarMsg, setPlanToolbarMsg] = useState<string | null>(null);
   const actionPlanPanelRef = useRef<HTMLDivElement | null>(null);
+  const [fileInputKey, setFileInputKey] = useState(0);
 
   const setJobDescriptionRef = useRef(setJobDescription);
   setJobDescriptionRef.current = setJobDescription;
@@ -220,6 +222,35 @@ export default function App() {
     setPlanToolbarMsg(null);
   }, []);
 
+  const handleNewJob = useCallback(() => {
+    researchEpochRef.current += 1;
+    listeningRef.current = false;
+    clearDictationSilenceTimer(dictationSilenceTimerRef);
+    dictationAnchorRef.current = "";
+    dictationFinalAccumRef.current = "";
+    try {
+      recognitionRef.current?.stop();
+    } catch {
+      try {
+        recognitionRef.current?.abort();
+      } catch {
+        /* noop */
+      }
+    }
+    setDictationActive(false);
+    setSpeechHint(null);
+
+    setSelection(null);
+    setJobDescription("");
+    setImageFile(null);
+    setSearchLimit(5);
+    setLocateMessage(null);
+    setBusy(false);
+    resetOutput();
+    addressRef.current?.clearForNewJob();
+    setFileInputKey((k) => k + 1);
+  }, [resetOutput]);
+
   const runResearch = useCallback(async () => {
     if (!selection) {
       return;
@@ -228,6 +259,7 @@ export default function App() {
     setStreamBroken(false);
     researchSawChunkRef.current = false;
     researchCompleteRef.current = false;
+    const epochAtStart = researchEpochRef.current;
     setBusy(true);
     setPhase("Connecting…");
 
@@ -276,11 +308,21 @@ export default function App() {
           try {
             payload = JSON.parse(raw) as Record<string, unknown>;
           } catch {
+            if (researchEpochRef.current !== epochAtStart) {
+              return;
+            }
             setActionPlan((p) => (p ? `${p}\n\n` : "") + raw);
             return;
           }
 
+          if (researchEpochRef.current !== epochAtStart) {
+            return;
+          }
+
           const appendToActionPlan = (text: string) => {
+            if (researchEpochRef.current !== epochAtStart) {
+              return;
+            }
             const t = text.trim();
             if (!t) {
               return;
@@ -419,7 +461,11 @@ export default function App() {
         },
       });
 
-      if (researchSawChunkRef.current && !researchCompleteRef.current) {
+      if (
+        researchEpochRef.current === epochAtStart &&
+        researchSawChunkRef.current &&
+        !researchCompleteRef.current
+      ) {
         console.error("[RegGuard research] stream ended without complete event");
         setStreamBroken(true);
         setError((prev) => prev ?? "Research stream ended before completion.");
@@ -429,6 +475,9 @@ export default function App() {
         e instanceof DOMException
           ? e.name === "AbortError"
           : e instanceof Error && e.name === "AbortError";
+      if (researchEpochRef.current !== epochAtStart) {
+        return;
+      }
       if (isAbort) {
         console.info("[RegGuard research] aborted");
         setError("Research was canceled.");
