@@ -65,17 +65,23 @@ def _locality_data_fence(city: str, county: str, st: str, mode: str) -> str:
     return ""
 
 
-def _serp_suggests_washington(blob: str) -> bool:
-    """Heuristic: title/snippet/URL refer to Washington State (U.S.), not D.C. alone."""
+def _reject_serp_for_project_state(blob: str, project_state: Optional[str]) -> bool:
+    """Drop hits that clearly reference Washington State when the project is elsewhere (e.g. Texas)."""
+    st = (project_state or "").strip().upper()
+    if len(st) != 2:
+        return False
+    if st == "WA":
+        return False
     b = (blob or "").lower()
-    if re.search(r"\bwashington\s+state\b", b):
-        return True
-    if re.search(r"\bstate\s+of\s+washington\b", b):
+    if re.search(r"\bwashington\s+state\b", b) or re.search(r"\bstate\s+of\s+washington\b", b):
         return True
     if ".wa.gov" in b:
         return True
-    if re.search(r"\bseattle\b", b) and "texas" not in b and "tx" not in b:
-        return True
+    if st == "TX" and re.search(r"\bseattle\b", b):
+        if not re.search(r"\b(texas|dallas|plano|fort\s+worth|houston|austin)\b", b) and not re.search(
+            r"\btx\b", b
+        ):
+            return True
     return False
 
 
@@ -127,7 +133,8 @@ def _scout_queries_for_location(
             f"{prefix}Building codes adopted for {county_disp} {st}: county code amendments "
             f"IBC IRC — {zip_tag}"
         )
-        return (juris, permits, codes)
+        fence = _locality_data_fence(city, county, st, mode)
+        return (juris + fence, permits + fence, codes + fence)
 
     city_disp = city or "the municipality"
     loc = city_st or (f"{city_disp}, {st}" if st else city_disp)
@@ -142,6 +149,8 @@ def _scout_queries_for_location(
     codes = (
         f"{prefix}Building codes adopted for {city_disp} {st}: municipal amendments IBC IRC — {zip_tag}"
     )
+    fence = _locality_data_fence(city, county, st, mode)
+    juris, permits, codes = juris + fence, permits + fence, codes + fence
     if _is_plano_texas(city, st):
         permits = f"{permits} | {PLANO_SCOUT_FEE_SCHEDULE}"
         codes = f"{codes} | {PLANO_SCOUT_AMENDMENTS_NEC}"
@@ -333,6 +342,9 @@ def _filter_trusted(
         if not url_matches_trust_policy(u):
             continue
         if _host_conflicts_project_state(host, project_state):
+            continue
+        blob = f"{h.get('title') or ''} {h.get('description') or ''} {u}"
+        if _reject_serp_for_project_state(blob, project_state):
             continue
         seen.add(u)
         out.append(h)
