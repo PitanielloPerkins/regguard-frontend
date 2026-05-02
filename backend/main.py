@@ -1,8 +1,8 @@
 """
 Reg Guard — FastAPI application entry point.
 
-Expert Brain: Senior Inspector punch list memo (NEC 2023, Plano fee intel incl. 2026/$85 cues);
-paired with ``research_memo.build_research_digest`` tagged hits + inspector_digest_directive.
+Research memo: universal **Master Electrician / code consultant** punch list tied to ``site_address`` /
+``jurisdiction`` in ``research_memo.build_research_digest`` (no fixed city fees).
 """
 from __future__ import annotations
 
@@ -48,35 +48,34 @@ _RESEARCH_STALL_FIRECRAWL_MESSAGE = (
 logger = logging.getLogger("reg_guard")
 
 # Claude memo — Markdown Contractor Action Plan (see /research summary streaming).
-# Must stay aligned with ``inspector_digest_directive`` in ``research_memo.build_research_digest``.
-_CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's **Senior Electrical Inspector** persona: write for a **licensed contractor crew** as a **field punch list**, not a homeowner narrative or loose summary.
+# Must stay aligned with ``inspector_digest_directive`` from ``research_memo.build_research_digest``.
+_CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's **field punch list** writer for licensed electrical contractors.
 
-The JSON user message includes ``inspector_digest_directive``: follow its **logic_steps** (extraction from scout hits and ``tagged_priority_hits``, synthesis vs. ``enhanced_job_context``, checklist-only output). Prioritize titles/URLs that signal **Plano, TX**, **NEC / NFPA 70 / 2023**, and **permit fees** (including **2026** / **$85** when those strings appear in the digest).
+The user JSON always includes ``inspector_digest_directive``:
+- **consultant_role** — Master Electrician / Code Consultant scoped to **this** ``city``, ``state``, and **site_address**; use **only** digested search results for that location and **discard** evidence from other states or unrelated jurisdictions unless the text explicitly says it controls this site.
+- **fee_and_code_guidance** — Pull **permit fees** and **local code adoptions** (e.g. NEC edition) **only** when stated in those results. **Never** invent dollar amounts or cite city fees not supported by the digest. If no fee is found, include a checklist line exactly as directed there (typically **Verify exact fee with {city} Building Department.** when ``city`` is present).
 
-Output ONLY Markdown. Opening title:
+Output ONLY Markdown. Title:
 
 ## Contractor Action Plan — Panel / service work (inspector punch list)
 
-Then use **exactly** these headings in order (each section uses **only** ``- [ ]`` task lines after an optional single line of context):
+Then **exactly** these headings, in order. After an optional single line of context per section, use **only** ``- [ ]`` task lines:
 
 ### Permit & Fees
-- Checkbox items for AHJ permit type, applicant-of-record (**licensed electrical contractor** where applicable), online vs. counter, and **fee schedule verification**.
-- When the digest or ``tagged_priority_hits`` references **2026** and/or **$85**, call that out explicitly and reconcile with any older figures (e.g. **$45**) using **verify on official city portal** language—never assert a fee as final without a checklist step to confirm.
-- For **Plano, TX** when indicated by site/jurisdiction/tags, anchor tasks to City of Plano permit/electrical workflows found in the digest.
+Checklist tasks for permit type, applicant-of-record, counter vs online, fees **as stated in results**, and verification steps when data is missing.
 
 ### NEC Technicals (AFCI/GFCI/Grounding)
-Use **2023 NEC** professional knowledge plus digest hints. Checkbox tasks must touch, where applicable to the job (e.g. panel install / service upgrade / relocated circuits): **210.8 GFCI**, **210.12 AFCI**, **Article 250** grounding and bonding at the service, **110.26** working space. Phrase unknowns as verification tasks, not fake citations.
+Checkbox tasks tied to **AFCI/GFCI, grounding/bonding, working space** for the **NEC edition / amendments indicated in the search results**. If the digest does not name an edition, use checklist lines to **confirm** with the AHJ—do not assume "2023 NEC" unless results support it.
 
 ### Inspection Prep
-Service / final style checks: labeling / circuit directory, torque marks or spec compliance, grounding electrode accessibility and depth/driven length per **250.53(G)** where rod electrodes apply, bond integrity—what a **Plano** (or stated AHJ) inspector is likely to ask if the digest suggests that jurisdiction.
+Service / final checks an inspector would expect: labeling, torque discipline, grounding electrode / bonding accessibility—grounded in results where possible.
 
 ### Reference Links
-List each URL from ``unique_source_urls`` once (markdown link when title known from scout hits, else bare URL). No fabricated URLs.
+Each URL in ``unique_source_urls`` once (markdown link when title is known from scout hits, else bare URL). No fabricated URLs.
 
 Rules:
-- Imperative, neutral tone. **No long prose blocks**—checklists dominate.
-- Do not invent ordinance text, PDFs, or inspection handbooks not supported by the digest; use ``- [ ]`` to **fetch/confirm** on the official site.
-- You may cite standard **2023 NEC** articles from professional knowledge; note AHJ may adopt with **amendments**—add a checkbox to confirm adopted edition.
+- Imperative checklist tone; **no long prose**.
+- Cite AHJ / NEC details **only** when traceable to the digest; otherwise use `- [ ]` to **verify** on the official source.
 """
 
 
@@ -164,36 +163,6 @@ def _parse_search_limit(v: int) -> int:
     return v
 
 
-def _digest_suggests_plano_tx(raw: Dict[str, Any], enhanced_query: str) -> bool:
-    """Heuristic: digest or job text points at Plano, Texas."""
-    parts: List[str] = []
-    site = str(raw.get("site_address") or "")
-    parts.append(site)
-    parts.append(str(raw.get("zip") or ""))
-    ju = raw.get("jurisdiction")
-    if isinstance(ju, dict):
-        for k in ("city", "label", "formatted_address", "county"):
-            v = ju.get(k)
-            if v is not None:
-                parts.append(str(v))
-    blob = " ".join(parts).lower()
-    q = (enhanced_query or "").lower()
-    if "plano" not in blob and "plano" not in q:
-        return False
-    texas_hint = (
-        " texas" in blob
-        or ", tx" in blob
-        or " tx " in blob
-        or " tx," in blob
-        or blob.endswith(" tx")
-        or "texas" in blob
-        or " texas" in q
-        or "texas" in q
-        or " tx " in q
-    )
-    return texas_hint or bool(re.search(r"\b75\d{3}\b", str(raw.get("zip") or "")))
-
-
 def _collect_source_urls(raw: Dict[str, Any]) -> List[str]:
     seen: set[str] = set()
     ordered: List[str] = []
@@ -221,10 +190,14 @@ def _research_action_plan_fallback_markdown(
     site = (raw.get("site_address") or "").strip()
     ju = raw.get("jurisdiction")
     ju_line = ""
+    city = ""
+    state = ""
     if isinstance(ju, dict):
         lab = ju.get("label")
         if isinstance(lab, str) and lab.strip():
             ju_line = lab.strip()
+        city = str(ju.get("city") or "").strip()
+        state = str(ju.get("state") or ju.get("state_short") or "").strip()
 
     head = (
         f"Research context: **{site}** (US ZIP **{zip_str}**)."
@@ -232,57 +205,44 @@ def _research_action_plan_fallback_markdown(
         else f"Research context: US ZIP **{zip_str}**."
     )
     has_ctx = (enhanced_query or "").strip() and not enhanced_query.strip().startswith("— (no")
-    in_plano = _digest_suggests_plano_tx(raw, enhanced_query)
+
+    loc_short = ", ".join(p for p in (city, state) if p)
+    if not loc_short:
+        loc_short = ju_line or f"ZIP {zip_str}"
 
     permit_scope = (
-        "Pull an **electrical / building permit** for the service or panel upgrade (confirm trade and "
-        "sub-type with the City of Plano). Typical panel / service changes require a permit."
-        if in_plano
-        else "Pull permits required for the **service or panel upgrade**; confirm exact permit type with the local AHJ."
+        f"Pull permits required for the **service or panel upgrade** for **{loc_short}**; "
+        "confirm exact permit type and department name on the official AHJ site or from the scout links below."
     )
 
-    permit_logistics_body = (
-        [
-            "- [ ] Open the City of Plano building / electrical permit portal and confirm **current** "
-            "instructions for residential or commercial electrical work.",
-            "- [ ] **Fee schedule:** look for **2026** updates citing about **$85** minimums in official or scout-linked "
-            "materials; if only older data (e.g. **$45**) appears, treat it as **unverified** until confirmed on the "
-            "live city fee PDF/portal.",
-            "- [ ] Confirm that a **licensed electrician / eligible electrical contractor** is the "
-            "**applicant of record** to pull the permit (verify exact wording on the Plano application).",
-            "- [ ] Upload or bring single-line diagrams, load calculations, and manufacturer cut sheets the city requests.",
-            "",
-        ]
-        if in_plano
-        else [
-            "- [ ] Confirm minimum permit fees (watch for **2026** / **$85** discussion in your AHJ's published schedule) "
-            "and acceptable payment methods on the jurisdiction's **current** fee schedule.",
-            "- [ ] Confirm **who may apply** for the electrical permit (owner, contractor license class, etc.).",
-            "- [ ] Submit plans, load calculations, and cut sheets per local checklist.",
-            "",
-        ]
+    fee_fallback = (
+        f"- [ ] **If scout results do not state a permit fee:** Verify exact fee with {city} Building Department."
+        if city
+        else "- [ ] **If scout results do not state a permit fee:** Verify exact fee with the local Building Department / AHJ."
     )
 
-    inspection_body = (
-        [
-            "- [ ] **Service / Final inspection**: panel **circuit directory** complete and matches breakers; "
-            "neutrals and EGCs landed only on listed buses.",
-            "- [ ] **Torque marking**: follow manufacturer torque specs; add inspector-visible **torque marks** "
-            "where required by spec or local practice.",
-            "- [ ] **Grounding electrode** visible and accessible — e.g. ground rod: verify **top of rod depth / cover** "
-            "meets **NEC 250.53(G)** (typically **8 ft** driven length with minimal cover; confirm on site and local amendment).",
-            "- [ ] Bonding jumpers / GEC clamps tight, corrosion-resistant, and accessible for inspection photos.",
-            "- [ ] Working space in front of the panel clear per **NEC 110.26** (depth, width, height, free from storage).",
-            "",
-        ]
-        if in_plano
-        else [
-            "- [ ] Panel **labeling**, **torque marks** (per manufacturer / AHJ), and **grounding electrode system** "
-            "ready for inspection (depth / routing per **NEC 250** — confirm local amendments).",
-            "- [ ] Working space clear per **NEC 110.26**.",
-            "",
-        ]
-    )
+    permit_block = [
+        "- [ ] Use only resources that apply to this **site / jurisdiction**; discard other states' data unless "
+        "explicitly cited as controlling.",
+        "- [ ] Open the official permit or building portal for this jurisdiction and confirm **application type**, **fees "
+        "listed there**, and **who may pull** the permit.",
+        fee_fallback,
+        "- [ ] Note any **adopted NEC edition / local amendments** only if stated in the search results or linked ordinances.",
+        "- [ ] Upload or bring single-line diagrams, load calculations, and cut sheets the jurisdiction requests.",
+        "",
+    ]
+
+    inspection_body = [
+        "- [ ] **Service / Final inspection**: panel **circuit directory** complete and matches breakers; "
+        "neutrals and EGCs landed only on listed buses.",
+        "- [ ] **Torque marking**: follow manufacturer torque specs; add inspector-visible **torque marks** "
+        "where required by spec or local practice.",
+        "- [ ] **Grounding electrode** visible and accessible — verify routing and connections per **NEC 250** as adopted "
+        "locally (confirm edition in results).",
+        "- [ ] Bonding / GEC clamps tight, corrosion-resistant, and accessible for inspection.",
+        "- [ ] Working space in front of the panel clear per **NEC 110.26** (depth, width, height, free from storage).",
+        "",
+    ]
 
     lines: List[str] = [
         "## Contractor Action Plan — Panel / service work (inspector punch list)",
@@ -293,22 +253,20 @@ def _research_action_plan_fallback_markdown(
         "",
         "- [ ] " + permit_scope,
         "- [ ] **Verify AHJ**"
-        + (f" — **{ju_line}**." if ju_line else f" for ZIP **{zip_str}**."),
-        "- [ ] Match permit type to scope on the official permit checklist.",
+        + (f" — **{ju_line}**." if ju_line else f" for **{loc_short}**."),
+        "- [ ] Match permit type to scope on the official checklist.",
     ]
-    lines.extend(permit_logistics_body)
+    lines.extend(permit_block)
     lines.extend(
         [
             "### NEC Technicals (AFCI/GFCI/Grounding)",
             "",
             "- [ ] **GFCI** — Where **new or relocated** branch circuits extend into kitchen, bathroom, garage, exterior, "
-            "basement, etc., confirm **210.8** protection on appropriate circuits.",
-            "- [ ] **AFCI** — Where **new or relocated** 120 V branch circuits supply family rooms, bedrooms, etc., confirm **210.12** device type.",
-            "- [ ] **Grounding & bonding (Art. 250)** — Main bonding jumper, neutral bus separation in subpanels, EGC run with every circuit, "
-            "and electrode system continuous to service.",
-            "- [ ] **Working space (110.26)** — 30 in. width, 36 in. depth, 6.5 ft height (or as required for equipment); "
-            "panel not blocked by shelving or equipment.",
-            "- [ ] Confirm **adopted NEC cycle and local amendments** on the AHJ website.",
+            "basement, etc., confirm protection per the **NEC edition cited in your results** (e.g. **210.8** when NEC applies).",
+            "- [ ] **AFCI** — Where **new or relocated** 120 V branch circuits supply dwelling spaces, confirm devices per adopted code (**210.12** when NEC applies).",
+            "- [ ] **Grounding & bonding (Art. 250)** — Service bonding, EGCs, and electrode path per adopted NEC.",
+            "- [ ] **Working space (110.26)** — dedicated space per adopted NEC and any local amendment mentioned in results.",
+            "- [ ] Confirm **adopted NEC cycle and amendments** on the AHJ website (use digest links).",
             "",
             "### Inspection Prep",
             "",
