@@ -154,6 +154,19 @@ export default function App() {
     });
   }, [geoSupported, speechSupportedOnMount]);
 
+  useEffect(() => {
+    const id = "rg-font-inter-roboto";
+    if (document.getElementById(id)) {
+      return;
+    }
+    const link = document.createElement("link");
+    link.id = id;
+    link.rel = "stylesheet";
+    link.href =
+      "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap";
+    document.head.appendChild(link);
+  }, []);
+
   const mapsOk = mapsAutocompleteEnabled();
   const addressRef = useRef<AddressAutocompleteHandle>(null);
   /** When the Places field fires `onSelection` (typing, clearing, or picking), skip applying a stale GPS result. */
@@ -838,6 +851,7 @@ export default function App() {
         siteAddress: meta?.site ?? selection?.formattedAddress ?? null,
         zip: meta?.zip ?? selection?.zip ?? null,
         city: meta?.city ?? null,
+        county: meta?.county ?? null,
       });
       setPlanToolbarMsg("Punch list PDF downloaded.");
       window.setTimeout(() => setPlanToolbarMsg(null), 3500);
@@ -933,7 +947,10 @@ export default function App() {
 
   return (
     <div className="app-shell">
-      <header className="app-header">
+      <header
+        className="app-header"
+        style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif" }}
+      >
         <div>
           <h1 className="app-title">Reg Guard</h1>
           <p className="app-tagline">
@@ -942,6 +959,18 @@ export default function App() {
             8000 (proxied via <code>/api</code>).
           </p>
         </div>
+        <button
+          type="button"
+          className="rg-btn rg-btn--ghost"
+          style={{
+            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
+            fontWeight: 600,
+            flexShrink: 0,
+          }}
+          onClick={handleNewJob}
+        >
+          New Job
+        </button>
       </header>
 
       <div className="app-grid">
@@ -1090,6 +1119,7 @@ export default function App() {
           <div className="rg-field">
             <label htmlFor="site-photo">Job-site photo (optional)</label>
             <input
+              key={fileInputKey}
               id="site-photo"
               className="rg-input"
               type="file"
