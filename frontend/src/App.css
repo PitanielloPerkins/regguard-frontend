@@ -135,6 +135,11 @@
   font-weight: 700;
 }
 
+.rg-plan-actions .rg-plan-action-btn--accept {
+  box-shadow: 0 0 0 1px rgba(168, 197, 232, 0.35);
+  white-space: nowrap;
+}
+
 .rg-plan-toolbar-msg {
   font-size: 0.8rem;
   color: var(--rg-link);

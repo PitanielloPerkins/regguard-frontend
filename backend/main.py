@@ -1,5 +1,8 @@
 """
 Reg Guard — FastAPI application entry point.
+
+Expert Brain: Senior Inspector punch list memo (NEC 2023, Plano fee intel incl. 2026/$85 cues);
+paired with ``research_memo.build_research_digest`` tagged hits + inspector_digest_directive.
 """
 from __future__ import annotations
 

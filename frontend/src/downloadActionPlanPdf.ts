@@ -1,3 +1,6 @@
+/**
+ * Expert Brain: Contractor Action Plan → printable Reg Guard punch list PDF (jsPDF).
+ */
 import { jsPDF } from "jspdf";
 
 /** Reg Guard “construction navy” — matches index.css */

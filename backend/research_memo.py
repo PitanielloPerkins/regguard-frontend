@@ -1,5 +1,7 @@
 """
 Reg Guard — Claude text memo: Markdown Contractor Action Plan from scout payload.
+
+Expert Brain: ``inspector_digest_directive`` + ``tagged_priority_hits`` (Plano / NEC 2023 / fees incl. 2026·$85 cues).
 """
 from __future__ import annotations
 

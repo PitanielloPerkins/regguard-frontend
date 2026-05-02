@@ -1,3 +1,6 @@
+/**
+ * Reg Guard — Expert Brain UI: SSE research → Contractor Action Plan, Accept (copy), PDF punch list export.
+ */
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
@@ -1151,16 +1154,9 @@ export default function App() {
               <strong className="rg-subheading">Contractor action plan</strong>
               <span className="rg-plan-actions">
                 <button
+                  id="rg-expert-accept-plan"
                   type="button"
-                  className="rg-btn rg-btn--ghost rg-btn--compact rg-plan-action-btn"
-                  title="Scroll to the plan and highlight this panel"
-                  onClick={handleReviewActionPlan}
-                >
-                  Review
-                </button>
-                <button
-                  type="button"
-                  className="rg-btn rg-btn--primary rg-btn--compact rg-plan-action-btn"
+                  className="rg-btn rg-btn--primary rg-btn--compact rg-plan-action-btn rg-plan-action-btn--accept"
                   title="Copy the full Contractor Action Plan to your clipboard"
                   onClick={() => void handleAcceptActionPlan()}
                 >
@@ -1173,6 +1169,14 @@ export default function App() {
                   onClick={handleDownloadPunchListPdf}
                 >
                   Download Punch List as PDF
+                </button>
+                <button
+                  type="button"
+                  className="rg-btn rg-btn--ghost rg-btn--compact rg-plan-action-btn"
+                  title="Scroll to the plan and highlight this panel"
+                  onClick={handleReviewActionPlan}
+                >
+                  Review
                 </button>
               </span>
             </div>
@@ -1213,10 +1217,10 @@ export default function App() {
             <span>A newer API build was detected.{autoRefreshSec !== null ? ` Refreshing in ${autoRefreshSec}s…` : ""}</span>
             <span className="rg-update-actions">
               <button type="button" className="rg-btn rg-btn--primary rg-btn--compact" onClick={() => window.location.reload()}>
-                Accept
+                Reload now
               </button>
               <button type="button" className="rg-btn rg-btn--ghost rg-btn--compact" onClick={dismissBackendNotice}>
-                Review
+                Dismiss
               </button>
             </span>
           </div>
