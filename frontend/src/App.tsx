@@ -127,6 +127,8 @@ export default function App() {
 
   const mapsOk = mapsAutocompleteEnabled();
   const addressRef = useRef<AddressAutocompleteHandle>(null);
+  /** When the Places field fires `onSelection` (typing, clearing, or picking), skip applying a stale GPS result. */
+  const cancelPendingLocateApplyRef = useRef(false);
   const dictationAnchorRef = useRef("");
   const dictationFinalAccumRef = useRef("");
   const listeningRef = useRef(false);
@@ -352,54 +354,102 @@ export default function App() {
     }
   }, [selection, jobDescription, searchLimit, imageFile, resetOutput]);
 
-  const handleLocateMe = useCallback(() => {
-    setLocateMessage(null);
-    if (!geoSupported || !mapsOk) {
-      return;
-    }
-    setLocatingMe(true);
-    navigator.geolocation.getCurrentPosition(
-      async (position) => {
-        const lat = position.coords.latitude;
-        const lon = position.coords.longitude;
-        try {
-          const q = new URLSearchParams({
-            latitude: String(lat),
-            longitude: String(lon),
-          });
-          const res = await fetch(`/api/reverse-geocode-address?${q}`, { method: "GET" });
-          if (!res.ok) {
-            setLocateMessage(await detailFromBadResponse(res.clone()));
+  const geolocationReadOptions = useMemo<PositionOptions>(
+    () => ({
+      enableHighAccuracy: true,
+      timeout: 25_000,
+      maximumAge: 0,
+    }),
+    [],
+  );
+
+  const onAddressSelection = useCallback((sel: AddressSelection | null) => {
+    cancelPendingLocateApplyRef.current = true;
+    setSelection(sel);
+  }, []);
+
+  const runDeviceLocate = useCallback(
+    (recenter: boolean) => {
+      setLocateMessage(null);
+      if (!geoSupported || !mapsOk) {
+        return;
+      }
+      cancelPendingLocateApplyRef.current = false;
+      setLocatingMe(true);
+      navigator.geolocation.getCurrentPosition(
+        async (position) => {
+          if (cancelPendingLocateApplyRef.current) {
+            setLocateMessage(
+              "Address field changed before GPS finished — location not applied. Adjust the text or pick from the list, or try Locate / Recenter again.",
+            );
             setLocatingMe(false);
             return;
           }
-          const data = (await res.json()) as { formatted_address?: string; zip?: string };
-          const formattedAddress =
-            typeof data.formatted_address === "string" ? data.formatted_address.trim() : "";
-          const zip = typeof data.zip === "string" ? data.zip.trim() : "";
-          if (!formattedAddress || zip.length !== 5) {
-            setLocateMessage("Could not decode that location into a U.S. address with ZIP.");
-            setLocatingMe(false);
-            return;
+          const lat = position.coords.latitude;
+          const lon = position.coords.longitude;
+          try {
+            const q = new URLSearchParams({
+              latitude: String(lat),
+              longitude: String(lon),
+            });
+            if (recenter) {
+              q.set("_", String(Date.now()));
+            }
+            const res = await fetch(`/api/reverse-geocode-address?${q}`, {
+              method: "GET",
+              cache: "no-store",
+            });
+            if (cancelPendingLocateApplyRef.current) {
+              setLocateMessage(
+                "Address field changed while resolving location — location not applied.",
+              );
+              setLocatingMe(false);
+              return;
+            }
+            if (!res.ok) {
+              setLocateMessage(await detailFromBadResponse(res.clone()));
+              setLocatingMe(false);
+              return;
+            }
+            const data = (await res.json()) as { formatted_address?: string; zip?: string };
+            const formattedAddress =
+              typeof data.formatted_address === "string" ? data.formatted_address.trim() : "";
+            const zip = typeof data.zip === "string" ? data.zip.trim() : "";
+            if (!formattedAddress || zip.length !== 5) {
+              setLocateMessage("Could not decode that location into a U.S. address with ZIP.");
+              setLocatingMe(false);
+              return;
+            }
+            if (cancelPendingLocateApplyRef.current) {
+              setLocateMessage(
+                "Address field changed before geocode finished — location not applied.",
+              );
+              setLocatingMe(false);
+              return;
+            }
+            const sel = { formattedAddress, zip };
+            setSelection(sel);
+            addressRef.current?.setLocatedAddress(sel);
+            setLocateMessage(null);
+          } catch (e) {
+            setLocateMessage(e instanceof Error ? e.message : String(e));
           }
-          const sel = { formattedAddress, zip };
-          setSelection(sel);
-          addressRef.current?.setLocatedAddress(sel);
-          setLocateMessage(null);
-        } catch (e) {
-          setLocateMessage(e instanceof Error ? e.message : String(e));
-        }
-        setLocatingMe(false);
-      },
-      (err) => {
-        setLocateMessage(
-          err.message ? `Location unavailable: ${err.message}` : "Location permission denied.",
-        );
-        setLocatingMe(false);
-      },
-      { enableHighAccuracy: false, timeout: 18_000, maximumAge: 0 },
-    );
-  }, [geoSupported, mapsOk]);
+          setLocatingMe(false);
+        },
+        (err) => {
+          setLocateMessage(
+            err.message ? `Location unavailable: ${err.message}` : "Location permission denied.",
+          );
+          setLocatingMe(false);
+        },
+        geolocationReadOptions,
+      );
+    },
+    [geoSupported, mapsOk, geolocationReadOptions],
+  );
+
+  const handleLocateMe = useCallback(() => runDeviceLocate(false), [runDeviceLocate]);
+  const handleRecenter = useCallback(() => runDeviceLocate(true), [runDeviceLocate]);
 
   const speechCtor = useMemo(() => speechRecognitionCtor(), []);
   const speechSupported = Boolean(speechCtor) && speechSupportedOnMount;
@@ -710,7 +760,7 @@ export default function App() {
                 <AddressAutocomplete
                   ref={addressRef}
                   disabled={busy || locatingMe}
-                  onSelection={setSelection}
+                  onSelection={onAddressSelection}
                 />
               </div>
               <button
@@ -734,6 +784,16 @@ export default function App() {
                     />
                   </svg>
                 )}
+              </button>
+              <button
+                type="button"
+                className="rg-btn rg-btn--ghost rg-recenter-btn"
+                title="Recenter: fresh high-accuracy GPS and bypass cached geocode responses"
+                aria-label="Recenter with high-accuracy GPS"
+                disabled={busy || locatingMe || !mapsOk || !geoSupported}
+                onClick={() => handleRecenter()}
+              >
+                Recenter
               </button>
             </div>
             {!geoSupported ? (
