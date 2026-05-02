@@ -31,6 +31,16 @@ load_dotenv(_ROOT / ".env")
 # Firecrawl / web search: restrict SERP to U.S. government and Municode (reduces unrelated-state noise).
 SEARCH_DOMAIN_SCOPE = "(site:gov OR site:municode.com)"
 
+# City of Plano — product-targeted scout supplements (also referenced from ``main`` module comment).
+PLANO_SCOUT_AMENDMENTS_NEC = "Plano TX electrical amendments 2023 NEC"
+PLANO_SCOUT_FEE_SCHEDULE = "Plano building fee schedule 2026"
+
+
+def _is_plano_texas(city: str, state: str) -> bool:
+    c = (city or "").strip().lower()
+    s = (state or "").strip().upper()
+    return c == "plano" and s in ("TX",)
+
 
 def _scout_queries_for_location(
     z: str,
@@ -95,6 +105,9 @@ def _scout_queries_for_location(
     codes = (
         f"{prefix}Building codes adopted for {city_disp} {st}: municipal amendments IBC IRC — {zip_tag}"
     )
+    if _is_plano_texas(city, st):
+        permits = f"{permits} | {PLANO_SCOUT_FEE_SCHEDULE}"
+        codes = f"{codes} | {PLANO_SCOUT_AMENDMENTS_NEC}"
     return (juris, permits, codes)
 
 # Reuse cached scrapes where possible (24h) when single-page scrape is enabled elsewhere.

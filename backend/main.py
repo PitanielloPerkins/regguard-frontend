@@ -48,30 +48,34 @@ _RESEARCH_STALL_FIRECRAWL_MESSAGE = (
 logger = logging.getLogger("reg_guard")
 
 # Claude memo — Markdown Contractor Action Plan (see /research summary streaming).
-# Digest: ``research_memo.build_research_digest``. Universal Scout: ``scraper.py`` (each query: ``City, ST`` + scope).
+# Digest: ``research_memo.build_research_digest``. Plano, TX: scout adds ``PLANO_SCOUT_*`` strings in ``scraper.py``.
 _CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's **field punch list** writer for licensed electrical contractors.
 
-Scout results in the digest are intentionally limited to **.gov** and **Municode** hosts for the input locality—treat other domains as out of scope.
+Scout results favor **.gov** and **Municode** for the input locality.
 
-The user JSON always includes ``inspector_digest_directive``:
-- **consultant_role** — Act as a **Master Electrician** for the resolved locality; use only **.gov** / **Municode** evidence that clearly applies; ignore other states and unrelated cities.
-- **fee_and_code_guidance** — Fees and code adoptions **only** when stated in those results. Use the prescribed **Verify exact fee with …** checkbox when no fee is cited.
-- **output_format** — Strict **`- [ ] `** checkbox punch list (space after brackets).
+When the digest locality is **Plano, Texas**, act as a **Plano Code Auditor**: prioritize City of Plano amendments vs base NEC, fee schedules (including **2026** when cited), and inspection nuance from **only** Plano-applicable hits.
+
+The JSON includes ``inspector_digest_directive``:
+- **consultant_role**, **gotchas_guidance**, **fee_and_code_guidance**, **output_format**
+- Obey **required_checklist_headings** exactly.
 
 Output ONLY Markdown. Title:
 
-## Contractor Action Plan — Panel / service work (inspector punch list)
+## Contractor Action Plan — Panel / service work (Plano Code Audit when applicable)
 
-Then **exactly** these headings, in order. After an optional single line of context per section, use **only** ``- [ ] `` task lines (checkbox format):
+Then **exactly** these headings in order—only ``- [ ] `` task lines after optional one-line context per section:
 
-### Permit & Fees
-### NEC Technicals (AFCI/GFCI/Grounding)
-### Inspection Prep
+### Permit Costs
+### Technical Punch List
+Place **MANDATORY GOTCHA:** lines (with supporting `- [ ]` items) for local amendments that **differ** from national NEC when the digest supports it—examples: ground-rod / electrode **20 ft**-style local rules, **exterior disconnect labeling** requirements, stricter working space, etc. Do not fabricate Plano text.
+
+### Inspection Must-Haves
 ### Reference Links
+Each URL in ``unique_source_urls`` once (markdown link when title known, else bare URL).
 
 Rules:
 - Imperative checklist tone; **no long prose**.
-- Cite AHJ / NEC details **only** when traceable to the digest; otherwise use `- [ ]` to **verify** on the official **.gov** or **Municode** source.
+- Cite details **only** when traceable to the digest; otherwise `- [ ]` to verify on official **.gov** / **Municode**.
 """
 
 
@@ -227,6 +231,11 @@ def _research_action_plan_fallback_markdown(
         "- [ ] Upload or bring single-line diagrams, load calculations, and cut sheets the jurisdiction requests.",
         "",
     ]
+    if city.lower() == "plano" and (state or "").strip().upper() == "TX":
+        permit_block.insert(
+            1,
+            "- [ ] Scout targets: **Plano building fee schedule 2026** and **Plano TX electrical amendments 2023 NEC** — confirm figures on the official city fee table / code adoption pages.",
+        )
 
     inspection_body = [
         "- [ ] **Service / Final inspection**: panel **circuit directory** complete and matches breakers; "
