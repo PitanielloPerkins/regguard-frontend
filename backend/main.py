@@ -1,8 +1,9 @@
 """
 Reg Guard — FastAPI application entry point.
 
-Research memo: ``research_memo.build_research_digest``. **Plano, TX**: Universal Scout appends
-``Plano TX electrical amendments 2023 NEC`` and ``Plano building fee schedule 2026`` in ``scraper.py``.
+Research memo: ``research_memo.build_research_digest``. **Universal Scout** applies a **data fence**
+in ``scraper.py``: every query line appends resolved **City, ST** or **County, ST** (``LOCALITY_LOCK`` …) so SERP
+stays in-state. **Plano, TX** also appends ``PLANO_SCOUT_*`` strings there.
 """
 from __future__ import annotations
 
@@ -48,16 +49,18 @@ _RESEARCH_STALL_FIRECRAWL_MESSAGE = (
 logger = logging.getLogger("reg_guard")
 
 # Claude memo — Markdown Contractor Action Plan (see /research summary streaming).
-# Digest: ``research_memo.build_research_digest``. Plano, TX: scout adds ``PLANO_SCOUT_*`` strings in ``scraper.py``.
+# Digest: ``research_memo.build_research_digest``. Scout query construction + data fence: ``scraper.py``.
 _CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's **field punch list** writer for licensed electrical contractors.
 
-Scout results favor **.gov** and **Municode** for the input locality.
+Scout results favor **.gov** and **Municode** for the input locality. Act as a **Master Electrician for that specific city or county**; output **only** `- [ ]` technical punch list lines under the required headings (no narrative paragraphs).
 
-When the digest locality is **Plano, Texas**, act as a **Plano Code Auditor**: prioritize City of Plano amendments vs base NEC, fee schedules (including **2026** when cited), and inspection nuance from **only** Plano-applicable hits.
+When the digest locality is **Plano, Texas**, you **MUST** include under **Technical Punch List** a **MANDATORY GOTCHA: Plano Ordinance 250.50** block with `- [ ]` tasks for **two 8-foot ground rods** spaced **20 feet** apart (**Plano local rule** — **not** the **6-foot** rod-spacing narrative from generic NEC discussion). Cross-check codified wording on official Plano / Municode sources when the digest allows.
 
-The JSON includes ``inspector_digest_directive``:
+When the digest locality is **Plano, Texas**, also prioritize City of Plano amendments vs base NEC, fee schedules (including **2026** when cited), and inspection nuance from **only** Plano-applicable hits.
+
+The JSON includes ``inspector_digest_directive`` and may include ``plano_ord_250_50_requirement``:
 - **consultant_role**, **gotchas_guidance**, **fee_and_code_guidance**, **output_format**
-- Obey **required_checklist_headings** exactly.
+- Obey **required_checklist_headings** exactly. If ``plano_ord_250_50_requirement`` is present, satisfy it.
 
 Output ONLY Markdown. Title:
 
@@ -67,7 +70,7 @@ Then **exactly** these headings in order—only ``- [ ] `` task lines after opti
 
 ### Permit Costs
 ### Technical Punch List
-Place **MANDATORY GOTCHA:** lines (with supporting `- [ ]` items) for local amendments that **differ** from national NEC when the digest supports it—examples: ground-rod / electrode **20 ft**-style local rules, **exterior disconnect labeling** requirements, stricter working space, etc. Do not fabricate Plano text.
+Place **MANDATORY GOTCHA:** lines (with supporting `- [ ]` items) for local amendments that **differ** from national NEC when the digest supports it—for Plano, **250.50 / dual rods / 20 ft** is mandatory; other examples: exterior disconnect labeling, stricter working space, etc. Do not fabricate ordinance text.
 
 ### Inspection Must-Haves
 ### Reference Links
@@ -262,12 +265,23 @@ def _research_action_plan_fallback_markdown(
         "- [ ] Match permit type to scope on the official checklist.",
     ]
     lines.extend(permit_block)
+    punch_core = [
+            "- [ ] **MANDATORY GOTCHA:** For each **local amendment** in the digest that is **stricter than base NEC**, add "
+            "explicit `- [ ]` tasks (e.g. electrode / ground-rod local rules, **exterior disconnect labels**).",
+    ]
+    if city.lower() == "plano" and (state or "").strip().upper() == "TX":
+        punch_core.insert(
+            0,
+            "- [ ] **MANDATORY GOTCHA: Plano Ordinance 250.50** — Confirm **two 8-foot ground rods** with **20 feet** "
+            "separation between rods per Plano (**not** the **6-foot** spacing assumption from generic NEC discussion); verify wording on official Plano / Municode sources.",
+        )
     lines.extend(
         [
             "### Technical Punch List",
             "",
-            "- [ ] **MANDATORY GOTCHA:** For each **local amendment** in the digest that is **stricter than base NEC**, add "
-            "explicit `- [ ]` tasks (e.g. electrode / ground-rod depth **20 ft**-style rules, **exterior disconnect labels**).",
+        ]
+        + punch_core
+        + [
             "- [ ] **GFCI / AFCI** — align with **adopted code + amendments** from results, not NEC alone.",
             "- [ ] **Grounding & bonding (Art. 250)** — plus any **additive local** requirements in the digest.",
             "- [ ] **Working space (110.26)** — plus **local clearance** changes if cited.",

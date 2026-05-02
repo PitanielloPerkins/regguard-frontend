@@ -139,20 +139,15 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
 
     is_plano_tx = city.lower() == "plano" and (state or "").strip().upper() in ("TX",)
 
+    consultant_role = (
+        f"Act as a Master Electrician for **{loc_focus}** (the specific city or county for this job). "
+        "Output ONLY a technical punch list using Markdown checkboxes (`- [ ] `). "
+        "Ignore results from other U.S. states (e.g. Washington) or unrelated jurisdictions unless the text is clearly generic NEC with no locality claims."
+    )
     if is_plano_tx:
-        consultant_role = (
-            "Act as a **Plano Code Auditor** and Master Electrician for **Plano, Texas**. "
-            "Use only **City of Plano** official **.gov** and **Municode** results in this digest. "
-            "If a hit is from another state or unrelated municipality, ignore it completely. "
-            f"Anchor analysis to {addr} and Plano, TX."
-        )
-    else:
-        consultant_role = (
-            f"Act as a Master Electrician for {loc_focus}. "
-            "Discard any data not explicitly from **that** jurisdiction's official **.gov** site or from **Municode** "
-            "for this locality. If a search result is from another U.S. state or an unrelated city/county, "
-            "ignore it completely. "
-            f"Use only material credibly tied to {addr} and {loc_focus}."
+        consultant_role += (
+            " For **Plano, Texas**, use only **City of Plano** **.gov** and **Municode** hits in this digest when stating local rules; "
+            f"anchor tasks to {addr} and Plano, TX."
         )
 
     if city:
@@ -173,13 +168,12 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
 
     if is_plano_tx:
         gotchas_guidance = (
-            "Identify **specific City of Plano local amendments** that **differ from** or **add to** the adopted NEC "
-            "(tighter than national minimums). When the digest quotes concrete local requirements—e.g. **20 feet** "
-            "for ground rods / electrode driven length, **exterior disconnect labels**, added labeling beyond NEC "
-            "defaults, or other Plano-specific electrical rules—surface each under **Technical Punch List** as:\n"
-            "- **MANDATORY GOTCHA:** (one line describing the delta vs base NEC) then immediately "
-            "one or more `- [ ]` tasks to comply.\n"
-            "Do not invent Plano rules; only use what the scout text or linked ordinance supports."
+            "**MANDATORY — Plano Ordinance 250.50:** Under **Technical Punch List**, include **MANDATORY GOTCHA: "
+            "Plano Ordinance 250.50** with `- [ ]` tasks requiring **two 8-foot ground rods** installed with **20 feet** "
+            "separation between rods (Plano **local** amendment — **not** the typical **6-foot** NEC minimum-spacing narrative "
+            "some crews assume). Cross-check wording on current Plano codified ordinance / Municode when reconciling.\n"
+            "Identify other **City of Plano** local amendments that **differ from** or **add to** the adopted NEC only when "
+            "the digest text supports them."
         )
     else:
         gotchas_guidance = (
@@ -199,8 +193,8 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
                 "and inspection expectations **only** as stated in results."
             ),
             (
-                "Step 3 — Output: Under **Technical Punch List**, apply `gotchas_guidance` for amendment-vs-NEC differences. "
-                "Elsewhere use only `- [ ] ` lines (checkbox + space)."
+                "Step 3 — Output: Under **Permit Costs**, **Technical Punch List** (apply `gotchas_guidance` here), and "
+                "**Inspection Must-Haves**, use **only** `- [ ] ` lines. No narrative paragraphs."
             ),
         ],
         "required_checklist_headings": [
@@ -209,8 +203,9 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             "### Inspection Must-Haves",
         ],
         "output_format": (
-            "Three body sections (**Permit Costs**, **Technical Punch List**, **Inspection Must-Haves**) then "
-            "**### Reference Links**. Every actionable line: `- [ ] ` + task. Optional one line before a `###` heading."
+            "Technical punch list only: every actionable line is `- [ ] ` (Markdown checkbox + space) under the headings in "
+            "`required_checklist_headings`, in order. Optional single-line **MANDATORY GOTCHA:** immediately before related "
+            "checkboxes. Then **### Reference Links** for `unique_source_urls`."
         ),
         "gotchas_guidance": gotchas_guidance,
         "fee_and_code_guidance": (
@@ -255,7 +250,7 @@ def build_research_digest(raw: Dict[str, Any], source_urls: List[str], enhanced_
 
     tagged_priority_hits = _merge_tagged_hits(steps_digest)
 
-    payload = {
+    payload: Dict[str, Any] = {
         "zip": raw.get("zip"),
         "site_address": raw.get("site_address"),
         "jurisdiction": ju_blob,
@@ -266,6 +261,12 @@ def build_research_digest(raw: Dict[str, Any], source_urls: List[str], enhanced_
         "enhanced_job_context": (enhanced_query or "").strip(),
         "inspector_digest_directive": _build_inspector_digest_directive(raw),
     }
+    if city_guess.lower() == "plano" and (state_guess or "").strip().upper() in ("TX",):
+        payload["plano_ord_250_50_requirement"] = (
+            "HARD REQUIREMENT (Plano, TX): Under **Technical Punch List**, include **MANDATORY GOTCHA: Plano Ordinance 250.50** "
+            "with `- [ ]` tasks for **two 8-foot ground rods** at **20 feet** separation between rods (Plano ordinance — "
+            "**not** the **6-foot** rod-spacing assumption from generic NEC discussion)."
+        )
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
@@ -285,8 +286,10 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                     "role": "user",
                     "content": (
                         "Read `inspector_digest_directive` first (`consultant_role`, `logic_steps`, `fee_and_code_guidance`, "
-                        "`gotchas_guidance`, `output_format`), then `tagged_priority_hits` and the rest of the JSON. "
+                        "`gotchas_guidance`, `output_format`), then `plano_ord_250_50_requirement` if present, then "
+                        "`tagged_priority_hits` and the rest of the JSON. "
                         "Follow the role and logic steps; obey `output_format` and `gotchas_guidance`. "
+                        "When `plano_ord_250_50_requirement` is set, you MUST satisfy it under **Technical Punch List**. "
                         "Use ONLY checklist lines (`- [ ] `) under the headings in `required_checklist_headings`, "
                         "then add **### Reference Links** listing `unique_source_urls`. "
                         "Apply `fee_and_code_guidance` in **Permit Costs**.\n\n"
