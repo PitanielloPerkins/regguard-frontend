@@ -520,6 +520,7 @@ export default function App() {
       }
     } finally {
       setBusy(false);
+      setSseConnectionLive(false);
     }
   }, [selection, jobDescription, searchLimit, imageFile, resetOutput]);
 
@@ -1324,6 +1325,15 @@ export default function App() {
           </div>
         </div>
       ) : null}
+      <ToastContainer
+        position="top-right"
+        theme="dark"
+        autoClose={3200}
+        closeOnClick={false}
+        newestOnTop
+        pauseOnHover
+        limit={5}
+      />
     </div>
   );
 }
