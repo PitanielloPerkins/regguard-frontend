@@ -197,6 +197,13 @@ export default function App() {
     setBusy(true);
     setPhase("Connecting…");
 
+    const abortController = new AbortController();
+    let timedOut = false;
+    const timeoutId = window.setTimeout(() => {
+      timedOut = true;
+      abortController.abort();
+    }, 60_000);
+
     const form = new FormData();
     form.append("zip_code", selection.zip);
     form.append("site_address", selection.formattedAddress);
@@ -211,6 +218,7 @@ export default function App() {
         method: "POST",
         body: form,
         cache: "no-store",
+        signal: abortController.signal,
       });
       if (!res.ok) {
         throw new Error(await detailFromBadResponse(res));
@@ -316,13 +324,30 @@ export default function App() {
         setError((prev) => prev ?? "Research stream ended before completion.");
       }
     } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setError(msg);
-      setPhase("");
-      if (researchSawChunkRef.current && !researchCompleteRef.current) {
-        setStreamBroken(true);
+      const isAbort =
+        e instanceof DOMException
+          ? e.name === "AbortError"
+          : e instanceof Error && e.name === "AbortError";
+      if (isAbort) {
+        setError(
+          timedOut
+            ? "Research took longer than 60 seconds and was canceled. Check the backend terminal for the current step, then try again."
+            : "Research was canceled.",
+        );
+        setPhase("");
+        if (researchSawChunkRef.current && !researchCompleteRef.current) {
+          setStreamBroken(true);
+        }
+      } else {
+        const msg = e instanceof Error ? e.message : String(e);
+        setError(msg);
+        setPhase("");
+        if (researchSawChunkRef.current && !researchCompleteRef.current) {
+          setStreamBroken(true);
+        }
       }
     } finally {
+      window.clearTimeout(timeoutId);
       setBusy(false);
     }
   }, [selection, jobDescription, searchLimit, imageFile, resetOutput]);

@@ -279,6 +279,16 @@ def _line(obj: Dict[str, Any]) -> bytes:
     return (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
 
 
+def _log_research_step(label: str, *, detail: str = "") -> None:
+    """Stdout trace for hung streams — always visible when running ``python backend/main.py``."""
+    if detail:
+        line = f"research step: {label} — {detail}"
+    else:
+        line = f"research step: {label}"
+    print(line, flush=True)
+    logger.info(line)
+
+
 async def _with_heartbeats(threadpool_coro):
     """
     Await one threadpool call (Vision queue pull or Universal Scout step) without
@@ -412,6 +422,7 @@ async def research(
     async def ndjson_bytes():
         try:
             yield _line({"event": "open"})
+            _log_research_step("open", detail="NDJSON stream started")
 
             photo_analysis: Optional[str] = None
             if image_bytes:
@@ -422,6 +433,7 @@ async def research(
                     args=(q, image_bytes, content_type, filename),
                     daemon=True,
                 )
+                _log_research_step("vision", detail="Claude vision — analyzing job-site image")
                 thread.start()
                 raw_parts: List[str] = []
                 while True:
@@ -442,6 +454,7 @@ async def research(
                         yield _line({"event": "error", "message": str(err)})
                         return
                 photo_analysis = normalize_vision_text("".join(raw_parts))
+                _log_research_step("vision", detail="Claude vision — done")
 
             enhanced_query = _build_enhanced_query(job_description, photo_analysis)
             yield _line(
@@ -452,6 +465,7 @@ async def research(
                     "photo_analysis": photo_analysis,
                 }
             )
+            _log_research_step("context", detail="enhanced query ready for scout")
 
             if scout_jurisdiction and scout_site:
                 yield _line(
@@ -461,10 +475,15 @@ async def research(
                         "profile": scout_jurisdiction,
                     }
                 )
+                _log_research_step("jurisdiction", detail="geocoded profile emitted to client")
 
             ahj_for_scout: Optional[Dict[str, Any]] = None
             if scout_jurisdiction:
                 ahj_for_scout = _ahj_identification_payload(scout_jurisdiction)
+                _log_research_step(
+                    "AHJ identification",
+                    detail="city/county/state from geocode (before Universal Scout)",
+                )
                 yield _line(
                     {
                         "event": "step",
@@ -479,6 +498,10 @@ async def research(
 
             final_raw: Optional[Dict[str, Any]] = None
             try:
+                _log_research_step(
+                    "Universal Scout",
+                    detail="Firecrawl /search — jurisdiction, permits, codes (sequential)",
+                )
                 it = iter(
                     iter_universal_scout(
                         zip_for_scout,
@@ -489,6 +512,11 @@ async def research(
                         ahj_identification=ahj_for_scout,
                     )
                 )
+                _scout_labels = {
+                    "step_jurisdiction": "pass 1/3 — jurisdiction & AHJ hints (Firecrawl)",
+                    "step_building_permits": "pass 2/3 — building permits (Firecrawl)",
+                    "step_building_codes": "pass 3/3 — adopted codes (Firecrawl)",
+                }
                 while True:
                     ev: Optional[Dict[str, Any]] = None
                     async for pkt in _with_heartbeats(run_in_threadpool(_scout_iter_next, it)):
@@ -500,7 +528,14 @@ async def research(
                         break
                     if ev.get("event") == "complete":
                         final_raw = ev["raw"]
+                        _log_research_step("Universal Scout", detail="all search passes complete")
                         break
+                    if ev.get("event") == "step":
+                        key = str(ev.get("step") or "step")
+                        _log_research_step(
+                            "Universal Scout",
+                            detail=_scout_labels.get(key, key),
+                        )
                     yield _line(ev)
             except Exception:
                 logger.exception("Firecrawl / Universal Scout crawl failed")
@@ -513,6 +548,7 @@ async def research(
 
             raw = final_raw
             source_urls = _collect_source_urls(raw)
+            _log_research_step("digest", detail="building structured research digest")
             digest = build_research_digest(raw, source_urls, enhanced_query)
 
             summary: str
@@ -523,6 +559,7 @@ async def research(
                     args=(q_plan, digest),
                     daemon=True,
                 )
+                _log_research_step("action plan", detail="Claude — Contractor Action Plan streaming")
                 thread_plan.start()
                 raw_parts: List[str] = []
                 while True:
@@ -550,12 +587,15 @@ async def research(
                         for chunk in _iter_summary_word_chunks(stub):
                             yield _line({"event": "summary_delta", "text": chunk})
                         summary = banner + stub
+                        _log_research_step("action plan", detail="fallback memo (Claude error)")
                         break
             else:
+                _log_research_step("action plan", detail="structured fallback memo — no ANTHROPIC_API_KEY")
                 summary = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
                 for chunk in _iter_summary_word_chunks(summary):
                     yield _line({"event": "summary_delta", "text": chunk})
 
+            _log_research_step("complete", detail="streaming final payload to client")
             ju_complete = scout_jurisdiction or {}
             yield _line(
                 {
