@@ -1,3 +1,4 @@
+import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import ReactMarkdown from "react-markdown";
 import remarkGfm from "remark-gfm";
@@ -65,40 +66,6 @@ async function detailFromBadResponse(res: Response): Promise<string> {
   }
   const t = await res.text().catch(() => "");
   return t.trim() || `${res.status} ${res.statusText}`;
-}
-
-function parseSseDataEvents(buffer: string): { events: NdjsonLine[]; rest: string } {
-  const norm = buffer.replace(/\r\n/g, "\n");
-  const events: NdjsonLine[] = [];
-  let start = 0;
-  while (true) {
-    const idx = norm.indexOf("\n\n", start);
-    if (idx === -1) {
-      return { events, rest: norm.slice(start) };
-    }
-    const block = norm.slice(start, idx);
-    start = idx + 2;
-    const lines = block.split("\n");
-    const dataLines: string[] = [];
-    for (const line of lines) {
-      const t = line.trimEnd();
-      if (t === "" || t.startsWith(":")) {
-        continue;
-      }
-      if (t.startsWith("data:")) {
-        dataLines.push(t.slice(5).trimStart());
-      }
-    }
-    if (dataLines.length === 0) {
-      continue;
-    }
-    const payload = dataLines.join("\n");
-    try {
-      events.push(JSON.parse(payload) as NdjsonLine);
-    } catch {
-      events.push({ event: "error", message: "Malformed SSE data from server." });
-    }
-  }
 }
 
 function speechRecognitionCtor(): (new () => SpeechRecognition) | undefined {
@@ -225,35 +192,43 @@ export default function App() {
     }
 
     try {
-      const res = await fetch("/api/research", {
+      await fetchEventSource("/api/research", {
         method: "POST",
         body: form,
+        /** Long runs (Firecrawl + Claude); keep streaming while tab is in background. */
+        openWhenHidden: true,
         cache: "no-store",
-      });
-      if (!res.ok) {
-        throw new Error(await detailFromBadResponse(res));
-      }
-      const reader = res.body?.getReader();
-      if (!reader) {
-        throw new Error("No response body from server.");
-      }
-
-      const dec = new TextDecoder();
-      let buf = "";
-
-      while (true) {
-        const { done, value } = await reader.read();
-        if (done) {
-          break;
-        }
-        if (value && value.byteLength > 0) {
+        async onopen(response) {
+          if (!response.ok) {
+            const detail = await detailFromBadResponse(response);
+            console.error("[RegGuard research] HTTP error", response.status, detail);
+            throw new Error(detail);
+          }
+          const ct = response.headers.get("content-type") ?? "";
+          if (!ct.toLowerCase().includes("text/event-stream")) {
+            console.warn("[RegGuard research] expected text/event-stream; got:", ct);
+          }
+        },
+        onmessage(ev) {
+          const raw = typeof ev.data === "string" ? ev.data : "";
+          if (!raw.trim()) {
+            return;
+          }
           researchSawChunkRef.current = true;
-        }
-        buf += dec.decode(value, { stream: true });
-        const { events, rest } = parseSseDataEvents(buf);
-        buf = rest;
-
-        for (const row of events) {
+          let row: NdjsonLine;
+          try {
+            row = JSON.parse(raw) as NdjsonLine;
+          } catch (err) {
+            console.error(
+              "[RegGuard research] SSE data is not JSON",
+              err,
+              "event:",
+              ev.event,
+              "snippet:",
+              raw.length > 500 ? `${raw.slice(0, 500)}…` : raw,
+            );
+            return;
+          }
           switch (row.event) {
             case "open":
               setPhase("Started");
@@ -289,10 +264,16 @@ export default function App() {
               );
               break;
             }
-            case "summary_delta":
+            case "summary_delta": {
+              const piece = typeof row.text === "string" ? row.text : "";
+              if (!piece) {
+                console.warn("[RegGuard research] summary_delta missing text", row);
+                break;
+              }
               setPhase("Writing Contractor Action Plan");
-              setSummary((prev) => prev + row.text);
+              setSummary((prev) => prev + piece);
               break;
+            }
             case "complete": {
               researchCompleteRef.current = true;
               setStreamBroken(false);
@@ -312,14 +293,24 @@ export default function App() {
               break;
             }
             case "error":
+              console.error("[RegGuard research] server error event", row.message);
               throw new Error(row.message);
             default:
+              console.warn("[RegGuard research] unknown SSE event shape", row);
               break;
           }
-        }
-      }
+        },
+        onclose() {
+          console.info("[RegGuard research] SSE connection closed");
+        },
+        onerror(err) {
+          console.error("[RegGuard research] SSE transport error (not retrying)", err);
+          throw err;
+        },
+      });
 
       if (researchSawChunkRef.current && !researchCompleteRef.current) {
+        console.error("[RegGuard research] stream ended without complete event");
         setStreamBroken(true);
         setError((prev) => prev ?? "Research stream ended before completion.");
       }
@@ -329,6 +320,7 @@ export default function App() {
           ? e.name === "AbortError"
           : e instanceof Error && e.name === "AbortError";
       if (isAbort) {
+        console.info("[RegGuard research] aborted");
         setError("Research was canceled.");
         setPhase("");
         if (researchSawChunkRef.current && !researchCompleteRef.current) {
@@ -336,6 +328,7 @@ export default function App() {
         }
       } else {
         const msg = e instanceof Error ? e.message : String(e);
+        console.error("[RegGuard research] failed", e);
         setError(msg);
         setPhase("");
         if (researchSawChunkRef.current && !researchCompleteRef.current) {

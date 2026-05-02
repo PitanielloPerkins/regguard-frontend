@@ -307,10 +307,10 @@ def _vision_queue_producer(
         q.put(("error", e))
 
 
-def _sse_event_bytes(obj: Dict[str, Any]) -> bytes:
-    """SSE ``data:`` line + blank line, UTF-8 (matches frontend ``parseSseDataEvents``)."""
+def _sse_event_str(obj: Dict[str, Any]) -> str:
+    """One SSE frame: ``data:`` line + blank line (browser / fetch-event-source protocol)."""
     payload = json.dumps(obj, ensure_ascii=False)
-    return f"data: {payload}\n\n".encode("utf-8")
+    return f"data: {payload}\n\n"
 
 
 def _log_research_step(label: str, *, detail: str = "") -> None:
@@ -335,8 +335,8 @@ async def _with_heartbeats(threadpool_coro):
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=_STREAM_HEARTBEAT_SEC)
         except asyncio.TimeoutError:
-            yield b": ping\n\n"
-            yield _sse_event_bytes({"event": "heartbeat", "ts": time.time()})
+            yield ": ping\n\n"
+            yield _sse_event_str({"event": "heartbeat", "ts": time.time()})
     yield ("__done__", task.result())
 
 
@@ -404,6 +404,9 @@ async def research(
     """
     Multipart research streamed as **Server-Sent Events** (``text/event-stream``).
 
+    The response body is an **async generator** of many ``data:`` SSE frames
+    (``data: <json>\\n\\n``), including incremental ``summary_delta`` chunks, not one final string only.
+
     Each event's ``data`` field is one JSON object (same schema as the former NDJSON lines).
 
     Emits immediately to avoid proxy/client JSON timeouts, then streams Claude vision (if any),
@@ -437,7 +440,7 @@ async def research(
 
     async def research_sse():
         try:
-            yield _sse_event_bytes({"event": "open"})
+            yield _sse_event_str({"event": "open"})
             _log_research_step("open", detail="SSE stream started")
 
             try:
@@ -446,17 +449,17 @@ async def research(
                     site_line,
                 )
             except ValueError as e:
-                yield _sse_event_bytes({"event": "error", "message": str(e)})
+                yield _sse_event_str({"event": "error", "message": str(e)})
                 return
 
             if (zip_code or "").strip():
                 try:
                     client_z = normalize_us_zip(zip_code)
                 except ValueError as e:
-                    yield _sse_event_bytes({"event": "error", "message": str(e)})
+                    yield _sse_event_str({"event": "error", "message": str(e)})
                     return
                 if client_z != profile.zip5:
-                    yield _sse_event_bytes(
+                    yield _sse_event_str(
                         {
                             "event": "error",
                             "message": "ZIP does not match the selected address. Pick the address again from suggestions.",
@@ -490,18 +493,18 @@ async def research(
                         yield pkt
                     if kind == "delta":
                         raw_parts.append(cast(str, val))
-                        yield _sse_event_bytes({"event": "vision_delta", "text": cast(str, val)})
+                        yield _sse_event_str({"event": "vision_delta", "text": cast(str, val)})
                     elif kind == "done":
                         break
                     else:
                         err = cast(Exception, val)
-                        yield _sse_event_bytes({"event": "error", "message": str(err)})
+                        yield _sse_event_str({"event": "error", "message": str(err)})
                         return
                 photo_analysis = normalize_vision_text("".join(raw_parts))
                 _log_research_step("vision", detail="Claude vision — done")
 
             enhanced_query = _build_enhanced_query(job_description, photo_analysis)
-            yield _sse_event_bytes(
+            yield _sse_event_str(
                 {
                     "event": "context",
                     "enhanced_query": enhanced_query,
@@ -512,7 +515,7 @@ async def research(
             _log_research_step("context", detail="enhanced query ready for scout")
 
             if scout_jurisdiction and scout_site:
-                yield _sse_event_bytes(
+                yield _sse_event_str(
                     {
                         "event": "jurisdiction",
                         "site_address": scout_site,
@@ -528,7 +531,7 @@ async def research(
                     "AHJ identification",
                     detail="city/county/state from geocode (before Universal Scout)",
                 )
-                yield _sse_event_bytes(
+                yield _sse_event_str(
                     {
                         "event": "step",
                         "step": "step_ahj_identification",
@@ -580,14 +583,14 @@ async def research(
                             "Universal Scout",
                             detail=_scout_labels.get(key, key),
                         )
-                    yield _sse_event_bytes(ev)
+                    yield _sse_event_str(ev)
             except Exception:
                 logger.exception("Firecrawl / Universal Scout crawl failed")
-                yield _sse_event_bytes({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})
+                yield _sse_event_str({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})
                 return
 
             if final_raw is None:
-                yield _sse_event_bytes(
+                yield _sse_event_str(
                     {"event": "error", "message": "Research finished without complete payload."}
                 )
                 return
@@ -618,7 +621,7 @@ async def research(
                         yield pkt
                     if kind == "delta":
                         raw_parts.append(cast(str, val))
-                        yield _sse_event_bytes({"event": "summary_delta", "text": cast(str, val)})
+                        yield _sse_event_str({"event": "summary_delta", "text": cast(str, val)})
                     elif kind == "done":
                         summary = "".join(raw_parts)
                         break
@@ -629,9 +632,9 @@ async def research(
                             f"*Claude action plan unavailable ({err!s}); "
                             "showing structured fallback memo.*\n\n"
                         )
-                        yield _sse_event_bytes({"event": "summary_delta", "text": banner})
+                        yield _sse_event_str({"event": "summary_delta", "text": banner})
                         for chunk in _iter_summary_word_chunks(stub):
-                            yield _sse_event_bytes({"event": "summary_delta", "text": chunk})
+                            yield _sse_event_str({"event": "summary_delta", "text": chunk})
                         summary = banner + stub
                         _log_research_step("action plan", detail="fallback memo (Claude error)")
                         break
@@ -639,11 +642,11 @@ async def research(
                 _log_research_step("action plan", detail="structured fallback memo — no ANTHROPIC_API_KEY")
                 summary = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
                 for chunk in _iter_summary_word_chunks(summary):
-                    yield _sse_event_bytes({"event": "summary_delta", "text": chunk})
+                    yield _sse_event_str({"event": "summary_delta", "text": chunk})
 
             _log_research_step("complete", detail="streaming final payload to client")
             ju_complete = scout_jurisdiction or {}
-            yield _sse_event_bytes(
+            yield _sse_event_str(
                 {
                     "event": "complete",
                     "zip": raw["zip"],
