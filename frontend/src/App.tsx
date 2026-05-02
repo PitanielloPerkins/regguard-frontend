@@ -46,6 +46,46 @@ type NdjsonLine =
     }
   | { event: "error"; message: string };
 
+/** Markdown slice for live Universal Scout step payloads shown in the Contractor Action Plan panel. */
+function scoutStepDataToMarkdown(stepKey: string, data: unknown): string {
+  if (data == null || typeof data !== "object") {
+    return "";
+  }
+  const d = data as Record<string, unknown>;
+  const query = typeof d.query === "string" ? d.query.trim() : "";
+  const results = Array.isArray(d.results) ? d.results : [];
+  const heading =
+    stepKey === "step_building_codes"
+      ? "### Building codes (live scout)"
+      : stepKey === "step_building_permits"
+        ? "### Building permits (live scout)"
+        : stepKey === "step_jurisdiction"
+          ? "### Jurisdiction (live scout)"
+          : `### Scout: ${stepKey}`;
+  let md = `\n\n${heading}\n\n`;
+  if (query) {
+    md += `**Query:** ${query}\n\n`;
+  }
+  if (results.length === 0) {
+    md += "_(No results in this batch.)_\n";
+    return md;
+  }
+  for (const hit of results) {
+    if (hit == null || typeof hit !== "object") {
+      continue;
+    }
+    const h = hit as Record<string, unknown>;
+    const title = typeof h.title === "string" ? h.title.trim() : "";
+    const url = typeof h.url === "string" ? h.url.trim() : "";
+    if (title && url) {
+      md += `- [${title}](${url})\n`;
+    } else if (url) {
+      md += `- ${url}\n`;
+    }
+  }
+  return md;
+}
+
 async function detailFromBadResponse(res: Response): Promise<string> {
   const ct = res.headers.get("content-type") ?? "";
   if (ct.includes("application/json")) {
@@ -133,7 +173,7 @@ export default function App() {
   const [error, setError] = useState<string | null>(null);
   const [steps, setSteps] = useState<string[]>([]);
   const [visionText, setVisionText] = useState("");
-  const [summary, setSummary] = useState("");
+  const [actionPlan, setActionPlan] = useState("");
   const [sourceUrls, setSourceUrls] = useState<string[]>([]);
   const [locatingMe, setLocatingMe] = useState(false);
   const [locateMessage, setLocateMessage] = useState<string | null>(null);
@@ -165,7 +205,7 @@ export default function App() {
     setPhase("");
     setSteps([]);
     setVisionText("");
-    setSummary("");
+    setActionPlan("");
     setSourceUrls([]);
     setMeta(null);
     setStreamBroken(false);
@@ -222,21 +262,45 @@ export default function App() {
             return;
           }
           researchSawChunkRef.current = true;
-          let row: NdjsonLine;
+
+          let payload: Record<string, unknown>;
           try {
-            row = JSON.parse(raw) as NdjsonLine;
-          } catch (err) {
-            console.error(
-              "[RegGuard research] SSE data is not JSON",
-              err,
-              "event:",
-              ev.event,
-              "snippet:",
-              raw.length > 500 ? `${raw.slice(0, 500)}…` : raw,
-            );
+            payload = JSON.parse(raw) as Record<string, unknown>;
+          } catch {
+            setActionPlan((p) => (p ? `${p}\n\n` : "") + raw);
             return;
           }
-          switch (row.event) {
+
+          const appendToActionPlan = (text: string) => {
+            const t = text.trim();
+            if (!t) {
+              return;
+            }
+            setActionPlan((p) => (p ? `${p}\n\n` : "") + t);
+          };
+
+          const eventName = payload.event;
+          if (typeof eventName !== "string") {
+            const s = payload.summary;
+            if (typeof s === "string" && s.trim()) {
+              appendToActionPlan(s);
+            } else {
+              appendToActionPlan(raw);
+            }
+            return;
+          }
+
+          const topSummary = payload.summary;
+          if (
+            typeof topSummary === "string" &&
+            topSummary.trim() &&
+            eventName !== "complete" &&
+            eventName !== "summary_delta"
+          ) {
+            appendToActionPlan(topSummary);
+          }
+
+          switch (eventName) {
             case "open":
               setPhase("Started");
               break;
@@ -247,63 +311,85 @@ export default function App() {
                   : "Research scan in progress…",
               );
               break;
-            case "vision_delta":
+            case "vision_delta": {
+              const vt = typeof payload.text === "string" ? payload.text : "";
               setPhase("Analyzing photo");
-              setVisionText((prev) => prev + row.text);
+              setVisionText((prev) => prev + vt);
               break;
-            case "context":
-              setPhase(row.photo_analysis ? "Context ready (photo + job)" : "Context ready");
+            }
+            case "context": {
+              const pa = payload.photo_analysis;
+              setPhase(
+                pa != null && String(pa).trim()
+                  ? "Context ready (photo + job)"
+                  : "Context ready",
+              );
               break;
-            case "jurisdiction":
+            }
+            case "jurisdiction": {
               setPhase("Jurisdiction locked");
-              if (row.site_address != null || row.profile) {
+              const site = payload.site_address;
+              const prof = payload.profile;
+              if (site != null || prof != null) {
                 setMeta((m) => ({
                   ...m,
-                  site: row.site_address ?? m?.site,
+                  site: typeof site === "string" ? site : m?.site,
                 }));
               }
               break;
+            }
             case "step": {
-              const name = typeof row.step === "string" ? row.step : "step";
+              const name = typeof payload.step === "string" ? payload.step : "step";
               setPhase(`Research: ${name}`);
               setSteps((s) =>
                 s.includes(name) ? s : [...s, name],
               );
+              if (
+                name === "step_building_codes" ||
+                name === "step_building_permits" ||
+                name === "step_jurisdiction"
+              ) {
+                appendToActionPlan(scoutStepDataToMarkdown(name, payload.data));
+              }
               break;
             }
             case "summary_delta": {
-              const piece = typeof row.text === "string" ? row.text : "";
+              const piece = typeof payload.text === "string" ? payload.text : "";
               if (!piece) {
-                console.warn("[RegGuard research] summary_delta missing text", row);
+                console.warn("[RegGuard research] summary_delta missing text", payload);
                 break;
               }
               setPhase("Writing Contractor Action Plan");
-              setSummary((prev) => prev + piece);
+              appendToActionPlan(piece);
               break;
             }
             case "complete": {
               researchCompleteRef.current = true;
               setStreamBroken(false);
               setPhase("Complete");
-              if (typeof row.summary === "string" && row.summary.length > 0) {
-                setSummary(row.summary);
+              const fin = typeof payload.summary === "string" ? payload.summary : "";
+              if (fin.trim()) {
+                setActionPlan(fin);
               }
-              if (Array.isArray(row.source_urls)) {
-                setSourceUrls(row.source_urls);
+              const urls = payload.source_urls;
+              if (Array.isArray(urls)) {
+                setSourceUrls(urls.filter((u): u is string => typeof u === "string"));
               }
               setMeta({
-                site: row.site_address ?? undefined,
-                zip: row.zip,
-                city: row.city ?? undefined,
-                county: row.county ?? undefined,
+                site: typeof payload.site_address === "string" ? payload.site_address : undefined,
+                zip: typeof payload.zip === "string" ? payload.zip : undefined,
+                city: typeof payload.city === "string" ? payload.city : undefined,
+                county: typeof payload.county === "string" ? payload.county : undefined,
               });
               break;
             }
-            case "error":
-              console.error("[RegGuard research] server error event", row.message);
-              throw new Error(row.message);
+            case "error": {
+              const msg = typeof payload.message === "string" ? payload.message : "Unknown error";
+              console.error("[RegGuard research] server error event", msg);
+              throw new Error(msg);
+            }
             default:
-              console.warn("[RegGuard research] unknown SSE event shape", row);
+              console.warn("[RegGuard research] unknown SSE event shape", payload);
               break;
           }
         },
@@ -1009,8 +1095,8 @@ export default function App() {
           <div>
             <strong className="rg-subheading">Contractor action plan</strong>
             <div className="rg-summary rg-summary--md">
-              {summary.trim() ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary}</ReactMarkdown>
+              {actionPlan.trim() ? (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{actionPlan}</ReactMarkdown>
               ) : null}
             </div>
           </div>
