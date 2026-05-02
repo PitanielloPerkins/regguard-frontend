@@ -495,6 +495,7 @@ export default function App() {
           ? e.name === "AbortError"
           : e instanceof Error && e.name === "AbortError";
       if (researchEpochRef.current !== epochAtStart) {
+        sseErrorToastedRef.current = false;
         return;
       }
       if (isAbort) {
