@@ -30,7 +30,7 @@ from vision import iter_job_site_image_text_stream, normalize_vision_text
 _BACKEND_DIR = Path(__file__).resolve().parent
 _BACKEND_BOOT_ID = uuid.uuid4().hex[:10]
 
-# Chunked NDJSON stream: yield heartbeats while Firecrawl / vision block in threadpool
+# Chunked SSE stream: yield heartbeats while Firecrawl / vision block in threadpool
 # so proxies and browsers keep the connection open during long scans.
 _STREAM_HEARTBEAT_SEC = 2.0
 
@@ -225,9 +225,26 @@ def _research_action_plan_fallback_markdown(
     return "\n".join(lines)
 
 
+def _iter_streaming_words(chunks: Iterator[str]) -> Iterator[str]:
+    """Split model chunks into word+whitespace pieces without splitting across chunk boundaries."""
+    buf = ""
+    for chunk in chunks:
+        buf += chunk
+        while True:
+            m = re.match(r"^(\S+\s+)", buf)
+            if not m:
+                break
+            yield m.group(1)
+            buf = buf[m.end() :]
+    if buf.strip():
+        yield buf.lstrip()
+
+
 def _action_plan_queue_producer(q: Queue, digest: str) -> None:
     try:
-        for fragment in iter_contractor_action_plan_stream(_CONTRACTOR_ACTION_PLAN_SYSTEM, digest):
+        for fragment in _iter_streaming_words(
+            iter_contractor_action_plan_stream(_CONTRACTOR_ACTION_PLAN_SYSTEM, digest),
+        ):
             if fragment:
                 q.put(("delta", fragment))
         q.put(("done", None))
@@ -275,8 +292,10 @@ def _vision_queue_producer(
         q.put(("error", e))
 
 
-def _line(obj: Dict[str, Any]) -> bytes:
-    return (json.dumps(obj, ensure_ascii=False) + "\n").encode("utf-8")
+def _sse_data_event(obj: Dict[str, Any]) -> bytes:
+    """One SSE message: a single JSON object in the data field (newline-safe via JSON escaping)."""
+    payload = json.dumps(obj, ensure_ascii=False)
+    return f"data: {payload}\n\n".encode("utf-8")
 
 
 def _log_research_step(label: str, *, detail: str = "") -> None:
