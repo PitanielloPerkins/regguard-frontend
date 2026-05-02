@@ -48,34 +48,30 @@ _RESEARCH_STALL_FIRECRAWL_MESSAGE = (
 logger = logging.getLogger("reg_guard")
 
 # Claude memo — Markdown Contractor Action Plan (see /research summary streaming).
-# Must stay aligned with ``inspector_digest_directive`` from ``research_memo.build_research_digest``.
+# Digest: ``research_memo.build_research_digest``. Universal Scout: ``scraper.py`` (each query: ``City, ST`` + scope).
 _CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's **field punch list** writer for licensed electrical contractors.
 
+Scout results in the digest are intentionally limited to **.gov** and **Municode** hosts for the input locality—treat other domains as out of scope.
+
 The user JSON always includes ``inspector_digest_directive``:
-- **consultant_role** — Master Electrician / Code Consultant scoped to **this** ``city``, ``state``, and **site_address**; use **only** digested search results for that location and **discard** evidence from other states or unrelated jurisdictions unless the text explicitly says it controls this site.
-- **fee_and_code_guidance** — Pull **permit fees** and **local code adoptions** (e.g. NEC edition) **only** when stated in those results. **Never** invent dollar amounts or cite city fees not supported by the digest. If no fee is found, include a checklist line exactly as directed there (typically **Verify exact fee with {city} Building Department.** when ``city`` is present).
+- **consultant_role** — Act as a **Master Electrician** for the resolved locality; use only **.gov** / **Municode** evidence that clearly applies; ignore other states and unrelated cities.
+- **fee_and_code_guidance** — Fees and code adoptions **only** when stated in those results. Use the prescribed **Verify exact fee with …** checkbox when no fee is cited.
+- **output_format** — Strict **`- [ ] `** checkbox punch list (space after brackets).
 
 Output ONLY Markdown. Title:
 
 ## Contractor Action Plan — Panel / service work (inspector punch list)
 
-Then **exactly** these headings, in order. After an optional single line of context per section, use **only** ``- [ ]`` task lines:
+Then **exactly** these headings, in order. After an optional single line of context per section, use **only** ``- [ ] `` task lines (checkbox format):
 
 ### Permit & Fees
-Checklist tasks for permit type, applicant-of-record, counter vs online, fees **as stated in results**, and verification steps when data is missing.
-
 ### NEC Technicals (AFCI/GFCI/Grounding)
-Checkbox tasks tied to **AFCI/GFCI, grounding/bonding, working space** for the **NEC edition / amendments indicated in the search results**. If the digest does not name an edition, use checklist lines to **confirm** with the AHJ—do not assume "2023 NEC" unless results support it.
-
 ### Inspection Prep
-Service / final checks an inspector would expect: labeling, torque discipline, grounding electrode / bonding accessibility—grounded in results where possible.
-
 ### Reference Links
-Each URL in ``unique_source_urls`` once (markdown link when title is known from scout hits, else bare URL). No fabricated URLs.
 
 Rules:
 - Imperative checklist tone; **no long prose**.
-- Cite AHJ / NEC details **only** when traceable to the digest; otherwise use `- [ ]` to **verify** on the official source.
+- Cite AHJ / NEC details **only** when traceable to the digest; otherwise use `- [ ]` to **verify** on the official **.gov** or **Municode** source.
 """
 
 
@@ -620,6 +616,7 @@ async def research(
                     "Universal Scout",
                     detail="Firecrawl /search — jurisdiction, permits, codes (sequential)",
                 )
+                # Universal Scout: each query line includes ``City, ST`` / county + ``(site:gov OR site:municode.com)`` — see ``scraper.py``.
                 it = iter(
                     iter_universal_scout(
                         zip_for_scout,

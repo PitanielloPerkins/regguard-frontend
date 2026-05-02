@@ -123,37 +123,51 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
     if not addr:
         addr = "the project address in this digest"
 
-    loc = ", ".join(p for p in (city, state) if p)
-    if not loc:
-        loc = "this jurisdiction (see `jurisdiction` and `site_address` in this digest)"
+    county = str(ju.get("county") or "").strip()
+    mode = str(ju.get("mode") or "").strip().lower()
 
-    if city and state:
-        consultant_role = (
-            f"Act as a Master Electrician and Code Consultant for {city}, {state}. "
-            f"Using only the search results provided for {addr}, discard any data from other states or unrelated jurisdictions."
+    county_disp = ""
+    if (mode == "county" or (not city and county)) and county:
+        county_disp = f"{county} County" if county and not county.lower().endswith("county") else county
+        loc_focus = f"{county_disp}, {state}".strip().strip(",") if state else county_disp
+    elif city and state:
+        loc_focus = f"{city}, {state}"
+    else:
+        loc_focus = ", ".join(p for p in (city, county, state) if p)
+        if not loc_focus:
+            loc_focus = "this jurisdiction (see `jurisdiction` and `site_address` in this digest)"
+
+    consultant_role = (
+        f"Act as a Master Electrician for {loc_focus}. "
+        "Discard any data not explicitly from **that** jurisdiction's official **.gov** site or from **Municode** "
+        "for this locality. If a search result is from another U.S. state or an unrelated city/county, "
+        "ignore it completely. "
+        f"Use only material credibly tied to {addr} and {loc_focus}."
+    )
+
+    if city:
+        fee_verify_exact = (
+            f'If no specific fee is found in the search results, include a `- [ ]` line exactly: '
+            f"Verify exact fee with {city} Building Department."
+        )
+    elif county_disp:
+        fee_verify_exact = (
+            f'If no specific fee is found in the search results, include a `- [ ]` line exactly: '
+            f"Verify exact fee with {county_disp} Building Department or county development services."
         )
     else:
-        consultant_role = (
-            f"Act as a Master Electrician and Code Consultant for {loc}. "
-            f"Using only the search results provided for {addr}, discard any data from other states or unrelated jurisdictions."
-        )
-
-    fee_verify_exact = (
-        f'If no specific fee is found in the search results, include a `- [ ]` line exactly: Verify exact fee with {city} Building Department.'
-        if city
-        else (
+        fee_verify_exact = (
             "If no specific fee is found in the search results, include a `- [ ]` line: "
             "Verify exact fee with the local Building Department / AHJ named in this digest."
         )
-    )
 
     return {
         "consultant_role": consultant_role,
         "logic_steps": [
             (
-                "Step 1 — Extraction: Use only scout hits and URLs that clearly apply to this project's "
-                f"jurisdiction ({loc}). Prefer `tagged_priority_hits` when they reference this locality, NEC, or fees. "
-                "Ignore results about other cities or states unless the text explicitly states they govern this site."
+                "Step 1 — Extraction: Use only scout hits whose URLs are **.gov** or **Municode** and that clearly apply "
+                f"to **{loc_focus}** (and {addr}). Prefer `tagged_priority_hits` that reference this locality. "
+                "If another state or unrelated jurisdiction appears, ignore it entirely."
             ),
             (
                 "Step 2 — Synthesis: Map `enhanced_job_context` to permit fees, adopted codes (e.g. NEC edition), "
@@ -161,7 +175,8 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
                 "or ordinance text."
             ),
             (
-                "Step 3 — Technical punch list: Output ONLY Markdown task lines using `- [ ]` under each required heading."
+                "Step 3 — Technical punch list: Output **only** Markdown lines beginning with `- [ ] ` (checkbox + space); "
+                "no numbered essay format, no long narrative blocks."
             ),
         ],
         "required_checklist_headings": [
@@ -169,6 +184,10 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             "### NEC Technicals (AFCI/GFCI/Grounding)",
             "### Inspection Prep",
         ],
+        "output_format": (
+            "Strict technical punch list: every actionable line must be `- [ ] ` followed by the task. "
+            "Optional one-line context immediately **before** a `###` heading is allowed."
+        ),
         "fee_and_code_guidance": (
             "Identify specific **permit fees** and **local code adoptions** (e.g. which NEC edition applies) **only** "
             "when explicitly mentioned in the search results for this project. "
@@ -237,11 +256,12 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                 {
                     "role": "user",
                     "content": (
-                        "Read `inspector_digest_directive` first (`consultant_role`, `logic_steps`, `fee_and_code_guidance`), "
-                        "then `tagged_priority_hits` and the rest of the JSON. Follow the role and logic steps. "
+                        "Read `inspector_digest_directive` first (`consultant_role`, `logic_steps`, `fee_and_code_guidance`, "
+                        "`output_format`), then `tagged_priority_hits` and the rest of the JSON. Follow the role and logic "
+                        "steps; obey `output_format`. "
                         "Use ONLY checklist lines (`- [ ] `) under the headings in `required_checklist_headings`, "
                         "then add **### Reference Links** listing `unique_source_urls`. "
-                        "Apply `fee_and_code_guidance` in **Permit & Fees**—no assumed dollar amounts.\n\n"
+                        "Apply `fee_and_code_guidance` in **Permit & Fees**.\n\n"
                         f"{user_digest}"
                     ),
                 }

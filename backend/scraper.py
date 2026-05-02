@@ -28,26 +28,8 @@ load_dotenv(_ROOT / ".env")
 # Universal Scout — trusted domains (query operators + post-filter)
 # -----------------------------------------------------------------------------
 
-# Firecrawl supports common search operators; this OR-chain biases SERP toward
-# government, broad non-profit TLD, major code publishers, and common codified-law hosts.
-SEARCH_DOMAIN_SCOPE = (
-    "(site:gov OR site:org OR site:municode.com OR site:iccsafe.org "
-    "OR site:amlegal.com OR site:up.codes)"
-)
-
-_AGENT_JURISDICTION_ZIP = (
-    "Find which US city and county US ZIP {zip} falls under. "
-    "Prefer results naming the municipality and county for permit jurisdiction."
-)
-_AGENT_PERMITS_ZIP = (
-    "For the US city and/or county that contains ZIP {zip}, search for: "
-    "[City/County] building department, permit applications, "
-    "adopted building code and local amendments, official AHJ site."
-)
-_AGENT_CODES_ZIP = (
-    "For ZIP {zip} and its local jurisdiction, find adopted building codes "
-    "(e.g. IBC/IRC) and municipal or county code amendments, official sources."
-)
+# Firecrawl / web search: restrict SERP to U.S. government and Municode (reduces unrelated-state noise).
+SEARCH_DOMAIN_SCOPE = "(site:gov OR site:municode.com)"
 
 
 def _scout_queries_for_location(
@@ -58,19 +40,22 @@ def _scout_queries_for_location(
     """
     Build (jurisdiction, permits, codes) search lines for Universal Scout.
 
-    When ``jurisdiction`` is present (from Google Geocoding), steer explicitly
-    toward **city** vs **county** building departments; otherwise keep ZIP-centric copy.
+    Every line includes **explicit locality** (``City, ST`` or ``County, ST``) when geocoding
+    provides it, plus ZIP where helpful. Queries are combined in ``_append_scope`` with
+    ``(site:gov OR site:municode.com)``.
     """
     addr = (site_address or "").strip()
     ju = jurisdiction
     if ju:
         addr = addr or str(ju.get("formatted_address") or "").strip() or f"ZIP {z}"
 
+    zip_tag = f"ZIP {z}"
+
     if not ju or not addr:
         return (
-            f"{_AGENT_JURISDICTION_ZIP.format(zip=z)} (ZIP {z})",
-            _AGENT_PERMITS_ZIP.format(zip=z),
-            _AGENT_CODES_ZIP.format(zip=z),
+            f"US {zip_tag} municipality county jurisdiction AHJ building permits — {zip_tag}",
+            f"US {zip_tag} building department permit applications electrical official — {zip_tag}",
+            f"US {zip_tag} adopted building code amendments codified law official — {zip_tag}",
         )
 
     mode = str(ju.get("mode") or "").strip().lower()
@@ -78,37 +63,37 @@ def _scout_queries_for_location(
     county = str(ju.get("county") or "").strip()
     st = str(ju.get("state") or "").strip()
 
+    city_st = f"{city}, {st}".strip().strip(",") if city and st else ""
     if mode == "county" or (not city and county):
         county_disp = f"{county} County" if county and not county.lower().endswith("county") else county
+        loc = f"{county_disp}, {st}".strip().strip(",") if st else county_disp
+        prefix = f"{loc}: " if loc else ""
         juris = (
-            f"For job site {addr} in unincorporated or county-administered {county_disp}, "
-            f"{st} (ZIP {z}), confirm the **county** is the Authority Having Jurisdiction "
-            f"(AHJ) for building permits — not a city municipal building department."
+            f"{prefix}Job site {addr} — unincorporated or county-administered {county_disp}, {st} ({zip_tag}). "
+            f"Confirm **county** is the AHJ for building permits (not a city department)."
         )
         permits = (
-            f"{county_disp} {st} building permits and inspections, development services, "
-            f"unincorporated areas, official .gov — ZIP {z}"
+            f"{prefix}{county_disp} {st} building permits inspections development services "
+            f"unincorporated official — {zip_tag}"
         )
         codes = (
-            f"Building codes adopted specifically for {county_disp} {st}: county building code, "
-            f"IBC IRC local adoption, county code amendments, codified law official .gov Municode "
-            f"— jurisdiction ZIP {z}"
+            f"{prefix}Building codes adopted for {county_disp} {st}: county code amendments "
+            f"IBC IRC — {zip_tag}"
         )
         return (juris, permits, codes)
 
     city_disp = city or "the municipality"
+    loc = city_st or (f"{city_disp}, {st}" if st else city_disp)
+    prefix = f"{loc}: " if loc else ""
     juris = (
-        f"For job site {addr} in incorporated {city_disp}, {st} (ZIP {z}), the **city** "
-        f"municipality is typically the AHJ for building permits at this address (not the county)."
+        f"{prefix}Job site {addr} — incorporated {city_disp}, {st} ({zip_tag}). "
+        f"The **city** is typically the AHJ for building permits at this address."
     )
     permits = (
-        f"{city_disp} {st} building department permits applications plan check "
-        f"official city .gov — ZIP {z}"
+        f"{prefix}{city_disp} {st} building department permits plan check electrical official — {zip_tag}"
     )
     codes = (
-        f"Building codes adopted specifically for incorporated {city_disp} {st} "
-        f"(not county-wide): municipal building code, IBC IRC local adoption, city code amendments, "
-        f"official .gov Municode amlegal — area ZIP {z}"
+        f"{prefix}Building codes adopted for {city_disp} {st}: municipal amendments IBC IRC — {zip_tag}"
     )
     return (juris, permits, codes)
 
@@ -194,26 +179,32 @@ def _hostname(url: str) -> str:
         return ""
 
 
+_STATE_SL_GOV_RE = re.compile(r"\.([a-z]{2})\.gov$", re.I)
+
+
+def _host_conflicts_project_state(host: str, state_short: Optional[str]) -> bool:
+    """True when host is a ``*.st.gov`` agency site and ``state_short`` is a different U.S. state."""
+    st = (state_short or "").strip().lower()
+    if len(st) != 2:
+        return False
+    m = _STATE_SL_GOV_RE.search(host)
+    if not m:
+        return False
+    return m.group(1).lower() != st
+
+
 def hostname_matches_trust_policy(host: str) -> bool:
     """
-    True if the host matches Universal Scout coverage: .gov, .org, Municode,
-    ICC / ICCSAFE, American Legal Publishing, or UpCodes.
+    Restrict to **.gov** (official government) and **municode.com** per product policy.
 
-    Post-filter is defense-in-depth alongside SEARCH_DOMAIN_SCOPE in the query string.
+    Post-filter is defense-in-depth alongside ``SEARCH_DOMAIN_SCOPE`` in the query string.
     """
     if not host:
         return False
-    if host.endswith(".gov"):
-        return True
-    if host.endswith(".org"):
-        return True
+    host = host.lower().rstrip(".")
     if "municode" in host:
         return True
-    if "iccsafe" in host:
-        return True
-    if "amlegal" in host:
-        return True
-    if "up.codes" in host:
+    if host.endswith(".gov"):
         return True
     return False
 
@@ -279,6 +270,8 @@ def _web_hits_raw(data: Optional[SearchData]) -> List[Dict[str, Optional[str]]]:
 def _filter_trusted(
     hits: List[Dict[str, Optional[str]]],
     limit: int,
+    *,
+    project_state: Optional[str] = None,
 ) -> List[Dict[str, Optional[str]]]:
     seen: set[str] = set()
     out: List[Dict[str, Optional[str]]] = []
@@ -286,7 +279,10 @@ def _filter_trusted(
         u = h.get("url")
         if not u or u in seen:
             continue
+        host = _hostname(str(u))
         if not url_matches_trust_policy(u):
+            continue
+        if _host_conflicts_project_state(host, project_state):
             continue
         seen.add(u)
         out.append(h)
@@ -358,6 +354,7 @@ def _scout_search(
     query: str,
     *,
     user_limit: int,
+    project_state: Optional[str] = None,
 ) -> tuple[List[Dict[str, Optional[str]]], Dict[str, Any]]:
     """
     Universal Scout: **/v2/search** with ``sources=['web']`` and **no** bundled scrape.
@@ -382,11 +379,12 @@ def _scout_search(
         location="US",
         scrape_options=None,
     )
-    trusted = _filter_trusted(_web_hits_raw(r), user_limit)
+    trusted = _filter_trusted(_web_hits_raw(r), user_limit, project_state=project_state)
     if trusted:
         return trusted, meta
 
-    fb = _fallback_official_query(query)
+    fb_core = _fallback_official_query(query)
+    fb = _append_scope(fb_core)
     meta["fallback_used"] = True
     meta["fallback_query"] = fb
     r2 = fc.search(
@@ -396,7 +394,7 @@ def _scout_search(
         location="US",
         scrape_options=None,
     )
-    return _dedupe_take(_web_hits_raw(r2), user_limit), meta
+    return _filter_trusted(_web_hits_raw(r2), user_limit, project_state=project_state), meta
 
 
 def _step_result_dict(
@@ -446,8 +444,8 @@ def _final_scout_response(
         )
     wf.extend(
         [
-            "Fallback — If a scoped step returns no trusted URLs: one unscoped search (no site: filters) "
-            "with *official* and *city government landing page* to reach the locality's official entry point.",
+            "Fallback — If a scoped step returns no trusted URLs: follow-up search **retains** "
+            "(site:gov OR site:municode.com) and adds *official* / *city government landing page*.",
             "Universal Scout 1 — Jurisdiction: city/county AHJ hints (trusted hosts).",
             "Universal Scout 2 — Permits: **city** or **county** building department (steered from address).",
             "Universal Scout 3 — Building codes: **city-specific** (incorporated) or **county-specific** "
@@ -461,9 +459,7 @@ def _final_scout_response(
         "scout": {
             "mode": "search_web",
             "search_domain_scope": SEARCH_DOMAIN_SCOPE,
-            "trust_policy": (
-                "hostname ends with .gov or .org, or contains municode, iccsafe, amlegal, or up.codes"
-            ),
+            "trust_policy": "hostname ends with .gov or hostname contains municode (SERP scoped with site:gov OR site:municode.com)",
             "sources": ["web"],
             "scrape_options": None,
             "max_depth_note": (
@@ -480,10 +476,9 @@ def _final_scout_response(
                 "(markdown only, fast_mode, no links format, exclude_tags strips media/CSS)."
             ),
             "fallback": (
-                "If a scoped step returns zero trusted URLs, Universal Scout runs one unscoped "
-                "search: it keeps the same research intent, ensures the word *official*, and adds "
-                "*city government landing page* to surface the municipality's official site entry "
-                "(no site: domain filters)."
+                "If a scoped step returns zero trusted URLs, Universal Scout runs a follow-up search that still "
+                "appends (site:gov OR site:municode.com) and biases keywords toward *official* / *city government* "
+                "(no fully unscoped web search)."
             ),
         },
         "enhanced_context_used": bool(ctx),
@@ -524,9 +519,13 @@ def iter_universal_scout(
     ju: Optional[Mapping[str, Any]] = jurisdiction if jurisdiction else None
     ahj_snap: Optional[Mapping[str, Any]] = ahj_identification if ahj_identification else None
 
+    st_for_filter: Optional[str] = None
+    if ju:
+        st_for_filter = str(ju.get("state") or ju.get("state_short") or "").strip() or None
+
     q1_core, q2_core, q3_core = _scout_queries_for_location(z, addr, ju)
     q1 = _with_context(q1_core, ctx)
-    hits1, meta1 = _scout_search(fc, q1, user_limit=search_limit)
+    hits1, meta1 = _scout_search(fc, q1, user_limit=search_limit, project_state=st_for_filter)
     yield {"event": "step", "step": "step_jurisdiction", "data": _step_result_dict(hits1, meta1)}
     hint = _jurisdiction_spelling_hint(hits1)
 
@@ -534,11 +533,11 @@ def iter_universal_scout(
         q2 = _with_context(f"{q2_core} Context from web: {hint}", ctx)
     else:
         q2 = _with_context(q2_core, ctx)
-    hits2, meta2 = _scout_search(fc, q2, user_limit=search_limit)
+    hits2, meta2 = _scout_search(fc, q2, user_limit=search_limit, project_state=st_for_filter)
     yield {"event": "step", "step": "step_building_permits", "data": _step_result_dict(hits2, meta2)}
 
     q3 = _with_context(q3_core, ctx)
-    hits3, meta3 = _scout_search(fc, q3, user_limit=search_limit)
+    hits3, meta3 = _scout_search(fc, q3, user_limit=search_limit, project_state=st_for_filter)
     yield {"event": "step", "step": "step_building_codes", "data": _step_result_dict(hits3, meta3)}
 
     full = _final_scout_response(
