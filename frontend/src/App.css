@@ -111,6 +111,23 @@
   align-items: center;
 }
 
+/**
+ * Plan toolbar: keep primary controls visible (avoid “invisible” disabled ghost buttons).
+ */
+.rg-plan-actions .rg-plan-action-btn {
+  flex-shrink: 0;
+  min-height: 2.25rem;
+  border-width: 2px;
+  font-weight: 700;
+  letter-spacing: 0.02em;
+}
+
+.rg-plan-actions .rg-btn--ghost.rg-plan-action-btn {
+  color: var(--rg-text);
+  border-color: var(--rg-accent-dim);
+  background: rgba(168, 197, 232, 0.08);
+}
+
 .rg-plan-toolbar-msg {
   font-size: 0.8rem;
   color: var(--rg-link);

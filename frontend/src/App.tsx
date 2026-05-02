@@ -757,6 +757,8 @@ export default function App() {
   const handleAcceptActionPlan = useCallback(async () => {
     const t = actionPlan.trim();
     if (!t) {
+      setPlanToolbarMsg("Nothing to copy yet — run research or wait for the plan to finish streaming.");
+      window.setTimeout(() => setPlanToolbarMsg(null), 4000);
       return;
     }
     try {
@@ -1127,16 +1129,16 @@ export default function App() {
               <span className="rg-plan-actions">
                 <button
                   type="button"
-                  className="rg-btn rg-btn--ghost rg-btn--compact"
-                  disabled={!actionPlan.trim()}
+                  className="rg-btn rg-btn--ghost rg-btn--compact rg-plan-action-btn"
+                  title="Scroll to the plan and highlight this panel"
                   onClick={handleReviewActionPlan}
                 >
                   Review
                 </button>
                 <button
                   type="button"
-                  className="rg-btn rg-btn--primary rg-btn--compact"
-                  disabled={!actionPlan.trim()}
+                  className="rg-btn rg-btn--primary rg-btn--compact rg-plan-action-btn"
+                  title="Copy the full Contractor Action Plan to your clipboard"
                   onClick={() => void handleAcceptActionPlan()}
                 >
                   Accept
