@@ -82,36 +82,10 @@ export function downloadActionPlanPdf(options: {
   let y = 0;
 
   const drawFirstPageHeader = () => {
-    const headerBandMm = 42;
-    pdf.setFillColor(...RG_NAVY);
-    pdf.rect(0, 0, pageW, headerBandMm, "F");
-
     const markX = margin;
     const markY = 7.5;
-    pdf.setFillColor(...RG_LINK);
-    pdf.roundedRect(markX, markY, 12, 12, 2.2, 2.2, "F");
-    pdf.setTextColor(...RG_NAVY);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(8.2);
-    pdf.text("RG", markX + 2.6, markY + 8.2);
-
     const textX = margin + 16;
     const titleMaxW = innerW - 16;
-    pdf.setTextColor(224, 225, 221);
-    pdf.setFont("helvetica", "bold");
-    pdf.setFontSize(14);
-    const reportTitle = "RegGuard Professional Compliance Report";
-    const titleLines = pdf.splitTextToSize(reportTitle, titleMaxW);
-    let ty = 13;
-    for (const ln of titleLines) {
-      pdf.text(ln, textX, ty);
-      ty += 5.2;
-    }
-
-    pdf.setFont("helvetica", "normal");
-    pdf.setFontSize(8.8);
-    pdf.setTextColor(...RG_LINK);
-    pdf.text("Agentic compliance assistant for contractors", textX, ty + 1.5);
 
     const locBits: string[] = [];
     if (options.siteAddress?.trim()) {
@@ -125,16 +99,56 @@ export function downloadActionPlanPdf(options: {
       }
     }
     const loc = locBits.join(" · ");
+
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(14);
+    const reportTitle = "RegGuard Professional Compliance Report";
+    const titleLines = pdf.splitTextToSize(reportTitle, titleMaxW);
+    let ty = 13;
+    ty += titleLines.length * 5.2;
+    ty += 1.5 + 5.5;
+    if (loc) {
+      pdf.setFont("helvetica", "normal");
+      pdf.setFontSize(8.2);
+      const locLinesMeasure = pdf.splitTextToSize(loc.slice(0, 280), titleMaxW);
+      ty += 4 + locLinesMeasure.length * 3.8;
+    }
+    const headerBandMm = Math.max(44, ty + 8);
+
+    pdf.setFillColor(...RG_NAVY);
+    pdf.rect(0, 0, pageW, headerBandMm, "F");
+
+    pdf.setFillColor(...RG_LINK);
+    pdf.roundedRect(markX, markY, 12, 12, 2.2, 2.2, "F");
+    pdf.setTextColor(...RG_NAVY);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(8.2);
+    pdf.text("RG", markX + 2.6, markY + 8.2);
+
+    pdf.setTextColor(224, 225, 221);
+    pdf.setFont("helvetica", "bold");
+    pdf.setFontSize(14);
+    let titleY = 13;
+    for (const ln of titleLines) {
+      pdf.text(ln, textX, titleY);
+      titleY += 5.2;
+    }
+
+    pdf.setFont("helvetica", "normal");
+    pdf.setFontSize(8.8);
+    pdf.setTextColor(...RG_LINK);
+    pdf.text("Agentic compliance assistant for contractors", textX, titleY + 1.5);
+
     if (loc) {
       pdf.setFont("helvetica", "bold");
       pdf.setFontSize(8.4);
       pdf.setTextColor(235, 237, 242);
-      pdf.text("Project address", textX, ty + 8.5);
+      pdf.text("Project address", textX, titleY + 8.5);
       pdf.setFont("helvetica", "normal");
       pdf.setFontSize(8.2);
       pdf.setTextColor(200, 206, 220);
       const locLines = pdf.splitTextToSize(loc.slice(0, 280), titleMaxW);
-      let ly = ty + 12.5;
+      let ly = titleY + 12.5;
       for (const ln of locLines) {
         pdf.text(ln, textX, ly);
         ly += 3.8;
