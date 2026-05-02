@@ -355,7 +355,7 @@ async def _with_heartbeats(threadpool_coro):
             await asyncio.wait_for(asyncio.shield(task), timeout=_STREAM_HEARTBEAT_SEC)
         except asyncio.TimeoutError:
             yield ": ping\n\n"
-            yield _safe_safe_sse_data_frame({"event": "heartbeat", "ts": time.time()})
+            yield _safe_sse_data_frame({"event": "heartbeat", "ts": time.time()})
             await asyncio.sleep(0)
     yield ("__done__", task.result())
 

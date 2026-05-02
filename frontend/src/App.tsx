@@ -201,10 +201,16 @@ export default function App() {
         async onopen(response) {
           if (!response.ok) {
             const detail = await detailFromBadResponse(response);
+            window.alert(
+              `RegGuard research (onopen): FAILED\nHTTP ${response.status}\n\n${detail}`,
+            );
             console.error("[RegGuard research] HTTP error", response.status, detail);
             throw new Error(detail);
           }
           const ct = response.headers.get("content-type") ?? "";
+          window.alert(
+            `RegGuard research (onopen): OK\nHTTP ${response.status} ${response.statusText}\nContent-Type: ${ct || "(none)"}`,
+          );
           if (!ct.toLowerCase().includes("text/event-stream")) {
             console.warn("[RegGuard research] expected text/event-stream; got:", ct);
           }
@@ -302,9 +308,17 @@ export default function App() {
           }
         },
         onclose() {
+          window.alert(
+            "RegGuard research (onclose): Server finished sending the SSE response body (stream ended).",
+          );
           console.info("[RegGuard research] SSE connection closed");
         },
         onerror(err) {
+          const msg = err instanceof Error ? err.message : String(err);
+          const stack = err instanceof Error ? (err.stack ?? "") : "";
+          window.alert(
+            `RegGuard research (onerror — connection / parse failure):\n${msg}\n\n${stack.slice(0, 800)}`,
+          );
           console.error("[RegGuard research] SSE transport error (not retrying)", err);
           throw err;
         },
