@@ -16,6 +16,7 @@ import {
   DICTATION_SILENCE_MS,
   scheduleDictationSilenceStop,
 } from "./speech-recognition";
+import { downloadActionPlanPdf } from "./downloadActionPlanPdf";
 
 type NdjsonLine =
   | { event: "open" }
@@ -770,6 +771,28 @@ export default function App() {
     }
   }, [actionPlan]);
 
+  const handleDownloadPunchListPdf = useCallback(() => {
+    const md = actionPlan.trim();
+    if (!md) {
+      setPlanToolbarMsg("Nothing to export — run research or wait for the plan to finish streaming.");
+      window.setTimeout(() => setPlanToolbarMsg(null), 4000);
+      return;
+    }
+    try {
+      downloadActionPlanPdf({
+        markdown: md,
+        siteAddress: meta?.site ?? selection?.formattedAddress ?? null,
+        zip: meta?.zip ?? selection?.zip ?? null,
+        city: meta?.city ?? null,
+      });
+      setPlanToolbarMsg("Punch list PDF downloaded.");
+      window.setTimeout(() => setPlanToolbarMsg(null), 3500);
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      window.alert(`Could not generate PDF: ${msg}`);
+    }
+  }, [actionPlan, meta, selection]);
+
   const dismissBackendNotice = useCallback(() => {
     dismissedRevisionRef.current = lastPollRevisionRef.current;
     setBackendStale(false);
@@ -1142,6 +1165,14 @@ export default function App() {
                   onClick={() => void handleAcceptActionPlan()}
                 >
                   Accept
+                </button>
+                <button
+                  type="button"
+                  className="rg-btn rg-btn--ghost rg-btn--compact rg-plan-action-btn rg-plan-action-btn--pdf"
+                  title="Download the punch list as a printable PDF"
+                  onClick={handleDownloadPunchListPdf}
+                >
+                  Download Punch List as PDF
                 </button>
               </span>
             </div>
