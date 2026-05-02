@@ -1,0 +1,7 @@
+{
+  "name": "reg-guard",
+  "private": true,
+  "scripts": {
+    "dev": "./start.sh"
+  }
+}
