@@ -67,22 +67,38 @@ async function detailFromBadResponse(res: Response): Promise<string> {
   return t.trim() || `${res.status} ${res.statusText}`;
 }
 
-function parseNdjsonObjects(buffer: string): { lines: NdjsonLine[]; rest: string } {
-  const parts = buffer.split("\n");
-  const rest = parts.pop() ?? "";
-  const lines: NdjsonLine[] = [];
-  for (const raw of parts) {
-    const line = raw.trim();
-    if (!line) {
+function parseSseDataEvents(buffer: string): { events: NdjsonLine[]; rest: string } {
+  const norm = buffer.replace(/\r\n/g, "\n");
+  const events: NdjsonLine[] = [];
+  let start = 0;
+  while (true) {
+    const idx = norm.indexOf("\n\n", start);
+    if (idx === -1) {
+      return { events, rest: norm.slice(start) };
+    }
+    const block = norm.slice(start, idx);
+    start = idx + 2;
+    const lines = block.split("\n");
+    const dataLines: string[] = [];
+    for (const line of lines) {
+      const t = line.trimEnd();
+      if (t === "" || t.startsWith(":")) {
+        continue;
+      }
+      if (t.startsWith("data:")) {
+        dataLines.push(t.slice(5).trimStart());
+      }
+    }
+    if (dataLines.length === 0) {
       continue;
     }
+    const payload = dataLines.join("\n");
     try {
-      lines.push(JSON.parse(line) as NdjsonLine);
+      events.push(JSON.parse(payload) as NdjsonLine);
     } catch {
-      lines.push({ event: "error", message: "Malformed stream line from server." });
+      events.push({ event: "error", message: "Malformed SSE data from server." });
     }
   }
-  return { lines, rest };
 }
 
 function speechRecognitionCtor(): (new () => SpeechRecognition) | undefined {
@@ -199,13 +215,6 @@ export default function App() {
     setBusy(true);
     setPhase("Connecting…");
 
-    const abortController = new AbortController();
-    let timedOut = false;
-    const timeoutId = window.setTimeout(() => {
-      timedOut = true;
-      abortController.abort();
-    }, 60_000);
-
     const form = new FormData();
     form.append("zip_code", selection.zip);
     form.append("site_address", selection.formattedAddress);
@@ -220,7 +229,6 @@ export default function App() {
         method: "POST",
         body: form,
         cache: "no-store",
-        signal: abortController.signal,
       });
       if (!res.ok) {
         throw new Error(await detailFromBadResponse(res));
@@ -242,17 +250,19 @@ export default function App() {
           researchSawChunkRef.current = true;
         }
         buf += dec.decode(value, { stream: true });
-        const { lines, rest } = parseNdjsonObjects(buf);
+        const { events, rest } = parseSseDataEvents(buf);
         buf = rest;
 
-        for (const row of lines) {
+        for (const row of events) {
           switch (row.event) {
             case "open":
               setPhase("Started");
               break;
             case "heartbeat":
               setPhase((p) =>
-                p.startsWith("Research:") || p === "Writing summary" ? p : "Research scan in progress…",
+                p.startsWith("Research:") || p === "Writing Contractor Action Plan"
+                  ? p
+                  : "Research scan in progress…",
               );
               break;
             case "vision_delta":
@@ -280,7 +290,7 @@ export default function App() {
               break;
             }
             case "summary_delta":
-              setPhase("Writing summary");
+              setPhase("Writing Contractor Action Plan");
               setSummary((prev) => prev + row.text);
               break;
             case "complete": {
@@ -309,18 +319,6 @@ export default function App() {
         }
       }
 
-      const tail = buf.trim();
-      if (tail) {
-        try {
-          const last = JSON.parse(tail) as NdjsonLine;
-          if (last.event === "error") {
-            throw new Error(last.message);
-          }
-        } catch {
-          /* ignore incomplete tail */
-        }
-      }
-
       if (researchSawChunkRef.current && !researchCompleteRef.current) {
         setStreamBroken(true);
         setError((prev) => prev ?? "Research stream ended before completion.");
@@ -331,11 +329,7 @@ export default function App() {
           ? e.name === "AbortError"
           : e instanceof Error && e.name === "AbortError";
       if (isAbort) {
-        setError(
-          timedOut
-            ? "Research took longer than 60 seconds and was canceled. Check the backend terminal for the current step, then try again."
-            : "Research was canceled.",
-        );
+        setError("Research was canceled.");
         setPhase("");
         if (researchSawChunkRef.current && !researchCompleteRef.current) {
           setStreamBroken(true);
@@ -349,7 +343,6 @@ export default function App() {
         }
       }
     } finally {
-      window.clearTimeout(timeoutId);
       setBusy(false);
     }
   }, [selection, jobDescription, searchLimit, imageFile, resetOutput]);
@@ -735,7 +728,7 @@ export default function App() {
           <h1 className="app-title">Reg Guard</h1>
           <p className="app-tagline">
             Compliance research for U.S. job sites — pick an address, describe the scope, optionally
-            add a photo, then stream jurisdiction and source-backed summary from the API on port
+            add a photo, then stream jurisdiction and a Contractor Action Plan (SSE) from the API on port
             8000 (proxied via <code>/api</code>).
           </p>
         </div>

@@ -226,18 +226,24 @@ def _research_action_plan_fallback_markdown(
 
 
 def _iter_streaming_words(chunks: Iterator[str]) -> Iterator[str]:
-    """Split model chunks into word+whitespace pieces without splitting across chunk boundaries."""
+    """Split model chunks into word/whitespace pieces without splitting a word across chunk boundaries."""
     buf = ""
     for chunk in chunks:
         buf += chunk
         while True:
             m = re.match(r"^(\S+\s+)", buf)
-            if not m:
-                break
-            yield m.group(1)
-            buf = buf[m.end() :]
-    if buf.strip():
-        yield buf.lstrip()
+            if m:
+                yield m.group(1)
+                buf = buf[m.end() :]
+                continue
+            m2 = re.match(r"^(\s+)", buf)
+            if m2:
+                yield m2.group(1)
+                buf = buf[m2.end() :]
+                continue
+            break
+    if buf:
+        yield buf
 
 
 def _action_plan_queue_producer(q: Queue, digest: str) -> None:
@@ -311,7 +317,7 @@ def _log_research_step(label: str, *, detail: str = "") -> None:
 async def _with_heartbeats(threadpool_coro):
     """
     Await one threadpool call (Vision queue pull or Universal Scout step) without
-    stalling the asyncio event loop; emit NDJSON heartbeats if the call is slow
+    stalling the asyncio event loop; emit SSE comments + JSON heartbeats if the call is slow
     so intermediaries keep the stream alive.
     """
     task = asyncio.create_task(threadpool_coro)
@@ -319,9 +325,8 @@ async def _with_heartbeats(threadpool_coro):
         try:
             await asyncio.wait_for(asyncio.shield(task), timeout=_STREAM_HEARTBEAT_SEC)
         except asyncio.TimeoutError:
-            # Wire-level padding so intermediaries flush; empty lines are ignored by the NDJSON client.
-            yield b"\n"
-            yield _line({"event": "heartbeat", "ts": time.time()})
+            yield b": ping\n\n"
+            yield _sse_data_event({"event": "heartbeat", "ts": time.time()})
     yield ("__done__", task.result())
 
 
@@ -387,10 +392,12 @@ async def research(
     image: Optional[UploadFile] = File(None),
 ):
     """
-    Multipart research streamed as NDJSON (one JSON object per line).
+    Multipart research streamed as **Server-Sent Events** (``text/event-stream``).
+
+    Each event's ``data`` field is one JSON object (same schema as the former NDJSON lines).
 
     Emits immediately to avoid proxy/client JSON timeouts, then streams Claude vision (if any),
-    Firecrawl scout steps, and word chunks of the final summary.
+    Firecrawl scout steps, and word-sized chunks of the Contractor Action Plan.
 
     Events include: ``open``, ``heartbeat`` (during slow Firecrawl/vision work), ``vision_delta``,
     ``context``, ``jurisdiction`` (when geocoded),
@@ -438,10 +445,10 @@ async def research(
     scout_jurisdiction = profile.to_scout_dict()
     scout_site = profile.formatted_address or site_line
 
-    async def ndjson_bytes():
+    async def sse_bytes():
         try:
-            yield _line({"event": "open"})
-            _log_research_step("open", detail="NDJSON stream started")
+            yield _sse_data_event({"event": "open"})
+            _log_research_step("open", detail="SSE stream started")
 
             photo_analysis: Optional[str] = None
             if image_bytes:
@@ -465,18 +472,18 @@ async def research(
                         yield pkt
                     if kind == "delta":
                         raw_parts.append(cast(str, val))
-                        yield _line({"event": "vision_delta", "text": cast(str, val)})
+                        yield _sse_data_event({"event": "vision_delta", "text": cast(str, val)})
                     elif kind == "done":
                         break
                     else:
                         err = cast(Exception, val)
-                        yield _line({"event": "error", "message": str(err)})
+                        yield _sse_data_event({"event": "error", "message": str(err)})
                         return
                 photo_analysis = normalize_vision_text("".join(raw_parts))
                 _log_research_step("vision", detail="Claude vision — done")
 
             enhanced_query = _build_enhanced_query(job_description, photo_analysis)
-            yield _line(
+            yield _sse_data_event(
                 {
                     "event": "context",
                     "enhanced_query": enhanced_query,
@@ -487,7 +494,7 @@ async def research(
             _log_research_step("context", detail="enhanced query ready for scout")
 
             if scout_jurisdiction and scout_site:
-                yield _line(
+                yield _sse_data_event(
                     {
                         "event": "jurisdiction",
                         "site_address": scout_site,
@@ -503,7 +510,7 @@ async def research(
                     "AHJ identification",
                     detail="city/county/state from geocode (before Universal Scout)",
                 )
-                yield _line(
+                yield _sse_data_event(
                     {
                         "event": "step",
                         "step": "step_ahj_identification",
@@ -555,14 +562,16 @@ async def research(
                             "Universal Scout",
                             detail=_scout_labels.get(key, key),
                         )
-                    yield _line(ev)
+                    yield _sse_data_event(ev)
             except Exception:
                 logger.exception("Firecrawl / Universal Scout crawl failed")
-                yield _line({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})
+                yield _sse_data_event({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})
                 return
 
             if final_raw is None:
-                yield _line({"event": "error", "message": "Research finished without complete payload."})
+                yield _sse_data_event(
+                    {"event": "error", "message": "Research finished without complete payload."}
+                )
                 return
 
             raw = final_raw
@@ -591,7 +600,7 @@ async def research(
                         yield pkt
                     if kind == "delta":
                         raw_parts.append(cast(str, val))
-                        yield _line({"event": "summary_delta", "text": cast(str, val)})
+                        yield _sse_data_event({"event": "summary_delta", "text": cast(str, val)})
                     elif kind == "done":
                         summary = "".join(raw_parts)
                         break
@@ -602,9 +611,9 @@ async def research(
                             f"*Claude action plan unavailable ({err!s}); "
                             "showing structured fallback memo.*\n\n"
                         )
-                        yield _line({"event": "summary_delta", "text": banner})
+                        yield _sse_data_event({"event": "summary_delta", "text": banner})
                         for chunk in _iter_summary_word_chunks(stub):
-                            yield _line({"event": "summary_delta", "text": chunk})
+                            yield _sse_data_event({"event": "summary_delta", "text": chunk})
                         summary = banner + stub
                         _log_research_step("action plan", detail="fallback memo (Claude error)")
                         break
@@ -612,11 +621,11 @@ async def research(
                 _log_research_step("action plan", detail="structured fallback memo — no ANTHROPIC_API_KEY")
                 summary = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
                 for chunk in _iter_summary_word_chunks(summary):
-                    yield _line({"event": "summary_delta", "text": chunk})
+                    yield _sse_data_event({"event": "summary_delta", "text": chunk})
 
             _log_research_step("complete", detail="streaming final payload to client")
             ju_complete = scout_jurisdiction or {}
-            yield _line(
+            yield _sse_data_event(
                 {
                     "event": "complete",
                     "zip": raw["zip"],
@@ -635,8 +644,8 @@ async def research(
             clear_scout_run_caches()
 
     return StreamingResponse(
-        ndjson_bytes(),
-        media_type="application/x-ndjson; charset=utf-8",
+        sse_bytes(),
+        media_type="text/event-stream; charset=utf-8",
         headers={
             "Cache-Control": "no-cache",
             "X-Accel-Buffering": "no",
