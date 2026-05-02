@@ -91,6 +91,53 @@
   margin-bottom: 0.35rem;
 }
 
+.rg-action-plan-header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.65rem 1rem;
+  margin-bottom: 0.5rem;
+}
+
+.rg-action-plan-header .rg-subheading {
+  margin-bottom: 0;
+}
+
+.rg-plan-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.35rem;
+  align-items: center;
+}
+
+.rg-plan-toolbar-msg {
+  font-size: 0.8rem;
+  color: var(--rg-link);
+  margin: 0 0 0.5rem;
+}
+
+.rg-plan-placeholder {
+  margin: 0;
+  font-size: 0.875rem;
+  color: var(--rg-muted);
+  line-height: 1.45;
+}
+
+@keyframes rg-plan-pulse {
+  0% {
+    box-shadow: 0 0 0 0 rgba(168, 197, 232, 0.45);
+  }
+  100% {
+    box-shadow: 0 0 0 10px rgba(168, 197, 232, 0);
+  }
+}
+
+.rg-plan-panel--pulse {
+  animation: rg-plan-pulse 0.7s ease-out 2;
+  border-radius: 8px;
+}
+
 .field-hint {
   font-size: 0.72rem;
   font-weight: 400;

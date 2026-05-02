@@ -188,6 +188,8 @@ export default function App() {
     city?: string | null;
     county?: string | null;
   } | null>(null);
+  const [planToolbarMsg, setPlanToolbarMsg] = useState<string | null>(null);
+  const actionPlanPanelRef = useRef<HTMLDivElement | null>(null);
 
   const setJobDescriptionRef = useRef(setJobDescription);
   setJobDescriptionRef.current = setJobDescription;
@@ -209,6 +211,7 @@ export default function App() {
     setSourceUrls([]);
     setMeta(null);
     setStreamBroken(false);
+    setPlanToolbarMsg(null);
   }, []);
 
   const runResearch = useCallback(async () => {
@@ -739,6 +742,32 @@ export default function App() {
     return () => window.clearInterval(id);
   }, [backendStale]);
 
+  const handleReviewActionPlan = useCallback(() => {
+    const el = actionPlanPanelRef.current;
+    if (!el) {
+      return;
+    }
+    el.scrollIntoView({ behavior: "smooth", block: "start" });
+    el.classList.remove("rg-plan-panel--pulse");
+    void el.offsetWidth;
+    el.classList.add("rg-plan-panel--pulse");
+    window.setTimeout(() => el.classList.remove("rg-plan-panel--pulse"), 1400);
+  }, []);
+
+  const handleAcceptActionPlan = useCallback(async () => {
+    const t = actionPlan.trim();
+    if (!t) {
+      return;
+    }
+    try {
+      await navigator.clipboard.writeText(t);
+      setPlanToolbarMsg("Copied action plan to clipboard.");
+      window.setTimeout(() => setPlanToolbarMsg(null), 3500);
+    } catch {
+      window.alert("Could not copy — your browser blocked clipboard access.");
+    }
+  }, [actionPlan]);
+
   const dismissBackendNotice = useCallback(() => {
     dismissedRevisionRef.current = lastPollRevisionRef.current;
     setBackendStale(false);
@@ -1092,12 +1121,39 @@ export default function App() {
             </div>
           ) : null}
 
-          <div>
-            <strong className="rg-subheading">Contractor action plan</strong>
-            <div className="rg-summary rg-summary--md">
+          <div id="contractor-action-plan">
+            <div className="rg-action-plan-header">
+              <strong className="rg-subheading">Contractor action plan</strong>
+              <span className="rg-plan-actions">
+                <button
+                  type="button"
+                  className="rg-btn rg-btn--ghost rg-btn--compact"
+                  disabled={!actionPlan.trim()}
+                  onClick={handleReviewActionPlan}
+                >
+                  Review
+                </button>
+                <button
+                  type="button"
+                  className="rg-btn rg-btn--primary rg-btn--compact"
+                  disabled={!actionPlan.trim()}
+                  onClick={() => void handleAcceptActionPlan()}
+                >
+                  Accept
+                </button>
+              </span>
+            </div>
+            {planToolbarMsg ? (
+              <div className="rg-plan-toolbar-msg" role="status">
+                {planToolbarMsg}
+              </div>
+            ) : null}
+            <div ref={actionPlanPanelRef} className="rg-summary rg-summary--md">
               {actionPlan.trim() ? (
                 <ReactMarkdown remarkPlugins={[remarkGfm]}>{actionPlan}</ReactMarkdown>
-              ) : null}
+              ) : (
+                <p className="rg-plan-placeholder">Results will stream here during research.</p>
+              )}
             </div>
           </div>
 
@@ -1124,10 +1180,10 @@ export default function App() {
             <span>A newer API build was detected.{autoRefreshSec !== null ? ` Refreshing in ${autoRefreshSec}s…` : ""}</span>
             <span className="rg-update-actions">
               <button type="button" className="rg-btn rg-btn--primary rg-btn--compact" onClick={() => window.location.reload()}>
-                Refresh now
+                Accept
               </button>
               <button type="button" className="rg-btn rg-btn--ghost rg-btn--compact" onClick={dismissBackendNotice}>
-                Skip once
+                Review
               </button>
             </span>
           </div>
