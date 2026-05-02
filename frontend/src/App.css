@@ -163,6 +163,14 @@ textarea.rg-input {
   color: var(--rg-link);
 }
 
+.rg-recenter-btn {
+  flex-shrink: 0;
+  padding: 0.45rem 0.65rem;
+  font-size: 0.8125rem;
+  font-weight: 500;
+  white-space: nowrap;
+}
+
 .rg-locate-loading {
   width: 1.1rem;
   height: 1.1rem;
