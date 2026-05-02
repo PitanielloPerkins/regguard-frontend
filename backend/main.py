@@ -23,6 +23,7 @@ from starlette.concurrency import run_in_threadpool
 
 from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
 from jurisdiction import JurisdictionProfile, geocode_profile_from_address
+from research_memo import build_research_digest, iter_contractor_action_plan_stream
 from scraper import clear_scout_run_caches, iter_universal_scout, normalize_us_zip
 from vision import iter_job_site_image_text_stream, normalize_vision_text
 
@@ -38,6 +39,30 @@ _RESEARCH_STALL_FIRECRAWL_MESSAGE = (
 )
 
 logger = logging.getLogger("reg_guard")
+
+# Claude memo — Markdown Contractor Action Plan (see /research summary streaming).
+_CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's compliance writing assistant for licensed U.S. contractors.
+
+Respond ONLY with Markdown. Use exactly these sections and headings:
+
+## Contractor Action Plan
+
+### Permit Status
+State clearly **Required**, **Not required**, or **Uncertain — verify with AHJ** for the job scope implied by the digest. Short paragraph; tie to jurisdiction context when the digest supports it.
+
+### Key Constraints
+Bulleted list: setbacks, hours of operation, noise ordinances, and other locality limits **when inferable** from the digest or typical AHJ practice for that jurisdiction type. If unknown, state **Insufficient detail in sources — confirm with AHJ** and bullet what to ask.
+
+### Action Items
+Numbered list (1. 2. 3. …) of concrete contractor next steps (whom to call, which applications, inspections, documents).
+
+### Reference Links
+Bulleted Markdown links for URLs from `unique_source_urls` in the digest (`[title or host](url)` when a title appears in scout hits; otherwise use the bare URL). Include each distinct URL once.
+
+Rules:
+- Do not invent URLs, ordinance text, or definitive permit outcomes absent digest support; prefer **Uncertain** / verify wording.
+- Neutral, factual tone; no lecturing.
+"""
 
 
 def compute_backend_source_fingerprint() -> str:
@@ -123,11 +148,12 @@ def _collect_source_urls(raw: Dict[str, Any]) -> List[str]:
     return ordered
 
 
-def _research_summary(
+def _research_action_plan_fallback_markdown(
     raw: Dict[str, Any],
     source_urls: List[str],
     enhanced_query: str,
 ) -> str:
+    """Deterministic Markdown memo when ANTHROPIC_API_KEY is unavailable."""
     zip_str = raw.get("zip", "")
     site = (raw.get("site_address") or "").strip()
     ju = raw.get("jurisdiction")
@@ -138,37 +164,75 @@ def _research_summary(
             ju_line = lab.strip()
 
     head = (
-        f"Reg Guard research for {site} (US ZIP {zip_str})."
+        f"Research context: **{site}** (US ZIP **{zip_str}**)."
         if site
-        else f"Reg Guard research for US ZIP {zip_str}."
+        else f"Research context: US ZIP **{zip_str}**."
     )
     has_ctx = (enhanced_query or "").strip() and not enhanced_query.strip().startswith("— (no")
-    lines = [head]
+
+    lines = [
+        "## Contractor Action Plan",
+        "",
+        "### Permit Status",
+        "**Uncertain — verify with AHJ.** Most structural or mechanical scopes require permits; "
+        "confirm against your trade and scope with the jurisdiction below.",
+        "",
+        "### Key Constraints",
+        "- **Insufficient detail in sources** — confirm setbacks, allowed construction hours, "
+        "noise ordinances, and staging rules with the Authority Having Jurisdiction.",
+        "",
+        "### Action Items",
+    ]
+    n = 1
     if ju_line:
-        lines.append(f"Jurisdiction steering: {ju_line}")
-    lines.extend(
-        [
-            "Enhanced job context (voice, typed text, and/or photo) was used to steer"
-            f" the Firecrawl search chain: {'yes' if has_ctx else 'no (ZIP only)'}",
-            "",
-            "Workflow:",
-        ]
+        lines.append(f"{n}. Confirm AHJ and permit desk for: **{ju_line}**.")
+        n += 1
+    lines.append(
+        f"{n}. Call or portal-check the city/county building department for ZIP **{zip_str}** "
+        "with your job description and plans."
     )
-    for line in raw.get("agentic_workflow") or []:
-        lines.append(f"• {line}")
+    n += 1
+    lines.append(
+        f"{n}. Gather site photos, scope of work, and property records before filing applications."
+    )
+    n += 1
+    ctx_note = (
+        "Enhanced job context (voice/photo/text) was merged into the scout queries."
+        if has_ctx
+        else "Run research again with voice or typed scope for tighter steering."
+    )
+    lines.append(f"{n}. {ctx_note}")
+    lines.extend(["", "### Reference Links"])
+    if source_urls:
+        for u in source_urls:
+            lines.append(f"- {u}")
+    else:
+        lines.append("- *(No URLs returned in this run.)*")
+
+    wf = raw.get("agentic_workflow") or []
+    if wf:
+        lines.extend(["", "---", "", "**Workflow trace**", ""])
+        for line in wf:
+            lines.append(f"- {line}")
+
     if has_ctx and len(enhanced_query) < 2000:
         short = re.sub(r"\s+", " ", enhanced_query)[:500]
         if len(enhanced_query) > 500:
             short += "…"
-        lines.extend(["", f"Context snapshot: {short}"])
-    lines.extend(
-        [
-            "",
-            f"Found {len(source_urls)} unique source URL(s) across jurisdiction, "
-            "permit, and building-code searches (see source_urls).",
-        ]
-    )
+        lines.extend(["", "**Context snapshot:**", "", short])
+
+    lines.extend(["", "---", "", head])
     return "\n".join(lines)
+
+
+def _action_plan_queue_producer(q: Queue, digest: str) -> None:
+    try:
+        for fragment in iter_contractor_action_plan_stream(_CONTRACTOR_ACTION_PLAN_SYSTEM, digest):
+            if fragment:
+                q.put(("delta", fragment))
+        q.put(("done", None))
+    except Exception as e:
+        q.put(("error", e))
 
 
 def _ahj_identification_payload(ju: Dict[str, Any]) -> Dict[str, Any]:
@@ -449,10 +513,48 @@ async def research(
 
             raw = final_raw
             source_urls = _collect_source_urls(raw)
-            summary = _research_summary(raw, source_urls, enhanced_query)
+            digest = build_research_digest(raw, source_urls, enhanced_query)
 
-            for chunk in _iter_summary_word_chunks(summary):
-                yield _line({"event": "summary_delta", "text": chunk})
+            summary: str
+            if (os.getenv("ANTHROPIC_API_KEY") or "").strip():
+                q_plan: Queue = Queue()
+                thread_plan = threading.Thread(
+                    target=_action_plan_queue_producer,
+                    args=(q_plan, digest),
+                    daemon=True,
+                )
+                thread_plan.start()
+                raw_parts: List[str] = []
+                while True:
+                    kind: str
+                    val: Any
+                    async for pkt in _with_heartbeats(run_in_threadpool(q_plan.get)):
+                        if isinstance(pkt, tuple) and pkt[0] == "__done__":
+                            kind, val = pkt[1]
+                            break
+                        yield pkt
+                    if kind == "delta":
+                        raw_parts.append(cast(str, val))
+                        yield _line({"event": "summary_delta", "text": cast(str, val)})
+                    elif kind == "done":
+                        summary = "".join(raw_parts)
+                        break
+                    else:
+                        err = cast(Exception, val)
+                        stub = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
+                        banner = (
+                            f"*Claude action plan unavailable ({err!s}); "
+                            "showing structured fallback memo.*\n\n"
+                        )
+                        yield _line({"event": "summary_delta", "text": banner})
+                        for chunk in _iter_summary_word_chunks(stub):
+                            yield _line({"event": "summary_delta", "text": chunk})
+                        summary = banner + stub
+                        break
+            else:
+                summary = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
+                for chunk in _iter_summary_word_chunks(summary):
+                    yield _line({"event": "summary_delta", "text": chunk})
 
             ju_complete = scout_jurisdiction or {}
             yield _line(

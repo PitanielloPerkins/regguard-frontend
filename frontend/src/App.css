@@ -367,8 +367,86 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   border: 1px solid var(--rg-border);
 }
 
+.rg-summary--md {
+  white-space: normal;
+}
+
+.rg-summary--md :first-child {
+  margin-top: 0;
+}
+
+.rg-summary--md :last-child {
+  margin-bottom: 0;
+}
+
+.rg-summary--md h2 {
+  margin: 1rem 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 800;
+  color: var(--rg-accent);
+  letter-spacing: -0.02em;
+}
+
+.rg-summary--md h2:first-child {
+  margin-top: 0;
+}
+
+.rg-summary--md h3 {
+  margin: 0.85rem 0 0.35rem;
+  font-size: 0.82rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--rg-accent-dim);
+}
+
+.rg-summary--md p {
+  margin: 0.45rem 0;
+}
+
+.rg-summary--md ul,
+.rg-summary--md ol {
+  margin: 0.35rem 0 0.65rem;
+  padding-left: 1.25rem;
+}
+
+.rg-summary--md li {
+  margin: 0.25rem 0;
+}
+
+.rg-summary--md strong {
+  font-weight: 700;
+  color: var(--rg-accent-dim);
+}
+
+.rg-summary--md a {
+  color: var(--rg-link);
+  word-break: break-all;
+}
+
+.rg-summary--md hr {
+  border: none;
+  border-top: 1px solid var(--rg-border);
+  margin: 1rem 0;
+}
+
+.rg-summary--md blockquote {
+  margin: 0.5rem 0;
+  padding-left: 0.75rem;
+  border-left: 3px solid var(--rg-border);
+  color: var(--rg-muted);
+}
+
+.rg-summary--md code {
+  font-family: var(--font-mono);
+  font-size: 0.82em;
+  padding: 0.12rem 0.35rem;
+  border-radius: 4px;
+  background: var(--rg-surface-2);
+}
+
 .rg-summary:empty::after {
-  content: "Compliance summary streams here once research runs.";
+  content: "Contractor action plan streams here once research runs.";
   color: var(--rg-muted);
   font-style: italic;
 }
@@ -442,6 +520,20 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
 .rg-mic-btn--active {
   border-color: var(--rg-link);
   background: rgba(168, 197, 232, 0.12);
+}
+
+.rg-mic-btn--processing {
+  border-color: var(--rg-border);
+  background: rgba(168, 197, 232, 0.08);
+}
+
+.rg-mic-processing-label {
+  font-size: 0.75rem;
+  font-weight: 700;
+  letter-spacing: 0.15em;
+  color: var(--rg-link);
+  line-height: 1;
+  text-transform: uppercase;
 }
 
 .rg-mic-pulse {

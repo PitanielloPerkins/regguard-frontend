@@ -1,4 +1,6 @@
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
+import ReactMarkdown from "react-markdown";
+import remarkGfm from "remark-gfm";
 
 import "./App.css";
 
@@ -8,6 +10,11 @@ import {
   mapsAutocompleteEnabled,
   type AddressSelection,
 } from "./AddressAutocomplete";
+import {
+  clearDictationSilenceTimer,
+  DICTATION_SILENCE_MS,
+  scheduleDictationSilenceStop,
+} from "./speech-recognition";
 
 type NdjsonLine =
   | { event: "open" }
@@ -123,6 +130,7 @@ export default function App() {
   const dictationAnchorRef = useRef("");
   const dictationFinalAccumRef = useRef("");
   const listeningRef = useRef(false);
+  const dictationSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const recognitionRef = useRef<SpeechRecognition | null>(null);
   const initialRevisionRef = useRef<string | null>(null);
   const lastPollRevisionRef = useRef<string | null>(null);
@@ -427,9 +435,36 @@ export default function App() {
       });
 
       setJobDescriptionRef.current(nextText);
+
+      scheduleDictationSilenceStop({
+        timerRef: dictationSilenceTimerRef,
+        silenceMs: DICTATION_SILENCE_MS,
+        isListening: () => listeningRef.current,
+        stopRecognition: () => {
+          listeningRef.current = false;
+          const r = recognitionRef.current;
+          if (!r) {
+            return;
+          }
+          try {
+            r.stop();
+          } catch {
+            try {
+              r.abort();
+            } catch {
+              /* noop */
+            }
+          }
+        },
+        onSilenceStop: () => {
+          setDictationActiveRef.current(false);
+          setSpeechHintRef.current("Processing…");
+        },
+      });
     };
 
     rec.onerror = (ev) => {
+      clearDictationSilenceTimer(dictationSilenceTimerRef);
       if (ev.error === "audio-capture" || ev.error === "not-allowed") {
         window.alert(
           `Speech recognition: ${ev.error}\n${(ev.message && String(ev.message).trim()) || "Microphone unavailable or blocked for this site."}`,
@@ -470,6 +505,7 @@ export default function App() {
 
     return () => {
       listeningRef.current = false;
+      clearDictationSilenceTimer(dictationSilenceTimerRef);
       try {
         rec.abort();
       } catch {
@@ -538,6 +574,8 @@ export default function App() {
     setBackendStale(false);
   }, []);
 
+  const voiceMicProcessing = speechHint === "Processing…";
+
   const toggleDictation = useCallback(() => {
     if (!speechCtor) {
       setSpeechHint("Voice dictation is not supported in this browser. Try Chrome or Edge.");
@@ -551,6 +589,7 @@ export default function App() {
     }
 
     if (listeningRef.current) {
+      clearDictationSilenceTimer(dictationSilenceTimerRef);
       listeningRef.current = false;
       try {
         rec.stop();
@@ -581,6 +620,31 @@ export default function App() {
         rec.lang = "en-US";
         rec.start();
         setDictationActive(true);
+        scheduleDictationSilenceStop({
+          timerRef: dictationSilenceTimerRef,
+          silenceMs: DICTATION_SILENCE_MS,
+          isListening: () => listeningRef.current,
+          stopRecognition: () => {
+            listeningRef.current = false;
+            const r = recognitionRef.current;
+            if (!r) {
+              return;
+            }
+            try {
+              r.stop();
+            } catch {
+              try {
+                r.abort();
+              } catch {
+                /* noop */
+              }
+            }
+          },
+          onSilenceStop: () => {
+            setDictationActive(false);
+            setSpeechHint("Processing…");
+          },
+        });
       } catch {
         listeningRef.current = false;
         setSpeechHint("Could not start the microphone. Confirm permissions and try again.");
@@ -674,15 +738,27 @@ export default function App() {
               <label htmlFor="job-desc">Job description</label>
               <button
                 type="button"
-                className={`rg-btn rg-btn--ghost rg-mic-btn${dictationActive ? " rg-mic-btn--active" : ""}`}
-                title={dictationActive ? "Stop dictation" : "Dictate with microphone"}
-                aria-label={dictationActive ? "Stop voice dictation" : "Start voice dictation"}
+                className={`rg-btn rg-btn--ghost rg-mic-btn${dictationActive ? " rg-mic-btn--active" : ""}${voiceMicProcessing ? " rg-mic-btn--processing" : ""}`}
+                title={
+                  dictationActive ? "Listening (stops after 6s silence)" :
+                    voiceMicProcessing ? "Processing…" :
+                      "Dictate with microphone"
+                }
+                aria-label={
+                  dictationActive ? "Stop voice dictation" :
+                    voiceMicProcessing ? "Voice processing" :
+                      "Start voice dictation"
+                }
                 aria-pressed={dictationActive}
                 disabled={busy || !speechSupported}
                 onClick={() => toggleDictation()}
               >
                 {dictationActive ? (
                   <span className="rg-mic-pulse" aria-hidden />
+                ) : voiceMicProcessing ? (
+                  <span className="rg-mic-processing-label" aria-hidden>
+                    ⋯
+                  </span>
                 ) : (
                   <svg
                     className="rg-mic-icon"
@@ -837,8 +913,12 @@ export default function App() {
           ) : null}
 
           <div>
-            <strong className="rg-subheading">Summary</strong>
-            <div className="rg-summary">{summary}</div>
+            <strong className="rg-subheading">Contractor action plan</strong>
+            <div className="rg-summary rg-summary--md">
+              {summary.trim() ? (
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{summary}</ReactMarkdown>
+              ) : null}
+            </div>
           </div>
 
           {sourceUrls.length > 0 ? (
