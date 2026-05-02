@@ -328,74 +328,148 @@ export function downloadActionPlanPdf(options: {
   pdf.line(margin, y, pageW - margin, y);
   y += 6;
 
+  /* ----- Body: balanced two columns for readability (headings full width) ----- */
+  const bodyColGap = 5;
+  const bodyColW = (innerW - bodyColGap) / 2;
+  const bodyX0 = margin;
+  const bodyX1 = margin + bodyColW + bodyColGap;
+  let yCol0 = y;
+  let yCol1 = y;
+
+  const contentBottomY = () => pageH - footerReserve - disclaimerMinReserve;
+
+  const syncBodyY = () => {
+    y = Math.max(yCol0, yCol1);
+  };
+
+  const bodyNewPage = () => {
+    startContinuedPage();
+    yCol0 = y;
+    yCol1 = y;
+  };
+
+  const fullWidthEnsure = (needMm: number) => {
+    syncBodyY();
+    if (y + needMm > contentBottomY()) {
+      bodyNewPage();
+    }
+  };
+
+  const emitBodyLineBalanced = (ln: string, lineHeight: number) => {
+    let col: 0 | 1 = yCol0 <= yCol1 ? 0 : 1;
+    let cy = col === 0 ? yCol0 : yCol1;
+    if (cy + lineHeight > contentBottomY()) {
+      const alt: 0 | 1 = col === 0 ? 1 : 0;
+      const ay = alt === 0 ? yCol0 : yCol1;
+      if (ay + lineHeight <= contentBottomY()) {
+        col = alt;
+        cy = ay;
+      } else {
+        bodyNewPage();
+        col = 0;
+        cy = yCol0;
+      }
+    }
+    const x = col === 0 ? bodyX0 : bodyX1;
+    pdf.text(ln, x, cy);
+    if (col === 0) {
+      yCol0 = cy + lineHeight;
+    } else {
+      yCol1 = cy + lineHeight;
+    }
+  };
+
   const rawLines = trimmed.split(/\r?\n/);
   for (const raw of rawLines) {
     const line = raw.trimEnd();
     const t = line.trim();
 
     if (t === "---" || t === "***") {
-      checkBreak(6);
+      fullWidthEnsure(10);
+      syncBodyY();
       y += 2;
       pdf.setDrawColor(210, 215, 222);
       pdf.setLineWidth(0.2);
       pdf.line(margin, y, pageW - margin, y);
       y += 5;
+      yCol0 = yCol1 = y;
       continue;
     }
 
     if (!t) {
-      y += 2.8;
+      const g = 2.8;
+      yCol0 += g;
+      yCol1 += g;
+      syncBodyY();
       continue;
     }
 
     if (t.startsWith("# ") && !t.startsWith("##")) {
-      checkBreak(10);
+      fullWidthEnsure(10);
+      syncBodyY();
+      y = Math.max(yCol0, yCol1);
       pdf.setFont(PDF_SANS, "bold");
       pdf.setFontSize(15);
       pdf.setTextColor(...RG_NAVY);
       const lines2 = pdf.splitTextToSize(stripInlineMd(t.slice(2)), innerW);
       for (const ln of lines2) {
-        checkBreak(7);
+        if (y + 7 > contentBottomY()) {
+          bodyNewPage();
+          y = Math.max(yCol0, yCol1);
+        }
         pdf.text(ln, margin, y);
         y += 7;
       }
       pdf.setFont(PDF_SANS, "normal");
       pdf.setTextColor(...RG_BODY_TEXT);
       y += 1.2;
+      yCol0 = yCol1 = y;
       continue;
     }
 
     if (t.startsWith("## ") && !t.startsWith("###")) {
-      checkBreak(8);
+      fullWidthEnsure(8);
+      syncBodyY();
+      y = Math.max(yCol0, yCol1);
       pdf.setFont(PDF_SANS, "bold");
       pdf.setFontSize(12.5);
       pdf.setTextColor(...RG_NAVY);
       const lines2 = pdf.splitTextToSize(stripInlineMd(t.slice(3)), innerW);
       for (const ln of lines2) {
-        checkBreak(5.8);
+        if (y + 5.8 > contentBottomY()) {
+          bodyNewPage();
+          y = Math.max(yCol0, yCol1);
+        }
         pdf.text(ln, margin, y);
         y += 5.8;
       }
       pdf.setFont(PDF_SANS, "normal");
       pdf.setTextColor(...RG_BODY_TEXT);
       y += 1.5;
+      yCol0 = yCol1 = y;
       continue;
     }
 
     if (t.startsWith("### ")) {
-      checkBreak(7);
+      fullWidthEnsure(7);
+      syncBodyY();
+      y = Math.max(yCol0, yCol1);
       pdf.setFont(PDF_SANS, "bold");
       pdf.setFontSize(10.6);
       pdf.setTextColor(55, 65, 80);
       const lines2 = pdf.splitTextToSize(stripInlineMd(t.slice(4)), innerW);
       for (const ln of lines2) {
-        checkBreak(5.2);
+        if (y + 5.2 > contentBottomY()) {
+          bodyNewPage();
+          y = Math.max(yCol0, yCol1);
+        }
         pdf.text(ln, margin, y);
         y += 5.2;
       }
       pdf.setFont(PDF_SANS, "normal");
       pdf.setTextColor(...RG_BODY_TEXT);
       y += 1;
+      yCol0 = yCol1 = y;
       continue;
     }
 
@@ -403,18 +477,21 @@ export function downloadActionPlanPdf(options: {
     pdf.setFontSize(9.5);
     pdf.setTextColor(...RG_BODY_TEXT);
     const plain = stripInlineMd(t);
-    const wrapped = pdf.splitTextToSize(plain, innerW);
+    const wrapped = pdf.splitTextToSize(plain, bodyColW);
     const lineHeight = 4.55;
     for (const ln of wrapped) {
-      checkBreak(lineHeight);
-      pdf.text(ln, margin, y);
-      y += lineHeight;
+      emitBodyLineBalanced(ln, lineHeight);
     }
   }
 
+  syncBodyY();
+  y = Math.max(yCol0, yCol1);
+
   /* ----- Legal disclaimer (professional deployment) ----- */
-  checkBreak(36);
-  y += 2;
+  if (y + 36 > contentBottomY()) {
+    bodyNewPage();
+    y = Math.max(yCol0, yCol1);
+  }
   const discPad = 3;
   const discW = innerW;
   pdf.setFont(PDF_SANS, "normal");
