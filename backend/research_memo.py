@@ -75,8 +75,13 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                 {
                     "role": "user",
                     "content": (
-                        "Using ONLY the JSON research digest below (plus generally known permit norms), "
-                        "write the Contractor Action Plan in Markdown.\n\n"
+                        "Using the JSON research digest below plus generally known permit and 2023 NEC norms, "
+                        "write the **Panel / service upgrade punch list** exactly as the system instructions specify. "
+                        "Every actionable bullet must use `- [ ] `. "
+                        "If `site_address`, `jurisdiction.city`, or `jurisdiction.label` indicates **Plano, Texas**, "
+                        "fully develop the Plano permit logistics ($45 minimum fee, licensed electrician pulls permit) "
+                        "and Service/Final inspection prep sections for that city; otherwise use generic AHJ wording "
+                        "and do not claim Plano-specific fees.\n\n"
                         f"{user_digest}"
                     ),
                 }

@@ -45,27 +45,48 @@ _RESEARCH_STALL_FIRECRAWL_MESSAGE = (
 logger = logging.getLogger("reg_guard")
 
 # Claude memo — Markdown Contractor Action Plan (see /research summary streaming).
-_CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's compliance writing assistant for licensed U.S. contractors.
+_CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's field-oriented compliance writer for licensed U.S. electrical contractors.
 
-Respond ONLY with Markdown. Use exactly these sections and headings:
+Output ONLY Markdown. The deliverable is a **technical punch list** for a **residential or light-commercial electrical service / panel upgrade** (adapt to scope implied by the digest). Use **GitHub-style task checkboxes** for every actionable line: each bullet MUST start with `- [ ] ` (space after the brackets).
 
-## Contractor Action Plan
+Use exactly these sections and headings (keep the order):
 
-### Permit Status
-State clearly **Required**, **Not required**, or **Uncertain — verify with AHJ** for the job scope implied by the digest. Short paragraph; tie to jurisdiction context when the digest supports it.
+## Contractor Action Plan — Panel / service upgrade punch list
 
-### Key Constraints
-Bulleted list: setbacks, hours of operation, noise ordinances, and other locality limits **when inferable** from the digest or typical AHJ practice for that jurisdiction type. If unknown, state **Insufficient detail in sources — confirm with AHJ** and bullet what to ask.
+### Permit status & scope
+One short paragraph stating **Required**, **Not required**, or **Uncertain — verify with AHJ** for this scope, grounded in the digest. Follow with **only** checkbox lines (no bare bullets without `- [ ]`).
 
-### Action Items
-Numbered list (1. 2. 3. …) of concrete contractor next steps (whom to call, which applications, inspections, documents).
+### 2023 NEC — technical checkpoints (panel / relocated circuits)
+Checkbox items the crew can verify in the field. **Use NEC knowledge (2023 edition)** for article references. Cover at minimum, when applicable to the job described:
+- **GFCI** requirements where branch circuits are **added, extended, or relocated** (kitchen, bathroom, garage, exterior, etc.; cite Article **210.8** where relevant).
+- **AFCI** protection where **new, extended, or relocated** branch circuits serve listed spaces (cite **210.12** where relevant).
+- **Grounding & bonding** at the service: neutral-ground bond, **EGC** sizing path, **main bonding jumper**, SEP clearance to electrodes; cite **Article 250** concepts the inspector will expect.
+- **Working space** about the panel / service equipment — depth, width, height, dedicated space (cite **110.26**).
+Use `- [ ]` for each discrete check. If the digest does not confirm scope, add checkboxes that say what to verify on site rather than assuming the scope.
+
+### Permit logistics (City of Plano, Texas)
+**When** `jurisdiction`, `site_address`, or `zip` in the digest clearly indicates **Plano, TX**, include a subsection with checkbox items that **explicitly** mention:
+- City of Plano electrical permit / building permit process.
+- **Minimum permit fee of $45** (state that exact figure; **also** `- [ ]` Confirm current fee schedule on the official City of Plano portal before payment — fees can change).
+- Requirement that a **licensed electrician / electrical contractor** (or party legally eligible under Plano rules) **pull the permit** — phrase as a checklist task to confirm the applicant-of-record rule on the city site.
+
+If the job is **not** in Plano, replace the subsection title with **Permit logistics (local AHJ)** and use `- [ ]` items to verify fees, applicant-of-record, and online vs. walk-in filing with that jurisdiction—**do not** claim Plano’s $45 rule outside Plano.
+
+### Inspection prep — Service / Final (Plano)
+**When** the site is Plano, TX, add checkbox items an inspector typically expects at **service** or **final** electrical, including at least:
+- **Circuit directory** labeling and panel **hot / neutral / EGC** termination accuracy.
+- **Torque marks** / documented torque for listed terminations when specified by manufacturer or local practice.
+- **Grounding electrode system** — e.g. rod / concrete-encased electrode / water bond: visible routing, **minimum** burial / cover depth for rod electrodes per **NEC 250.53(G)** (or state NEC reference), connections, and access for inspection.
+
+If **not** Plano, title this **Inspection prep — Service / Final** and list the same **types** of checks but tell the contractor to confirm any **Plano-specific** bullet list on the local inspection checklist — do not attribute Plano-only details to other cities.
 
 ### Reference Links
-Bulleted Markdown links for URLs from `unique_source_urls` in the digest (`[title or host](url)` when a title appears in scout hits; otherwise use the bare URL). Include each distinct URL once.
+Checkboxes optional here **or** use normal markdown links. List each URL from `unique_source_urls` in the digest once: `[title or host](url)` when a title exists in scout hits, else bare URL.
 
 Rules:
-- Do not invent URLs, ordinance text, or definitive permit outcomes absent digest support; prefer **Uncertain** / verify wording.
-- Neutral, factual tone; no lecturing.
+- Neutral, imperative checklist tone; no lecturing.
+- **URLs and city fee tables:** do not fabricate links; use only digest URLs in Reference Links. The **$45 minimum** and Plano applicant rules are **allowed** for the Plano subsection (fixed local operational facts the product targets); still include the checkbox to **re-verify** on the official site.
+- You **may** use standard **2023 NEC** citations from professional knowledge for the technical section; note that the AHJ may adopt NEC with **local amendments** — add a `- [ ]` item to confirm adopted edition / amendments when the digest is thin.
 """
 
 
@@ -151,6 +172,36 @@ def _parse_search_limit(v: int) -> int:
     if v < 1 or v > 20:
         raise ValueError("search_limit must be between 1 and 20")
     return v
+
+
+def _digest_suggests_plano_tx(raw: Dict[str, Any], enhanced_query: str) -> bool:
+    """Heuristic: digest or job text points at Plano, Texas."""
+    parts: List[str] = []
+    site = str(raw.get("site_address") or "")
+    parts.append(site)
+    parts.append(str(raw.get("zip") or ""))
+    ju = raw.get("jurisdiction")
+    if isinstance(ju, dict):
+        for k in ("city", "label", "formatted_address", "county"):
+            v = ju.get(k)
+            if v is not None:
+                parts.append(str(v))
+    blob = " ".join(parts).lower()
+    q = (enhanced_query or "").lower()
+    if "plano" not in blob and "plano" not in q:
+        return False
+    texas_hint = (
+        " texas" in blob
+        or ", tx" in blob
+        or " tx " in blob
+        or " tx," in blob
+        or blob.endswith(" tx")
+        or "texas" in blob
+        or " texas" in q
+        or "texas" in q
+        or " tx " in q
+    )
+    return texas_hint or bool(re.search(r"\b75\d{3}\b", str(raw.get("zip") or "")))
 
 
 def _collect_source_urls(raw: Dict[str, Any]) -> List[str]:
