@@ -48,3 +48,16 @@ a {
 a:hover {
   color: var(--rg-accent);
 }
+
+/* react-toastify — match Reg Guard shell, keep above panels */
+.Toastify__toast-container {
+  z-index: 10050;
+  font-family: var(--font-ui);
+}
+
+.Toastify__toast-theme--dark {
+  background: var(--rg-surface-2);
+  color: var(--rg-text);
+  border: 1px solid var(--rg-border);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
+}
