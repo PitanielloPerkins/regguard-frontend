@@ -42,6 +42,43 @@ def _is_plano_texas(city: str, state: str) -> bool:
     return c == "plano" and s in ("TX",)
 
 
+def _locality_data_fence(city: str, county: str, st: str, mode: str) -> str:
+    """
+    Repeat ``{city}, {state}`` (or county + state) on every scout line to bias SERP away from other states
+    (e.g. Washington). Documented from ``main`` as the **data fence**.
+    """
+    stx = (st or "").strip()
+    if not stx:
+        return ""
+    c = (city or "").strip()
+    co = (county or "").strip()
+    county_disp = ""
+    if co:
+        county_disp = f"{co} County" if not co.lower().endswith("county") else co
+    m = (mode or "").strip().lower()
+    if county_disp and (m == "county" or not c):
+        return (
+            f" | LOCALITY_LOCK {county_disp}, {stx} ONLY — exclude Washington State and all other states"
+        )
+    if c:
+        return f" | LOCALITY_LOCK {c}, {stx} ONLY — exclude Washington State and all other states"
+    return ""
+
+
+def _serp_suggests_washington(blob: str) -> bool:
+    """Heuristic: title/snippet/URL refer to Washington State (U.S.), not D.C. alone."""
+    b = (blob or "").lower()
+    if re.search(r"\bwashington\s+state\b", b):
+        return True
+    if re.search(r"\bstate\s+of\s+washington\b", b):
+        return True
+    if ".wa.gov" in b:
+        return True
+    if re.search(r"\bseattle\b", b) and "texas" not in b and "tx" not in b:
+        return True
+    return False
+
+
 def _scout_queries_for_location(
     z: str,
     site_address: Optional[str],
