@@ -23,7 +23,7 @@ from starlette.concurrency import run_in_threadpool
 
 from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
 from jurisdiction import JurisdictionProfile, geocode_profile_from_address
-from research_memo import build_research_digest, iter_contractor_action_plan_stream
+# Firecrawl Universal Scout (/v2/search, tight caps) — see ``scraper.py``.
 from scraper import clear_scout_run_caches, iter_universal_scout, normalize_us_zip
 from vision import iter_job_site_image_text_stream, normalize_vision_text
 

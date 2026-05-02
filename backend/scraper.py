@@ -1,12 +1,13 @@
 """
-Reg Guard — Universal Scout: Firecrawl search in *discovery* configuration.
+Reg Guard — Universal Scout: Firecrawl **/v2/search** (web index) for URL discovery.
 
-Discovery mode here means the Firecrawl `/search` flow that returns SERP hits and,
-via `scrapeOptions`, fetches each page (markdown + outbound links) in one call—
-the “discover URLs, then extract content” pattern from Firecrawl’s search API.
+We use the **search** endpoint with ``sources=["web"]`` and **no** ``scrapeOptions`` so
+Firecrawl returns SERP URLs and snippets only—no full-page crawl, no ``crawl_url``, and no
+per-result markdown download. That keeps latency and credits low versus bundled
+search+scrape or site mapping.
 
-Results are steered to official-style hosts: `.gov`, `.org`, Municode, ICC / ICCSAFE,
-American Legal Publishing (amlegal.com), and UpCodes (up.codes).
+Depth / page limits in the user brief (``maxDepth``, ``exclude_external_links``) apply to
+Firecrawl **crawl** jobs; this codebase does not call ``crawl()`` for Universal Scout.
 """
 from __future__ import annotations
 
@@ -111,21 +112,47 @@ def _scout_queries_for_location(
     )
     return (juris, permits, codes)
 
-# Reuse cached scrapes where possible (24h).
+# Reuse cached scrapes where possible (24h) when single-page scrape is enabled elsewhere.
 FIRECRAWL_MAX_AGE_MS = 86400000
 
-# Discovery scrape: markdown for LLM-ready text; links for onward scouting.
-DISCOVERY_SCRAPE_OPTIONS = ScrapeOptions(
-    max_age=FIRECRAWL_MAX_AGE_MS,
-    formats=["markdown", "links"],
+# Optional: single-page /search bundled scrape (not used — kept for reference / future use).
+# Firecrawl ``ScrapeOptions`` does not expose ``maxDepth`` or ``exclude_external_links``; those
+# are **crawl** parameters. For bundled search+scrape, we minimize cost by markdown-only,
+# ``fast_mode``, no ``links`` format (avoids expanding every on-page href), and stripping
+# media/CSS tags from the DOM before extraction.
+SEARCH_BUNDLED_SCRAPE_OPTIONS = ScrapeOptions(
+    formats=["markdown"],
     only_main_content=True,
+    max_age=FIRECRAWL_MAX_AGE_MS,
+    fast_mode=True,
+    remove_base64_images=True,
+    block_ads=True,
+    exclude_tags=[
+        "img",
+        "picture",
+        "source",
+        "video",
+        "audio",
+        "svg",
+        "canvas",
+        "iframe",
+        "object",
+        "embed",
+        "style",
+        "link",
+        "noscript",
+    ],
 )
 
-# Discovery search asks Firecrawl for SERP hits + scrape; keep limit modest so billing
-# does not treat the request like a maximal batch (see Firecrawl pricing/reservation quirks).
-_FIRECRAWL_SEARCH_BATCH_LIMIT = 20
+# Total SERP rows per scout query (permit checks: first few hits are enough).
+_SEARCH_PAGE_LIMIT_MIN = 3
+_SEARCH_PAGE_LIMIT_MAX = 5
 
 
+def _effective_search_limit(user_limit: int) -> int:
+    """Clamp Firecrawl /search ``limit`` to 3–5 pages per request."""
+    u = max(1, int(user_limit))
+    return min(_SEARCH_PAGE_LIMIT_MAX, max(_SEARCH_PAGE_LIMIT_MIN, min(u, _SEARCH_PAGE_LIMIT_MAX)))
 def _require_firecrawl_key() -> str:
     key = (os.environ.get("FIRECRAWL_API_KEY") or "").strip()
     if not key:
@@ -333,23 +360,27 @@ def _scout_search(
     user_limit: int,
 ) -> tuple[List[Dict[str, Optional[str]]], Dict[str, Any]]:
     """
-    Run Universal Scout: scoped discovery search + trusted-host filter.
-    If that yields zero rows, run one fallback search **without** domain operators,
-    adding *official* (if absent) and *city government landing page* so the SERP targets
-    the locality's official municipal entry page; return unfiltered web hits (deduped).
+    Universal Scout: **/v2/search** with ``sources=['web']`` and **no** bundled scrape.
+
+    Optionally could pass ``SEARCH_BUNDLED_SCRAPE_OPTIONS`` as ``scrape_options`` so each SERP URL
+    is scraped as a single page (still not a multi-page crawl — no ``maxDepth`` path here).
     """
+    api_limit = _effective_search_limit(user_limit)
     primary_q = _append_scope(query)
     meta: Dict[str, Any] = {
         "primary_query": primary_q,
         "fallback_used": False,
         "fallback_query": None,
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": api_limit,
     }
 
     r = fc.search(
         primary_q,
-        limit=_FIRECRAWL_SEARCH_BATCH_LIMIT,
+        limit=api_limit,
+        sources=["web"],
         location="US",
-        scrape_options=DISCOVERY_SCRAPE_OPTIONS,
+        scrape_options=None,
     )
     trusted = _filter_trusted(_web_hits_raw(r), user_limit)
     if trusted:
@@ -360,9 +391,10 @@ def _scout_search(
     meta["fallback_query"] = fb
     r2 = fc.search(
         fb,
-        limit=_FIRECRAWL_SEARCH_BATCH_LIMIT,
+        limit=api_limit,
+        sources=["web"],
         location="US",
-        scrape_options=DISCOVERY_SCRAPE_OPTIONS,
+        scrape_options=None,
     )
     return _dedupe_take(_web_hits_raw(r2), user_limit), meta
 
@@ -376,6 +408,8 @@ def _step_result_dict(
         "results": hits,
         "fallback_used": scout_meta.get("fallback_used", False),
         "fallback_query": scout_meta.get("fallback_query"),
+        "firecrawl_mode": scout_meta.get("firecrawl_mode"),
+        "firecrawl_limit": scout_meta.get("firecrawl_limit"),
     }
 
 
@@ -425,12 +459,26 @@ def _final_scout_response(
         "site_address": addr or None,
         "jurisdiction": ju,
         "scout": {
-            "mode": "discovery",
+            "mode": "search_web",
             "search_domain_scope": SEARCH_DOMAIN_SCOPE,
             "trust_policy": (
                 "hostname ends with .gov or .org, or contains municode, iccsafe, amlegal, or up.codes"
             ),
-            "scrape_formats": ["markdown", "links"],
+            "sources": ["web"],
+            "scrape_options": None,
+            "max_depth_note": (
+                "N/A — Universal Scout does not call Firecrawl crawl/map; depth 1 crawl would "
+                "use max_discovery_depth on /v2/crawl, not used here."
+            ),
+            "exclude_external_links_note": (
+                "N/A for SERP-only search. For crawl, omit following off-domain links via "
+                "allow_external_links=False."
+            ),
+            "page_limit_per_search": {"min": _SEARCH_PAGE_LIMIT_MIN, "max": _SEARCH_PAGE_LIMIT_MAX},
+            "bundled_single_page_scrape_options": (
+                "disabled — SERP snippets only; see SEARCH_BUNDLED_SCRAPE_OPTIONS if re-enabled "
+                "(markdown only, fast_mode, no links format, exclude_tags strips media/CSS)."
+            ),
             "fallback": (
                 "If a scoped step returns zero trusted URLs, Universal Scout runs one unscoped "
                 "search: it keeps the same research intent, ensures the word *official*, and adds "
@@ -522,9 +570,8 @@ def search_local_building_codes_by_zip(
     2. Building department / permits for that area.
     3. Adopted codes and amendments.
 
-    Each step uses Firecrawl **search discovery** (search + per-result scrape of
-    markdown and links), scoped to trusted hosts; empty scoped steps trigger one
-    unscoped **official** fallback search oriented to the city's government landing page.
+    Each step uses Firecrawl **/v2/search** (``web`` source only): URL + snippet discovery
+    without bundled full-page scrape; capped at a few SERP rows per query.
     """
     for ev in iter_universal_scout(
         zip_code, search_limit=search_limit, enhanced_context=enhanced_context
