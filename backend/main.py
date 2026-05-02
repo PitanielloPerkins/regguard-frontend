@@ -45,48 +45,35 @@ _RESEARCH_STALL_FIRECRAWL_MESSAGE = (
 logger = logging.getLogger("reg_guard")
 
 # Claude memo — Markdown Contractor Action Plan (see /research summary streaming).
-_CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's field-oriented compliance writer for licensed U.S. electrical contractors.
+# Must stay aligned with ``inspector_digest_directive`` in ``research_memo.build_research_digest``.
+_CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's **Senior Electrical Inspector** persona: write for a **licensed contractor crew** as a **field punch list**, not a homeowner narrative or loose summary.
 
-Output ONLY Markdown. The deliverable is a **technical punch list** for a **residential or light-commercial electrical service / panel upgrade** (adapt to scope implied by the digest). Use **GitHub-style task checkboxes** for every actionable line: each bullet MUST start with `- [ ] ` (space after the brackets).
+The JSON user message includes ``inspector_digest_directive``: follow its **logic_steps** (extraction from scout hits and ``tagged_priority_hits``, synthesis vs. ``enhanced_job_context``, checklist-only output). Prioritize titles/URLs that signal **Plano, TX**, **NEC / NFPA 70 / 2023**, and **permit fees** (including **2026** / **$85** when those strings appear in the digest).
 
-Use exactly these sections and headings (keep the order):
+Output ONLY Markdown. Opening title:
 
-## Contractor Action Plan — Panel / service upgrade punch list
+## Contractor Action Plan — Panel / service work (inspector punch list)
 
-### Permit status & scope
-One short paragraph stating **Required**, **Not required**, or **Uncertain — verify with AHJ** for this scope, grounded in the digest. Follow with **only** checkbox lines (no bare bullets without `- [ ]`).
+Then use **exactly** these headings in order (each section uses **only** ``- [ ]`` task lines after an optional single line of context):
 
-### 2023 NEC — technical checkpoints (panel / relocated circuits)
-Checkbox items the crew can verify in the field. **Use NEC knowledge (2023 edition)** for article references. Cover at minimum, when applicable to the job described:
-- **GFCI** requirements where branch circuits are **added, extended, or relocated** (kitchen, bathroom, garage, exterior, etc.; cite Article **210.8** where relevant).
-- **AFCI** protection where **new, extended, or relocated** branch circuits serve listed spaces (cite **210.12** where relevant).
-- **Grounding & bonding** at the service: neutral-ground bond, **EGC** sizing path, **main bonding jumper**, SEP clearance to electrodes; cite **Article 250** concepts the inspector will expect.
-- **Working space** about the panel / service equipment — depth, width, height, dedicated space (cite **110.26**).
-Use `- [ ]` for each discrete check. If the digest does not confirm scope, add checkboxes that say what to verify on site rather than assuming the scope.
+### Permit & Fees
+- Checkbox items for AHJ permit type, applicant-of-record (**licensed electrical contractor** where applicable), online vs. counter, and **fee schedule verification**.
+- When the digest or ``tagged_priority_hits`` references **2026** and/or **$85**, call that out explicitly and reconcile with any older figures (e.g. **$45**) using **verify on official city portal** language—never assert a fee as final without a checklist step to confirm.
+- For **Plano, TX** when indicated by site/jurisdiction/tags, anchor tasks to City of Plano permit/electrical workflows found in the digest.
 
-### Permit logistics (City of Plano, Texas)
-**When** `jurisdiction`, `site_address`, or `zip` in the digest clearly indicates **Plano, TX**, include a subsection with checkbox items that **explicitly** mention:
-- City of Plano electrical permit / building permit process.
-- **Minimum permit fee of $45** (state that exact figure; **also** `- [ ]` Confirm current fee schedule on the official City of Plano portal before payment — fees can change).
-- Requirement that a **licensed electrician / electrical contractor** (or party legally eligible under Plano rules) **pull the permit** — phrase as a checklist task to confirm the applicant-of-record rule on the city site.
+### NEC Technicals (AFCI/GFCI/Grounding)
+Use **2023 NEC** professional knowledge plus digest hints. Checkbox tasks must touch, where applicable to the job (e.g. panel install / service upgrade / relocated circuits): **210.8 GFCI**, **210.12 AFCI**, **Article 250** grounding and bonding at the service, **110.26** working space. Phrase unknowns as verification tasks, not fake citations.
 
-If the job is **not** in Plano, replace the subsection title with **Permit logistics (local AHJ)** and use `- [ ]` items to verify fees, applicant-of-record, and online vs. walk-in filing with that jurisdiction—**do not** claim Plano’s $45 rule outside Plano.
-
-### Inspection prep — Service / Final (Plano)
-**When** the site is Plano, TX, add checkbox items an inspector typically expects at **service** or **final** electrical, including at least:
-- **Circuit directory** labeling and panel **hot / neutral / EGC** termination accuracy.
-- **Torque marks** / documented torque for listed terminations when specified by manufacturer or local practice.
-- **Grounding electrode system** — e.g. rod / concrete-encased electrode / water bond: visible routing, **minimum** burial / cover depth for rod electrodes per **NEC 250.53(G)** (or state NEC reference), connections, and access for inspection.
-
-If **not** Plano, title this **Inspection prep — Service / Final** and list the same **types** of checks but tell the contractor to confirm any **Plano-specific** bullet list on the local inspection checklist — do not attribute Plano-only details to other cities.
+### Inspection Prep
+Service / final style checks: labeling / circuit directory, torque marks or spec compliance, grounding electrode accessibility and depth/driven length per **250.53(G)** where rod electrodes apply, bond integrity—what a **Plano** (or stated AHJ) inspector is likely to ask if the digest suggests that jurisdiction.
 
 ### Reference Links
-Checkboxes optional here **or** use normal markdown links. List each URL from `unique_source_urls` in the digest once: `[title or host](url)` when a title exists in scout hits, else bare URL.
+List each URL from ``unique_source_urls`` once (markdown link when title known from scout hits, else bare URL). No fabricated URLs.
 
 Rules:
-- Neutral, imperative checklist tone; no lecturing.
-- **URLs and city fee tables:** do not fabricate links; use only digest URLs in Reference Links. The **$45 minimum** and Plano applicant rules are **allowed** for the Plano subsection (fixed local operational facts the product targets); still include the checkbox to **re-verify** on the official site.
-- You **may** use standard **2023 NEC** citations from professional knowledge for the technical section; note that the AHJ may adopt NEC with **local amendments** — add a `- [ ]` item to confirm adopted edition / amendments when the digest is thin.
+- Imperative, neutral tone. **No long prose blocks**—checklists dominate.
+- Do not invent ordinance text, PDFs, or inspection handbooks not supported by the digest; use ``- [ ]`` to **fetch/confirm** on the official site.
+- You may cite standard **2023 NEC** articles from professional knowledge; note AHJ may adopt with **amendments**—add a checkbox to confirm adopted edition.
 """
 
 
@@ -253,12 +240,11 @@ def _research_action_plan_fallback_markdown(
 
     permit_logistics_body = (
         [
-            "### Permit logistics (City of Plano, Texas)",
-            "",
             "- [ ] Open the City of Plano building / electrical permit portal and confirm **current** "
             "instructions for residential or commercial electrical work.",
-            "- [ ] Budget the **minimum permit fee of $45** (Plano has cited this minimum — "
-            "**re-verify** the fee table on the official city site before paying).",
+            "- [ ] **Fee schedule:** look for **2026** updates citing about **$85** minimums in official or scout-linked "
+            "materials; if only older data (e.g. **$45**) appears, treat it as **unverified** until confirmed on the "
+            "live city fee PDF/portal.",
             "- [ ] Confirm that a **licensed electrician / eligible electrical contractor** is the "
             "**applicant of record** to pull the permit (verify exact wording on the Plano application).",
             "- [ ] Upload or bring single-line diagrams, load calculations, and manufacturer cut sheets the city requests.",
@@ -266,9 +252,8 @@ def _research_action_plan_fallback_markdown(
         ]
         if in_plano
         else [
-            "### Permit logistics (local AHJ)",
-            "",
-            "- [ ] Confirm minimum permit fees and acceptable payment methods on the jurisdiction's **current** fee schedule.",
+            "- [ ] Confirm minimum permit fees (watch for **2026** / **$85** discussion in your AHJ's published schedule) "
+            "and acceptable payment methods on the jurisdiction's **current** fee schedule.",
             "- [ ] Confirm **who may apply** for the electrical permit (owner, contractor license class, etc.).",
             "- [ ] Submit plans, load calculations, and cut sheets per local checklist.",
             "",
@@ -277,8 +262,6 @@ def _research_action_plan_fallback_markdown(
 
     inspection_body = (
         [
-            "### Inspection prep — Service / Final (Plano)",
-            "",
             "- [ ] **Service / Final inspection**: panel **circuit directory** complete and matches breakers; "
             "neutrals and EGCs landed only on listed buses.",
             "- [ ] **Torque marking**: follow manufacturer torque specs; add inspector-visible **torque marks** "
@@ -291,8 +274,6 @@ def _research_action_plan_fallback_markdown(
         ]
         if in_plano
         else [
-            "### Inspection prep — Service / Final",
-            "",
             "- [ ] Panel **labeling**, **torque marks** (per manufacturer / AHJ), and **grounding electrode system** "
             "ready for inspection (depth / routing per **NEC 250** — confirm local amendments).",
             "- [ ] Working space clear per **NEC 110.26**.",
@@ -301,31 +282,35 @@ def _research_action_plan_fallback_markdown(
     )
 
     lines: List[str] = [
-        "## Contractor Action Plan — Panel / service upgrade punch list",
+        "## Contractor Action Plan — Panel / service work (inspector punch list)",
         "",
         "_Generated without Claude — enable ANTHROPIC_API_KEY for a tailored memo._",
         "",
-        "### Permit status & scope",
+        "### Permit & Fees",
         "",
-        permit_scope,
-        "",
+        "- [ ] " + permit_scope,
         "- [ ] **Verify AHJ**"
         + (f" — **{ju_line}**." if ju_line else f" for ZIP **{zip_str}**."),
         "- [ ] Match permit type to scope on the official permit checklist.",
-        "",
-        "### 2023 NEC — technical checkpoints (panel / relocated circuits)",
-        "",
-        "- [ ] **GFCI** — Where **new or relocated** branch circuits extend into kitchen, bathroom, garage, exterior, "
-        "basement, etc., confirm **210.8** protection on appropriate circuits.",
-        "- [ ] **AFCI** — Where **new or relocated** 120 V branch circuits supply family rooms, bedrooms, etc., confirm **210.12** device type.",
-        "- [ ] **Grounding & bonding (Art. 250)** — Main bonding jumper, neutral bus separation in subpanels, EGC run with every circuit, "
-        "and electrode system continuous to service.",
-        "- [ ] **Working space (110.26)** — 30 in. width, 36 in. depth, 6.5 ft height (or as required for equipment); "
-        "panel not blocked by shelving or equipment.",
-        "- [ ] Confirm **adopted NEC cycle and local amendments** on the AHJ website.",
-        "",
     ]
     lines.extend(permit_logistics_body)
+    lines.extend(
+        [
+            "### NEC Technicals (AFCI/GFCI/Grounding)",
+            "",
+            "- [ ] **GFCI** — Where **new or relocated** branch circuits extend into kitchen, bathroom, garage, exterior, "
+            "basement, etc., confirm **210.8** protection on appropriate circuits.",
+            "- [ ] **AFCI** — Where **new or relocated** 120 V branch circuits supply family rooms, bedrooms, etc., confirm **210.12** device type.",
+            "- [ ] **Grounding & bonding (Art. 250)** — Main bonding jumper, neutral bus separation in subpanels, EGC run with every circuit, "
+            "and electrode system continuous to service.",
+            "- [ ] **Working space (110.26)** — 30 in. width, 36 in. depth, 6.5 ft height (or as required for equipment); "
+            "panel not blocked by shelving or equipment.",
+            "- [ ] Confirm **adopted NEC cycle and local amendments** on the AHJ website.",
+            "",
+            "### Inspection Prep",
+            "",
+        ],
+    )
     lines.extend(inspection_body)
     lines.append("### Reference Links")
     lines.append("")
