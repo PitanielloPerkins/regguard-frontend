@@ -71,7 +71,7 @@ When the digest locality is **Dallas, Texas**, under **Permit Costs** include a 
 
 When the JSON field ``empty_scout_nec_2023_fallback`` is **true**, Universal Scout returned **no** trusted rows. You MUST still fill **Technical Punch List** and **Inspection Must-Haves** using **NFPA 70 — NEC (2023 edition)** from your **training data** for a **200 amp service / panel upgrade** (conductor ampacity & OCPD sizing, grounding/bonding per Art. 250, workspace 110.26, surge where applicable, GFCI/AFCI for dwelling-branch requirements in 2023, etc.). Each such line must be a `- [ ]` task that explicitly notes **(NEC 2023 — verify adopted edition and amendments with the AHJ)**. Do not leave those sections blank.
 
-The JSON includes ``inspector_digest_directive`` and may include ``plano_ord_250_50_requirement``:
+The JSON includes ``inspector_digest_directive`` and may include ``plano_ord_250_50_requirement``, ``dallas_minimum_trade_permit_usd`` / ``dallas_minimum_trade_permit_note``, and ``empty_scout_nec_2023_fallback``:
 - **consultant_role**, **gotchas_guidance**, **fee_and_code_guidance**, **output_format**
 - Obey **required_checklist_headings** exactly. If ``plano_ord_250_50_requirement`` is present, satisfy it.
 
