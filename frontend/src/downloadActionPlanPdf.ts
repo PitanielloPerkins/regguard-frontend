@@ -14,8 +14,21 @@ const RG_NAVY: [number, number, number] = [13, 27, 42];
 const RG_LINK: [number, number, number] = [168, 197, 232];
 const RG_BODY_TEXT: [number, number, number] = [33, 38, 48];
 
-const LEGAL_DISCLAIMER =
-  "REG GUARD DISCLAIMER: This report is an AI-generated compliance aid. All technical requirements and fees must be verified with the AHJ before work commences. Reg Guard is not liable for errors or omissions in local code interpretations.";
+/** Long-form date inserted into the PDF footer (e.g. "May 2, 2026"). */
+function pdfAsOfDateString(): string {
+  return new Date().toLocaleDateString(undefined, {
+    year: "numeric",
+    month: "long",
+    day: "numeric",
+  });
+}
+
+function buildPdfFooterDisclaimer(asOfDate: string): string {
+  return (
+    `DISCLAIMER: This report is an AI-assisted compliance aid based on available digital records as of ${asOfDate}. ` +
+    "It is provided for informational purposes only. Final verification of all fees, codes, and technical requirements must be performed with the local Authority Having Jurisdiction (AHJ) by a licensed professional."
+  );
+}
 
 function stripInlineMd(line: string): string {
   let s = line;
@@ -136,9 +149,15 @@ export function downloadActionPlanPdf(options: {
   const pageH = pdf.internal.pageSize.getHeight();
   const margin = 16;
   const innerW = pageW - 2 * margin;
-  /** Footer line + optional legal block */
-  const footerReserve = 14;
-  const disclaimerMinReserve = 42;
+
+  const footerDisclaimerBody = buildPdfFooterDisclaimer(pdfAsOfDateString());
+  pdf.setFont(PDF_SANS, "normal");
+  pdf.setFontSize(6.5);
+  const footerWrapLines = pdf.splitTextToSize(footerDisclaimerBody, innerW);
+  const footerLineH = 3.0;
+  /** Space reserved at bottom of every page for disclaimer + page line */
+  const footerReserve = Math.max(26, footerWrapLines.length * footerLineH + 10);
+  const disclaimerMinReserve = footerReserve + 6;
 
   let y = 0;
 
@@ -487,35 +506,6 @@ export function downloadActionPlanPdf(options: {
   syncBodyY();
   y = Math.max(yCol0, yCol1);
 
-  /* ----- Legal disclaimer (professional deployment) ----- */
-  if (y + 36 > contentBottomY()) {
-    bodyNewPage();
-    y = Math.max(yCol0, yCol1);
-  }
-  const discPad = 3;
-  const discW = innerW;
-  pdf.setFont(PDF_SANS, "normal");
-  pdf.setFontSize(8);
-  const discLines = pdf.splitTextToSize(LEGAL_DISCLAIMER, discW - 2 * discPad);
-  const discH = 11 + discLines.length * 4;
-  pdf.setFillColor(250, 251, 253);
-  pdf.setDrawColor(188, 195, 208);
-  pdf.setLineWidth(0.25);
-  pdf.roundedRect(margin, y, discW, discH, 1.2, 1.2, "FD");
-  pdf.setFont(PDF_SANS, "bold");
-  pdf.setFontSize(9);
-  pdf.setTextColor(...RG_NAVY);
-  pdf.text("Legal Disclaimer", margin + discPad, y + 6);
-  pdf.setFont(PDF_SANS, "normal");
-  pdf.setFontSize(8);
-  pdf.setTextColor(...RG_BODY_TEXT);
-  let dyy = y + 11;
-  for (const ln of discLines) {
-    pdf.text(ln, margin + discPad, dyy);
-    dyy += 4;
-  }
-  y += discH + 4;
-
   const totalPages = pdf.getNumberOfPages();
   const stamp = new Date().toLocaleString(undefined, {
     dateStyle: "medium",
@@ -523,14 +513,18 @@ export function downloadActionPlanPdf(options: {
   });
   for (let i = 1; i <= totalPages; i++) {
     pdf.setPage(i);
+    const pageNumY = pageH - 4;
+    let ty = pageNumY - 5 - (footerWrapLines.length - 1) * footerLineH;
     pdf.setFont(PDF_SANS, "normal");
-    pdf.setFontSize(7.2);
+    pdf.setFontSize(6.5);
+    pdf.setTextColor(82, 88, 98);
+    for (const ln of footerWrapLines) {
+      pdf.text(ln, margin, ty);
+      ty += footerLineH;
+    }
+    pdf.setFontSize(7);
     pdf.setTextColor(115, 120, 130);
-    pdf.text(
-      `Page ${i} of ${totalPages} · Generated ${stamp} · Verify codes and fees with the AHJ before work.`,
-      margin,
-      pageH - 7,
-    );
+    pdf.text(`Page ${i} of ${totalPages} · Generated ${stamp}`, margin, pageNumY);
   }
 
   pdf.save(`RegGuard-punch-list-${slugDate()}.pdf`);
