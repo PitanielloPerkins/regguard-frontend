@@ -31,7 +31,7 @@ load_dotenv(_ROOT / ".env")
 # Firecrawl / web search: restrict SERP to U.S. government and Municode (reduces unrelated-state noise).
 SEARCH_DOMAIN_SCOPE = "(site:gov OR site:municode.com)"
 
-# City of Plano — product-targeted scout supplements (also referenced from ``main`` module comment).
+# City of Plano — product-targeted scout supplements (documented in ``main`` module docstring).
 PLANO_SCOUT_AMENDMENTS_NEC = "Plano TX electrical amendments 2023 NEC"
 PLANO_SCOUT_FEE_SCHEDULE = "Plano building fee schedule 2026"
 

@@ -1,8 +1,8 @@
 """
 Reg Guard — FastAPI application entry point.
 
-Research memo: universal **Master Electrician / code consultant** punch list tied to ``site_address`` /
-``jurisdiction`` in ``research_memo.build_research_digest`` (no fixed city fees).
+Research memo: ``research_memo.build_research_digest``. **Plano, TX**: Universal Scout appends
+``Plano TX electrical amendments 2023 NEC`` and ``Plano building fee schedule 2026`` in ``scraper.py``.
 """
 from __future__ import annotations
 
@@ -254,7 +254,7 @@ def _research_action_plan_fallback_markdown(
         "",
         "_Generated without Claude — enable ANTHROPIC_API_KEY for a tailored memo._",
         "",
-        "### Permit & Fees",
+        "### Permit Costs",
         "",
         "- [ ] " + permit_scope,
         "- [ ] **Verify AHJ**"
@@ -264,16 +264,16 @@ def _research_action_plan_fallback_markdown(
     lines.extend(permit_block)
     lines.extend(
         [
-            "### NEC Technicals (AFCI/GFCI/Grounding)",
+            "### Technical Punch List",
             "",
-            "- [ ] **GFCI** — Where **new or relocated** branch circuits extend into kitchen, bathroom, garage, exterior, "
-            "basement, etc., confirm protection per the **NEC edition cited in your results** (e.g. **210.8** when NEC applies).",
-            "- [ ] **AFCI** — Where **new or relocated** 120 V branch circuits supply dwelling spaces, confirm devices per adopted code (**210.12** when NEC applies).",
-            "- [ ] **Grounding & bonding (Art. 250)** — Service bonding, EGCs, and electrode path per adopted NEC.",
-            "- [ ] **Working space (110.26)** — dedicated space per adopted NEC and any local amendment mentioned in results.",
-            "- [ ] Confirm **adopted NEC cycle and amendments** on the AHJ website (use digest links).",
+            "- [ ] **MANDATORY GOTCHA:** For each **local amendment** in the digest that is **stricter than base NEC**, add "
+            "explicit `- [ ]` tasks (e.g. electrode / ground-rod depth **20 ft**-style rules, **exterior disconnect labels**).",
+            "- [ ] **GFCI / AFCI** — align with **adopted code + amendments** from results, not NEC alone.",
+            "- [ ] **Grounding & bonding (Art. 250)** — plus any **additive local** requirements in the digest.",
+            "- [ ] **Working space (110.26)** — plus **local clearance** changes if cited.",
+            "- [ ] Confirm **code edition and effective dates** from AHJ / Municode links in the digest.",
             "",
-            "### Inspection Prep",
+            "### Inspection Must-Haves",
             "",
         ],
     )

@@ -1,6 +1,6 @@
 /**
  * Reg Guard — Expert Brain UI: SSE research → Contractor Action Plan, Accept (copy), PDF punch list export.
- * Server-side Universal Scout scopes web hits to .gov / Municode + input City, ST (see backend/scraper.py).
+ * Server-side Universal Scout scopes .gov / Municode + input City, ST; **Plano, TX** adds amendments + 2026 fee-schedule search phrases.
  */
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
