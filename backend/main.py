@@ -31,6 +31,7 @@ from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
 from jurisdiction import JurisdictionProfile, geocode_profile_from_address
 from research_memo import (
     build_research_digest,
+    filter_source_urls,
     iter_contractor_action_plan_stream,
     scout_has_no_trusted_results,
 )
@@ -71,7 +72,9 @@ When the digest locality is **Plano, Texas**, under **Permit Costs** include a `
 
 When the digest locality is **Dallas, Texas**, under **Permit Costs** include a `- [ ]` line stating **$167.00** total minimum **trade** permit (incl. **administrative fees**); under **Technical Punch List** include **MANDATORY GOTCHA: Oncor coordination** with `- [ ]` tasks for **mandatory Oncor** notification and coordination before **service disconnect**, **meter seal** / **pull**, or other **utility-side** work.
 
-The JSON includes ``inspector_digest_directive`` and may include ``plano_ord_250_50_requirement``, ``plano_electrical_permit_fee_sync_usd``, ``plano_electrical_permit_fee_2026_note``, ``dallas_minimum_trade_permit_usd``, ``dallas_minimum_trade_permit_note``, ``dallas_oncor_disconnect_coordination``, and ``empty_scout_nec_2023_fallback``:
+When the digest locality is **Austin, Texas**, under **### Technical Punch List** include **MANDATORY GOTCHA: City of Austin Design Criteria** with `- [ ]` tasks for **36-inch** clearance from **gas relief valves** and, for **service upgrades** (incl. **78704** / **787** Austin), the **225A** interior **panel bus** with **200A** main / **Solar-Ready** pattern where Austin requires it. Under **Permit Costs**, itemize **Safety Surcharges** from **austintexas.gov/development-services/fees**.
+
+The JSON includes ``inspector_digest_directive`` and may include ``plano_ord_250_50_requirement``, ``plano_electrical_permit_fee_sync_usd``, ``plano_electrical_permit_fee_2026_note``, ``dallas_minimum_trade_permit_usd``, ``dallas_minimum_trade_permit_note``, ``dallas_oncor_disconnect_coordination``, ``austin_design_criteria_requirement``, ``austin_development_services_fees_url``, ``austin_safety_surcharge_note``, ``austin_central_zip_service_upgrade``, and ``empty_scout_nec_2023_fallback``:
 - **consultant_role**, **gotchas_guidance**, **fee_and_code_guidance**, **output_format**
 - Obey **required_checklist_headings** exactly. If ``plano_ord_250_50_requirement`` is present, satisfy it.
 
@@ -83,7 +86,7 @@ Then **exactly** these headings in order—only ``- [ ] `` task lines after opti
 
 ### Permit Costs
 ### Technical Punch List
-Place **MANDATORY GOTCHA:** lines (with supporting `- [ ]` items) for local amendments that **differ** from national NEC when the digest supports it—for Plano, **250.50 / dual 8 ft rods / 20 ft apart / 2/0 AWG bond** between rods is mandatory; other examples: exterior disconnect labeling, stricter working space, etc. Do not fabricate ordinance text.
+Place **MANDATORY GOTCHA:** lines (with supporting `- [ ]` items) for local amendments that **differ** from national NEC when the digest supports it—for Plano, **250.50 / dual 8 ft rods / 20 ft apart / 2/0 AWG bond** between rods is mandatory; for **Austin**, **Design Criteria** (gas relief **36-inch**, **225A**/ **200A** solar-ready bus on upgrades); other examples: exterior disconnect labeling, stricter working space, etc. Do not fabricate ordinance text.
 
 ### Inspection Must-Haves
 ### Reference Links
@@ -263,6 +266,11 @@ def _research_action_plan_fallback_markdown(
             2,
             "- [ ] **Oncor (Dallas):** Complete **mandatory Oncor** notification / coordination for **service disconnect**, **meter pull**, or **utility-side** work before cutting or restoring **energized** service.",
         )
+    if city.lower() == "austin" and (state or "").strip().upper() == "TX":
+        permit_block.insert(
+            1,
+            "- [ ] **Reg Guard sync (Austin, TX):** Itemize **Development Services** permit fees and **Safety Surcharges** using **https://www.austintexas.gov/development-services/fees** (confirm against the live City of Austin schedule).",
+        )
 
     inspection_body = [
         "- [ ] **Service / Final inspection**: panel **circuit directory** complete and matches breakers; "
@@ -302,6 +310,14 @@ def _research_action_plan_fallback_markdown(
                 "",
             ]
         )
+    elif city.lower() == "austin" and (state or "").strip().upper() == "TX":
+        lines.extend(
+            [
+                "",
+                "- [ ] **Reg Guard sync (Austin, TX):** **Permit Costs** must reflect **Development Services** fees including **Safety Surcharges** per **austintexas.gov/development-services/fees**.",
+                "",
+            ]
+        )
     lines.extend(permit_block)
     punch_core = [
             "- [ ] **MANDATORY GOTCHA:** For each **local amendment** in the digest that is **stricter than base NEC**, add "
@@ -321,6 +337,11 @@ def _research_action_plan_fallback_markdown(
         punch_core.insert(
             0,
             "- [ ] **MANDATORY GOTCHA: Oncor coordination** — **Mandatory Oncor** scheduling / notification for **service disconnect**, **meter seal**, and **utility reconnect**; no **hot** service work without Oncor clearance per current contractor rules.",
+        )
+    if city.lower() == "austin" and (state or "").strip().upper() == "TX":
+        punch_core.insert(
+            0,
+            "- [ ] **MANDATORY GOTCHA: City of Austin Design Criteria** — **36-inch** minimum clearance from **gas relief valves**; **service upgrade:** **225A** interior **panel bus** with **200A** main / **Solar-Ready** pattern per current **Design Criteria** / **Electrical Service Requirements** (verify for **78704** / **787** Austin).",
         )
 
     nec_200a_fallback: List[str] = []
@@ -786,7 +807,7 @@ async def research(
                 return
 
             raw = final_raw
-            source_urls = _collect_source_urls(raw)
+            source_urls = filter_source_urls(_collect_source_urls(raw))
             _log_research_step("digest", detail="building structured research digest")
             yield _reasoning_sse_frame(
                 "scout",

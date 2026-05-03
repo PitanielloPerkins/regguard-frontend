@@ -42,6 +42,20 @@ def _is_plano_texas(city: str, state: str) -> bool:
     return c == "plano" and s in ("TX",)
 
 
+def _is_austin_texas(city: str, state: str) -> bool:
+    c = (city or "").strip().lower()
+    s = (state or "").strip().upper()
+    return c == "austin" and s in ("TX",)
+
+
+AUSTIN_SCOUT_DEVELOPMENT_FEES_SURCHARGE = (
+    "site:austintexas.gov development services fees safety surcharge electrical permit"
+)
+AUSTIN_SCOUT_DESIGN_CRITERIA_ELECTRICAL = (
+    "Austin Texas design criteria electrical service 36 inch gas relief solar ready 225A 200A bus"
+)
+
+
 def _locality_data_fence(city: str, county: str, st: str, mode: str) -> str:
     """
     Append a **looser** locality cue on every scout line (still names City, ST or County, ST) so queries read like
@@ -171,6 +185,9 @@ def _scout_queries_for_location(
     if _is_plano_texas(city, st):
         permits = f"{permits} | {PLANO_SCOUT_FEE_SCHEDULE}"
         codes = f"{codes} | {PLANO_SCOUT_AMENDMENTS_NEC}"
+    if _is_austin_texas(city, st):
+        permits = f"{permits} | {AUSTIN_SCOUT_DEVELOPMENT_FEES_SURCHARGE}"
+        codes = f"{codes} | {AUSTIN_SCOUT_DESIGN_CRITERIA_ELECTRICAL}"
     return (juris, permits, codes)
 
 # Reuse cached scrapes where possible (24h) when single-page scrape is enabled elsewhere.

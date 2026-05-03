@@ -22,6 +22,27 @@ load_dotenv(_ROOT / ".env")
 REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD: float = 167.0
 REG_GUARD_PLANO_ELECTRICAL_PERMIT_TOTAL_USD: float = 75.0
 
+# City of Austin — Development Services fee page (safety surcharges, permit calculators).
+REG_GUARD_AUSTIN_DEVELOPMENT_SERVICES_FEES_URL: str = "https://www.austintexas.gov/development-services/fees"
+
+
+def is_out_of_jurisdiction_reference_noise(url: str) -> bool:
+    """Drop obvious SERP noise (other Texas jurisdictions / agencies) from reference lists and digest rows."""
+    u = (url or "").strip().lower()
+    if not u:
+        return False
+    if "tdcj" in u:
+        return True
+    if "cityofhumble" in u or "humbletx" in u:
+        return True
+    if "humble" in u and ("texas.gov" in u or ".tx.us" in u or "humblecity" in u):
+        return True
+    return False
+
+
+def filter_source_urls(urls: List[str]) -> List[str]:
+    return [u for u in urls if u and not is_out_of_jurisdiction_reference_noise(u)]
+
 
 def _anthropic_client() -> Anthropic | None:
     key = (os.environ.get("ANTHROPIC_API_KEY") or "").strip()
@@ -152,6 +173,8 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
 
     is_plano_tx = city.lower() == "plano" and (state or "").strip().upper() in ("TX",)
     is_dallas_tx = city.lower() == "dallas" and (state or "").strip().upper() in ("TX",)
+    is_austin_tx = city.lower() == "austin" and (state or "").strip().upper() in ("TX",)
+    zip_project = str(raw.get("zip") or ju.get("zip") or "").strip()
     empty_scout = scout_has_no_trusted_results(raw)
     _pf_amt = f"${REG_GUARD_PLANO_ELECTRICAL_PERMIT_TOTAL_USD:.2f}"
     _df_amt = f"${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD:.2f}"
@@ -167,6 +190,13 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             f"anchor tasks to {addr} and Plano, TX."
             f" **2026 data fence:** cite **{_pf_amt}** total electrical permit (**$65.00** base + **$10.00** laborer) from the official fee table "
             "and **Ordinance 250.50**: **two 8-foot grounding rods** **20 feet** apart **connected by 2/0 AWG** between rods (**not** **6-foot** NEC-spacing narrative)."
+        )
+    if is_austin_tx:
+        ztxt = f" **ZIP {zip_project}**" if zip_project else ""
+        consultant_role += (
+            " For **Austin, Texas** service upgrades (including **78704** and broader **787** Austin ZIPs), apply **City of Austin Design Criteria** "
+            "and **Electrical Service Requirements** — not generic NEC-only narratives for clearances or bus/main sizing."
+            f"{ztxt}: treat as **Austin AHJ** scope for **Design Criteria** punch-list items."
         )
     if empty_scout:
         consultant_role += (
@@ -221,6 +251,17 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             f"**Permit Costs — Dallas:** include an explicit `- [ ]` line for the **{_df_amt}** total minimum **trade** permit "
             "(incl. **administrative fees**) per **Reg Guard sync**, with confirmation on official Dallas permit / fee pages."
         )
+    elif is_austin_tx:
+        gotchas_guidance = (
+            "**MANDATORY — Austin Design Criteria:** Under **### Technical Punch List**, include **MANDATORY GOTCHA: City of Austin Design Criteria** "
+            "with `- [ ]` tasks that **must** cover:\n"
+            "- **Gas relief clearance:** **36-inch** minimum clearance from **gas relief valves** (and associated gas-meter / relief appurtenances) per **Austin** "
+            "**Design Criteria** — field-verify against current adopted language.\n"
+            "- **Solar-ready / bus (service upgrades):** for typical **200A** class **service upgrades** in **Austin** (incl. **78704**), plan **225A** interior **panel bus** "
+            "with **200A** main / **OCPD** where **Solar-Ready** / **Design Criteria** require it—confirm ratings against current **Electrical Service Requirements**.\n"
+            f"**Permit Costs — Austin:** itemize **Development Services** permit fees and explicitly add line items for **Safety Surcharges** per the official page "
+            f"**{REG_GUARD_AUSTIN_DEVELOPMENT_SERVICES_FEES_URL}** (Reg Guard sync — do not use other Texas cities’ fee tables)."
+        )
     else:
         gotchas_guidance = (
             "Where local amendments **tighten** or **modify** the base NEC, call that out under **Technical Punch List** "
@@ -270,6 +311,15 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
                 "Verify codified wording on official Plano / Municode."
             ),
         )
+    if is_austin_tx:
+        logic_steps.insert(
+            2,
+            (
+                "Step 2b — **Technical Punch List (Austin Design Criteria):** Under **### Technical Punch List**, emit **MANDATORY GOTCHA: City of Austin Design Criteria** "
+                "with `- [ ]` tasks for **36-inch** clearance at **gas relief valves** and for **service upgrades** the **225A** bus / **200A** main "
+                "**Solar-Ready** pattern where Austin requires it (confirm **78704** / **787** projects against current **Design Criteria**)."
+            ),
+        )
 
     fee_extra = ""
     if is_plano_tx:
@@ -281,6 +331,11 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
         fee_extra = (
             f" **Reg Guard sync (Dallas, TX):** Minimum **trade** permit **{_df_amt}** total including **administrative fees** "
             "(confirm on official Dallas permit / fee pages). **Oncor** utility coordination is **mandatory** for **disconnects** / meter work."
+        )
+    elif is_austin_tx:
+        fee_extra = (
+            f" **Reg Guard sync (Austin, TX):** Under **Permit Costs**, use **City of Austin Development Services** fee documentation, including **Safety Surcharges** at "
+            f"**{REG_GUARD_AUSTIN_DEVELOPMENT_SERVICES_FEES_URL}** — confirm calculator outputs against the posted schedule."
         )
     else:
         fee_extra = " Base technical items on the NEC/adoption language in the digest."
@@ -344,6 +399,8 @@ def build_research_digest(raw: Dict[str, Any], source_urls: List[str], enhanced_
                 continue
             title_u = str(item.get("title") or "")
             url_u = str(item.get("url") or "")
+            if is_out_of_jurisdiction_reference_noise(url_u):
+                continue
             row: Dict[str, Any] = {
                 "url": item.get("url"),
                 "title": item.get("title"),
@@ -391,6 +448,20 @@ def build_research_digest(raw: Dict[str, Any], source_urls: List[str], enhanced_
             "with `- [ ]` tasks for **two 8-foot grounding rods** **20 feet** apart **connected by 2/0 AWG** between rods (**not** **6-foot** "
             f"rod-spacing from generic NEC narrative). Under **Permit Costs**, state the **{pf}** sync fee line."
         )
+    if city_guess.lower() == "austin" and (state_guess or "").strip().upper() in ("TX",):
+        z = str(raw.get("zip") or ju_blob.get("zip") or "").strip()
+        payload["austin_design_criteria_requirement"] = (
+            "HARD REQUIREMENT (Austin, TX): Under **### Technical Punch List**, **MANDATORY GOTCHA: City of Austin Design Criteria** — "
+            "(1) **36-inch** minimum clearance from **gas relief valves**; (2) **service upgrades:** **225A** interior **panel bus** with **200A** main / **Solar-Ready** "
+            "pattern where Austin **Design Criteria** / **Electrical Service Requirements** apply (verify for **78704** and other **787** Austin ZIPs)."
+        )
+        payload["austin_development_services_fees_url"] = REG_GUARD_AUSTIN_DEVELOPMENT_SERVICES_FEES_URL
+        payload["austin_safety_surcharge_note"] = (
+            "Reg Guard sync: In **Permit Costs**, include **Safety Surcharges** and permit line items from City of Austin **Development Services** fees at "
+            f"{REG_GUARD_AUSTIN_DEVELOPMENT_SERVICES_FEES_URL}."
+        )
+        if z == "78704" or (len(z) == 5 and z.startswith("787")):
+            payload["austin_central_zip_service_upgrade"] = True
     return json.dumps(payload, ensure_ascii=False, indent=2)
 
 
@@ -413,6 +484,8 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                         "`gotchas_guidance`, `output_format`), then `plano_ord_250_50_requirement`, "
                         "`plano_electrical_permit_fee_sync_usd` / `plano_electrical_permit_fee_2026_note`, "
                         "`dallas_minimum_trade_permit_usd` / `dallas_minimum_trade_permit_note`, `dallas_oncor_disconnect_coordination`, "
+                        "`austin_design_criteria_requirement`, `austin_development_services_fees_url`, `austin_safety_surcharge_note`, "
+                        "`austin_central_zip_service_upgrade`, "
                         "and `empty_scout_nec_2023_fallback` if present, then "
                         "`tagged_priority_hits` and the rest of the JSON. "
                         "Follow the role and logic steps; obey `output_format` and `gotchas_guidance`. "
@@ -422,6 +495,8 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                         "using NEC 2023 training knowledge for 200A scope. "
                         f"When Dallas fee fields are set, include the **${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD:.2f}** floor in **Permit Costs**. "
                         "When `dallas_oncor_disconnect_coordination` is set, include **Oncor coordination** gotchas under **Technical Punch List**. "
+                        "When `austin_design_criteria_requirement` is set, satisfy **Design Criteria** gotchas (gas relief **36-inch**, **225A**/ **200A** **Solar-Ready** bus pattern) under **### Technical Punch List**, "
+                        "and apply `austin_safety_surcharge_note` / `austin_development_services_fees_url` in **Permit Costs**. "
                         "Use ONLY checklist lines (`- [ ] `) under the headings in `required_checklist_headings`, "
                         "then add **### Reference Links** listing `unique_source_urls`. "
                         "Apply `fee_and_code_guidance` in **Permit Costs**.\n\n"
