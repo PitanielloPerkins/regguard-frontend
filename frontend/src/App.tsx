@@ -227,6 +227,60 @@ export default function App() {
     return Boolean(selection?.formattedAddress && selection.zip && !busy);
   }, [selection, busy]);
 
+  /** Subtle reasoning trace above results (live scout / synthesis cues). */
+  const agentStatusLine = useMemo(() => {
+    const locality =
+      (meta?.city && meta?.zip ? `${meta.city}, ${meta.zip}` : null) ||
+      (meta?.city
+        ? meta.city
+        : selection?.formattedAddress
+          ? selection.formattedAddress.split(",").slice(0, 2).join(",").trim()
+          : null) ||
+      "your jurisdiction";
+
+    if (!busy && streamBroken && phase !== "Complete") {
+      return "Status — Stream interrupted before completion; partial results may appear below. Try Resume research or New Job.";
+    }
+    if (busy) {
+      if (phase === "Connecting…") {
+        return "Status — Connecting to Reg Guard research stream…";
+      }
+      if (phase === "Started") {
+        return "Status — Session started; preparing regional compliance context…";
+      }
+      if (phase === "Context ready" || phase === "Context ready (photo + job)") {
+        return "Status — Job + photo context packaged for Universal Scout…";
+      }
+      if (phase === "Jurisdiction locked") {
+        return `Status — Jurisdiction locked for ${locality} — verifying AHJ path…`;
+      }
+      if (phase.startsWith("Research: step_jurisdiction")) {
+        return `Status — Scouting ${locality} jurisdiction, AHJ hints & trusted municipal sources…`;
+      }
+      if (phase.startsWith("Research: step_building_permits")) {
+        return `Status — Scouting building department & permit portals (${locality})…`;
+      }
+      if (phase.startsWith("Research: step_building_codes")) {
+        return "Status — Analyzing adopted codes, NEC 2023 baseline & local amendment deltas…";
+      }
+      if (phase === "Writing Contractor Action Plan") {
+        return "Status — Synthesizing Master Electrician punch list (fees, technical gotchas, inspections)…";
+      }
+      if (phase === "Analyzing photo") {
+        return "Status — Analyzing job-site photo with vision model…";
+      }
+      if (phase.startsWith("Research:")) {
+        const rest = phase.slice("Research: ".length).trim();
+        return `Status — Research pipeline: ${rest}`;
+      }
+      return phase ? `Status — ${phase}` : "Status — Working…";
+    }
+    if (phase === "Complete") {
+      return "Status — Research complete. Confirm fees, codes, and scope with your AHJ before mobilizing.";
+    }
+    return null;
+  }, [busy, phase, meta, selection, streamBroken]);
+
   const resetOutput = useCallback(() => {
     setError(null);
     setPhase("");
@@ -242,6 +296,11 @@ export default function App() {
 
   const handleNewJob = useCallback(() => {
     researchEpochRef.current += 1;
+    researchSawChunkRef.current = false;
+    researchCompleteRef.current = false;
+    sseErrorToastedRef.current = false;
+    cancelPendingLocateApplyRef.current = true;
+
     listeningRef.current = false;
     clearDictationSilenceTimer(dictationSilenceTimerRef);
     dictationAnchorRef.current = "";
@@ -257,6 +316,7 @@ export default function App() {
     }
     setDictationActive(false);
     setSpeechHint(null);
+    setLocatingMe(false);
 
     setSelection(null);
     setJobDescription("");
@@ -267,7 +327,21 @@ export default function App() {
     resetOutput();
     addressRef.current?.clearForNewJob();
     setFileInputKey((k) => k + 1);
+
+    window.requestAnimationFrame(() => {
+      cancelPendingLocateApplyRef.current = false;
+      const el = actionPlanPanelRef.current;
+      if (el && typeof el.scrollTop === "number") {
+        el.scrollTop = 0;
+      }
+    });
+
+    toast.info("New job — workspace cleared.", { autoClose: 2200, hideProgressBar: true });
   }, [resetOutput]);
+
+  const handleRefreshApp = useCallback(() => {
+    window.location.reload();
+  }, []);
 
   const runResearch = useCallback(async () => {
     if (!selection) {
@@ -972,18 +1046,31 @@ export default function App() {
             8000 (proxied via <code>/api</code>).
           </p>
         </div>
-        <button
-          type="button"
-          className="rg-btn rg-btn--ghost"
-          style={{
-            fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-            fontWeight: 600,
-            flexShrink: 0,
-          }}
-          onClick={handleNewJob}
-        >
-          New Job
-        </button>
+        <div className="app-header-actions">
+          <button
+            type="button"
+            className="rg-btn rg-btn--ghost"
+            style={{
+              fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
+              fontWeight: 600,
+            }}
+            onClick={handleNewJob}
+          >
+            New Job
+          </button>
+          <button
+            type="button"
+            className="rg-btn rg-btn--ghost app-header-refresh"
+            style={{
+              fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
+              fontWeight: 600,
+            }}
+            title="Reload the app from the server (clears all browser state)"
+            onClick={handleRefreshApp}
+          >
+            Refresh
+          </button>
+        </div>
       </header>
 
       <div className="app-grid">
@@ -1188,13 +1275,19 @@ export default function App() {
           </div>
         </section>
 
-        <section className="rg-panel">
+        <section className="rg-panel rg-results-panel">
           <h2>Results</h2>
 
-          {busy && phase ? (
+          {!busy && agentStatusLine ? (
+            <p className="rg-agent-status" aria-live="polite">
+              {agentStatusLine}
+            </p>
+          ) : null}
+
+          {busy ? (
             <div className="rg-phase" aria-live="polite">
               <span className="rg-dot-pulse" aria-hidden />
-              {phase}
+              <span className="rg-phase-primary">{agentStatusLine || phase}</span>
               {sseConnectionLive ? (
                 <span className="rg-sse-live" title="Event stream connected">
                   <span className="rg-sse-live__dot" aria-hidden />
