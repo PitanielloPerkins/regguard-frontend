@@ -729,11 +729,18 @@ async def research(
                     "step_building_codes": "pass 3/3 — adopted codes (Firecrawl)",
                 }
                 _city_label = str((scout_jurisdiction or {}).get("city") or "").strip() or "local"
+                _st_scout = str((scout_jurisdiction or {}).get("state") or "").strip().upper()
+                _dallas_tx = _city_label.strip().lower() == "dallas" and _st_scout == "TX"
                 _scout_reasoning = {
                     "step_jurisdiction": f"Scouting {_city_label} jurisdiction, AHJ hints, and trusted .gov anchors…",
                     "step_building_permits": f"Scouting {_city_label} Building Dept — fee schedules and permit portals…",
                     "step_building_codes": f"Cross-referencing {_city_label} adopted codes and NEC 2023 amendment deltas…",
                 }
+                if _dallas_tx:
+                    _scout_reasoning["step_building_permits"] = (
+                        f"Scouting {_city_label} Building Dept — permits and fees; "
+                        "checking Oncor utility rules for disconnects and meter coordination…"
+                    )
                 yield _reasoning_sse_frame(
                     "scout",
                     "Scout — Running sequential Firecrawl passes (jurisdiction → permits → adopted codes)…",
@@ -761,6 +768,12 @@ async def research(
                         if rtxt:
                             yield _reasoning_sse_frame("scout", rtxt)
                     yield _safe_sse_data_frame(ev)
+                    if ev.get("event") == "step" and str(ev.get("step") or "") in (
+                        "step_jurisdiction",
+                        "step_building_permits",
+                        "step_building_codes",
+                    ):
+                        await asyncio.sleep(0.5)
             except Exception:
                 logger.exception("Firecrawl / Universal Scout crawl failed")
                 yield _safe_sse_data_frame({"event": "error", "message": _RESEARCH_STALL_FIRECRAWL_MESSAGE})

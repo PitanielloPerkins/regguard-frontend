@@ -1300,8 +1300,8 @@ export default function App() {
         <section className="rg-panel rg-results-panel">
           <h2>Results</h2>
 
-          {!busy && reasoningStep ? (
-            <p className="rg-reasoning-step" aria-live="polite">
+          {reasoningStep ? (
+            <p className="rg-reasoning-step rg-reasoning-step--in-results" aria-live="polite">
               <span className="rg-reasoning-step__label">Reasoning:</span> {reasoningStep}
             </p>
           ) : null}
@@ -1317,11 +1317,6 @@ export default function App() {
               <span className="rg-dot-pulse" aria-hidden />
               <div className="rg-phase-text">
                 <span className="rg-phase-primary">{agentStatusLine || phase}</span>
-                {reasoningStep ? (
-                  <p className="rg-reasoning-step rg-reasoning-step--inline">
-                    <span className="rg-reasoning-step__label">Reasoning:</span> {reasoningStep}
-                  </p>
-                ) : null}
               </div>
               {sseConnectionLive ? (
                 <span className="rg-sse-live" title="Event stream connected">

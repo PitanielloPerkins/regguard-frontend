@@ -395,15 +395,22 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
 }
 
 /** Live Scout/Audit reasoning from SSE — subtle, non-blocking cue above results. */
+/** Live reasoning trace — subdued so the action plan stays primary. */
 .rg-reasoning-step {
   margin: 0 0 0.55rem;
   font-size: 0.8rem;
   font-style: italic;
   font-weight: 450;
   line-height: 1.45;
-  color: rgba(168, 197, 232, 0.82);
+  color: #888888;
   letter-spacing: 0.01em;
   text-transform: none;
+}
+
+.rg-reasoning-step--in-results {
+  padding: 0.35rem 0;
+  border-bottom: 1px solid rgba(136, 136, 136, 0.25);
+  margin-bottom: 0.5rem;
 }
 
 .rg-reasoning-step--inline {
@@ -426,8 +433,9 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
 
 .rg-reasoning-step__label {
   font-style: italic;
-  color: var(--rg-muted);
+  color: #888888;
   font-weight: 500;
+  opacity: 0.92;
 }
 
 .rg-agent-status {
