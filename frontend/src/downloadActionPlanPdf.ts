@@ -80,6 +80,16 @@ function shouldDropPdfLine(line: string): boolean {
   if (lower.includes("claude action plan unavailable")) {
     return true;
   }
+  if (/\btdcj\b/i.test(t)) {
+    return true;
+  }
+  if (
+    /\bhumble\b/i.test(t) &&
+    (/cityofhumble|humbletx|humble-tx|humble\s*,\s*tx|\.gov\/[^)\s]*humble|humble[^)\s]*\.gov/i.test(lower) ||
+      /^-\s*https?:\/\/[^\s]*humble/i.test(t))
+  ) {
+    return true;
+  }
   return lower.includes("failed: error code");
 }
 
