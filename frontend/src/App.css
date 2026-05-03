@@ -394,6 +394,23 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   margin-bottom: 0.5rem;
 }
 
+/** Live Scout/Audit reasoning from SSE — subtle, non-blocking cue above results. */
+.rg-reasoning-step {
+  margin: 0 0 0.55rem;
+  font-size: 0.8rem;
+  font-style: italic;
+  font-weight: 450;
+  line-height: 1.45;
+  color: rgba(168, 197, 232, 0.82);
+  letter-spacing: 0.01em;
+}
+
+.rg-reasoning-step__label {
+  font-style: italic;
+  color: var(--rg-muted);
+  font-weight: 500;
+}
+
 .rg-agent-status {
   margin: 0 0 0.65rem;
   padding: 0.4rem 0.55rem;

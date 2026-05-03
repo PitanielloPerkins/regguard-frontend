@@ -41,6 +41,7 @@ type NdjsonLine =
       profile?: Record<string, unknown>;
     }
   | { event: "step"; step?: string; data?: unknown }
+  | { event: "reasoning"; phase?: string; text: string }
   | { event: "summary_delta"; text: string }
   | {
       event: "complete";
@@ -213,6 +214,8 @@ export default function App() {
     county?: string | null;
   } | null>(null);
   const [planToolbarMsg, setPlanToolbarMsg] = useState<string | null>(null);
+  /** Live line from backend Scout/Audit status frames (SSE ``reasoning``). */
+  const [reasoningStep, setReasoningStep] = useState<string | null>(null);
   const actionPlanPanelRef = useRef<HTMLDivElement | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
 
@@ -292,6 +295,7 @@ export default function App() {
     setStreamBroken(false);
     setPlanToolbarMsg(null);
     setSseConnectionLive(false);
+    setReasoningStep(null);
   }, []);
 
   const handleNewJob = useCallback(() => {
@@ -484,6 +488,13 @@ export default function App() {
               }
               break;
             }
+            case "reasoning": {
+              const line = typeof payload.text === "string" ? payload.text.trim() : "";
+              if (line) {
+                setReasoningStep(line);
+              }
+              break;
+            }
             case "step": {
               const name = typeof payload.step === "string" ? payload.step : "step";
               setPhase(`Research: ${name}`);
@@ -513,6 +524,7 @@ export default function App() {
               researchCompleteRef.current = true;
               setStreamBroken(false);
               setPhase("Complete");
+              setReasoningStep(null);
               const fin = typeof payload.summary === "string" ? payload.summary : "";
               if (fin.trim()) {
                 setActionPlan(fin);
@@ -1277,6 +1289,12 @@ export default function App() {
 
         <section className="rg-panel rg-results-panel">
           <h2>Results</h2>
+
+          {reasoningStep ? (
+            <p className="rg-reasoning-step" aria-live="polite">
+              <span className="rg-reasoning-step__label">Reasoning:</span> {reasoningStep}
+            </p>
+          ) : null}
 
           {!busy && agentStatusLine ? (
             <p className="rg-agent-status" aria-live="polite">

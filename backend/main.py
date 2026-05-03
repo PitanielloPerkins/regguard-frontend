@@ -432,6 +432,11 @@ def _safe_sse_data_frame(chunk: Dict[str, Any]) -> str:
         return f"data: {plain}\n\n"
 
 
+def _reasoning_sse_frame(phase: str, text: str) -> str:
+    """Short status line for the UI reasoning strip (``phase``: ``scout`` | ``audit``)."""
+    return _safe_sse_data_frame({"event": "reasoning", "phase": phase, "text": text})
+
+
 def _log_research_step(label: str, *, detail: str = "") -> None:
     """Stdout trace for hung streams — always visible when running ``python backend/main.py``."""
     if detail:
@@ -637,6 +642,10 @@ async def research(
                 }
             )
             _log_research_step("context", detail="enhanced query ready for scout")
+            yield _reasoning_sse_frame(
+                "scout",
+                "Scout — Packaging job context for jurisdiction-scoped discovery (gov & code publishers)…",
+            )
 
             if scout_jurisdiction and scout_site:
                 yield _safe_sse_data_frame(
@@ -689,6 +698,15 @@ async def research(
                     "step_building_permits": "pass 2/3 — building permits (Firecrawl)",
                     "step_building_codes": "pass 3/3 — adopted codes (Firecrawl)",
                 }
+                _scout_reasoning: Dict[str, str] = {
+                    "step_jurisdiction": "Cross-referencing city/county AHJ boundaries with municipal anchors and permit portals…",
+                    "step_building_permits": "Scouting building department fee schedules, applications, and inspection checklists…",
+                    "step_building_codes": "Cross-referencing adopted codes and local amendments with the NEC baseline…",
+                }
+                yield _reasoning_sse_frame(
+                    "scout",
+                    "Scout — Running sequential Firecrawl passes (jurisdiction → permits → adopted codes)…",
+                )
                 while True:
                     ev: Optional[Dict[str, Any]] = None
                     async for pkt in _with_heartbeats(run_in_threadpool(_scout_iter_next, it)):
@@ -708,6 +726,9 @@ async def research(
                             "Universal Scout",
                             detail=_scout_labels.get(key, key),
                         )
+                        rtxt = _scout_reasoning.get(key)
+                        if rtxt:
+                            yield _reasoning_sse_frame("scout", rtxt)
                     yield _safe_sse_data_frame(ev)
             except Exception:
                 logger.exception("Firecrawl / Universal Scout crawl failed")
@@ -723,10 +744,18 @@ async def research(
             raw = final_raw
             source_urls = _collect_source_urls(raw)
             _log_research_step("digest", detail="building structured research digest")
+            yield _reasoning_sse_frame(
+                "scout",
+                "Scout complete — normalizing URLs and building a structured research digest…",
+            )
             digest = build_research_digest(raw, source_urls, enhanced_query)
 
             summary: str
             if (os.getenv("ANTHROPIC_API_KEY") or "").strip():
+                yield _reasoning_sse_frame(
+                    "audit",
+                    "Audit — Synthesizing contractor action plan from the digest (fees, technical gates, inspections)…",
+                )
                 q_plan: Queue = Queue()
                 thread_plan = threading.Thread(
                     target=_action_plan_queue_producer,
@@ -753,6 +782,10 @@ async def research(
                         break
                     else:
                         err = cast(Exception, val)
+                        yield _reasoning_sse_frame(
+                            "audit",
+                            "Audit — Recovering with structured fallback memo after synthesis error…",
+                        )
                         stub = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
                         banner = (
                             f"*Claude action plan unavailable ({err!s}); "
@@ -767,6 +800,10 @@ async def research(
                         _log_research_step("action plan", detail="fallback memo (Claude error)")
                         break
             else:
+                yield _reasoning_sse_frame(
+                    "audit",
+                    "Audit — Building structured fallback action memo (no live synthesis key)…",
+                )
                 _log_research_step("action plan", detail="structured fallback memo — no ANTHROPIC_API_KEY")
                 summary = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
                 for chunk in _iter_summary_word_chunks(summary):
