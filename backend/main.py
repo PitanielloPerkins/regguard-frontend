@@ -67,11 +67,11 @@ When the digest locality is **Plano, Texas**, you **MUST** include under **Techn
 
 When the digest locality is **Plano, Texas**, also prioritize City of Plano amendments vs base NEC, fee schedules (including **2026** when cited), and inspection nuance from **only** Plano-applicable hits.
 
-When the digest locality is **Dallas, Texas**, under **Permit Costs** include a `- [ ]` line stating the **Reg Guard sync reference**: minimum **trade** permit total **$167.00** including **administrative fees** (floor only — contractor must confirm on official Dallas permit pages).
+When the digest locality is **Plano, Texas**, under **Permit Costs** include a `- [ ]` line for **Reg Guard 2026 sync**: **$75.00** total electrical permit (**$65.00** base + **$10.00** laborer) — confirm on official City of Plano fee schedule.
 
-When the JSON field ``empty_scout_nec_2023_fallback`` is **true**, Universal Scout returned **no** trusted rows. You MUST still fill **Technical Punch List** and **Inspection Must-Haves** using **NFPA 70 — NEC (2023 edition)** from your **training data** for a **200 amp service / panel upgrade** (conductor ampacity & OCPD sizing, grounding/bonding per Art. 250, workspace 110.26, surge where applicable, GFCI/AFCI for dwelling-branch requirements in 2023, etc.). Each such line must be a `- [ ]` task that explicitly notes **(NEC 2023 — verify adopted edition and amendments with the AHJ)**. Do not leave those sections blank.
+When the digest locality is **Dallas, Texas**, under **Permit Costs** include the **$167.00** minimum **trade** permit reference as already stated; under **Technical Punch List** include **MANDATORY GOTCHA: Oncor coordination** with `- [ ]` tasks for **mandatory Oncor** notification and coordination before **service disconnect**, **meter seal** / **pull**, or other **utility-side** work.
 
-The JSON includes ``inspector_digest_directive`` and may include ``plano_ord_250_50_requirement``, ``dallas_minimum_trade_permit_usd`` / ``dallas_minimum_trade_permit_note``, and ``empty_scout_nec_2023_fallback``:
+The JSON includes ``inspector_digest_directive`` and may include ``plano_ord_250_50_requirement``, ``plano_electrical_permit_fee_sync_usd``, ``plano_electrical_permit_fee_2026_note``, ``dallas_minimum_trade_permit_usd``, ``dallas_minimum_trade_permit_note``, ``dallas_oncor_disconnect_coordination``, and ``empty_scout_nec_2023_fallback``:
 - **consultant_role**, **gotchas_guidance**, **fee_and_code_guidance**, **output_format**
 - Obey **required_checklist_headings** exactly. If ``plano_ord_250_50_requirement`` is present, satisfy it.
 
@@ -259,6 +259,10 @@ def _research_action_plan_fallback_markdown(
             f"- [ ] **Reg Guard sync (Dallas, TX):** Minimum **trade** permit **${_DALLAS_TX_MIN_TRADE_PERMIT_USD:.2f}** "
             "including **administrative fees** (planning floor only — confirm on official Dallas permit / fee pages).",
         )
+        permit_block.insert(
+            2,
+            "- [ ] **Oncor (Dallas):** Complete **mandatory Oncor** notification / coordination for **service disconnect**, **meter pull**, or **utility-side** work before cutting or restoring **energized** service.",
+        )
 
     inspection_body = [
         "- [ ] **Service / Final inspection**: panel **circuit directory** complete and matches breakers; "
@@ -275,8 +279,6 @@ def _research_action_plan_fallback_markdown(
     lines: List[str] = [
         "## Contractor Action Plan — Panel / service work (inspector punch list)",
         "",
-        "_Generated without Claude — enable ANTHROPIC_API_KEY for a tailored memo._",
-        "",
         "### Permit Costs",
         "",
         "- [ ] " + permit_scope,
@@ -284,6 +286,22 @@ def _research_action_plan_fallback_markdown(
         + (f" — **{ju_line}**." if ju_line else f" for **{loc_short}**."),
         "- [ ] Match permit type to scope on the official checklist.",
     ]
+    if city.lower() == "plano" and (state or "").strip().upper() == "TX":
+        lines.extend(
+            [
+                "",
+                "- [ ] **Reg Guard 2026 sync (Plano, TX):** Electrical permit **$75.00** total — **$65.00** base + **$10.00** laborer fee. Confirm on the official City of Plano fee schedule before posting.",
+                "",
+            ]
+        )
+    elif city.lower() == "dallas" and (state or "").strip().upper() == "TX":
+        lines.extend(
+            [
+                "",
+                "- [ ] **Reg Guard sync (Dallas, TX):** Minimum **trade** permit **$167.00** total including **administrative fees** (confirm on official Dallas permit / fee pages).",
+                "",
+            ]
+        )
     lines.extend(permit_block)
     punch_core = [
             "- [ ] **MANDATORY GOTCHA:** For each **local amendment** in the digest that is **stricter than base NEC**, add "
@@ -292,8 +310,17 @@ def _research_action_plan_fallback_markdown(
     if city.lower() == "plano" and (state or "").strip().upper() == "TX":
         punch_core.insert(
             0,
-            "- [ ] **MANDATORY GOTCHA: Plano Ordinance 250.50** — Confirm **two 8-foot ground rods** with **20 feet** "
-            "separation between rods per Plano (**not** the **6-foot** spacing assumption from generic NEC discussion); verify wording on official Plano / Municode sources.",
+            "- [ ] **MANDATORY GOTCHA: Plano Ordinance 250.50** — **Two 8-foot ground rods** with **20 feet** separation between rods "
+            "(**not** **6-foot** generic NEC-spacing narrative); verify on official Plano / Municode.",
+        )
+        punch_core.insert(
+            1,
+            "- [ ] **Plano permit fee (2026 sync)** — Budget **$75.00** total (**$65.00** base + **$10.00** laborer); confirm against current City of Plano fee table.",
+        )
+    if city.lower() == "dallas" and (state or "").strip().upper() == "TX":
+        punch_core.insert(
+            0,
+            "- [ ] **MANDATORY GOTCHA: Oncor coordination** — **Mandatory Oncor** scheduling / notification for **service disconnect**, **meter seal**, and **utility reconnect**; no **hot** service work without Oncor clearance per current contractor rules.",
         )
 
     nec_200a_fallback: List[str] = []
@@ -333,12 +360,6 @@ def _research_action_plan_fallback_markdown(
             lines.append(f"- {u}")
     else:
         lines.append("- *(No URLs returned in this run.)*")
-
-    wf = raw.get("agentic_workflow") or []
-    if wf:
-        lines.extend(["", "---", "", "**Workflow trace**", ""])
-        for line in wf:
-            lines.append(f"- {line}")
 
     if has_ctx and len(enhanced_query) < 2000:
         short = re.sub(r"\s+", " ", enhanced_query)[:500]
@@ -797,16 +818,11 @@ async def research(
                             "Audit — Recovering with structured fallback memo after synthesis error…",
                         )
                         stub = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
-                        banner = (
-                            f"*Claude action plan unavailable ({err!s}); "
-                            "showing structured fallback memo.*\n\n"
-                        )
-                        yield _safe_sse_data_frame({"event": "summary_delta", "text": banner})
-                        await asyncio.sleep(0)
+                        logger.warning("Contractor Action Plan Claude error — using fallback: %s", err)
                         for chunk in _iter_summary_word_chunks(stub):
                             yield _safe_sse_data_frame({"event": "summary_delta", "text": chunk})
                             await asyncio.sleep(0)
-                        summary = banner + stub
+                        summary = stub
                         _log_research_step("action plan", detail="fallback memo (Claude error)")
                         break
             else:

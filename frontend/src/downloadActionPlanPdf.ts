@@ -65,10 +65,22 @@ function shouldDropPdfLine(line: string): boolean {
   if (lower.includes("anthropic_api_key") && (lower.includes("enable") || lower.includes("set "))) {
     return true;
   }
-  return (
-    lower.includes("claude action plan unavailable") ||
-    lower.includes("failed: error code")
-  );
+  if (/\bapi\s+error\b/i.test(t)) {
+    return true;
+  }
+  if (lower.includes("api error")) {
+    return true;
+  }
+  if (lower.includes("structured fallback")) {
+    return true;
+  }
+  if (lower.includes("claude research memo failed")) {
+    return true;
+  }
+  if (lower.includes("claude action plan unavailable")) {
+    return true;
+  }
+  return lower.includes("failed: error code");
 }
 
 /** Remove the backend **Workflow trace** block (bullets often omit the trigger phrase). */
