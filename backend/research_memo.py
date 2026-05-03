@@ -208,7 +208,7 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             "Plano Ordinance 250.50** with `- [ ]` tasks requiring **two 8-foot grounding rods** spaced **20 feet** apart, "
             "**connected by a 2/0 AWG conductor** between rods (Plano **local** rule — **not** the typical **6-foot** NEC minimum-spacing narrative "
             "some crews assume). Cross-check wording on current Plano codified ordinance / Municode when reconciling.\n"
-            "**Permit Costs — Plano:** include an explicit `- [ ]` line stating **{_pf_amt}** total (**$65.00** base + **$10.00** laborer) "
+            f"**Permit Costs — Plano:** include an explicit `- [ ]` line stating **{_pf_amt}** total (**$65.00** base + **$10.00** laborer) "
             "per **Reg Guard 2026 sync**, with AHJ confirmation on the official fee schedule.\n"
             "Identify other **City of Plano** local amendments that **differ from** or **add to** the adopted NEC only when "
             "the digest text supports them."
@@ -218,7 +218,7 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             "**MANDATORY — Dallas / Oncor:** Under **Technical Punch List**, include **MANDATORY GOTCHA: Oncor coordination** "
             "with `- [ ]` tasks requiring **mandatory Oncor notification / coordination** before **service disconnect**, **meter seal**, "
             "or **utility-side** work; confirm current Oncor contractor rules and scheduled outage / reconnect steps.\n"
-            "**Permit Costs — Dallas:** include an explicit `- [ ]` line for the **$167.00** total minimum **trade** permit "
+            f"**Permit Costs — Dallas:** include an explicit `- [ ]` line for the **{_df_amt}** total minimum **trade** permit "
             "(incl. **administrative fees**) per **Reg Guard sync**, with confirmation on official Dallas permit / fee pages."
         )
     else:
@@ -271,8 +271,8 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             ),
         )
 
-    plano_fee = f"${REG_GUARD_PLANO_ELECTRICAL_PERMIT_TOTAL_USD:.2f}"
-    dallas_fee = f"${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD:.2f}"
+    plano_fee = _pf_amt
+    dallas_fee = _df_amt
 
     fee_extra = ""
     if is_plano_tx:
