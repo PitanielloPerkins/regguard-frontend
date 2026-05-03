@@ -363,6 +363,10 @@ export default function App() {
     const form = new FormData();
     form.append("zip_code", selection.zip);
     form.append("site_address", selection.formattedAddress);
+    const clientCity = selection.city?.trim();
+    if (clientCity) {
+      form.append("client_city", clientCity);
+    }
     form.append("job_description", jobDescription.trim());
     form.append("search_limit", String(searchLimit));
     if (imageFile) {
@@ -676,10 +680,16 @@ export default function App() {
               setLocatingMe(false);
               return;
             }
-            const data = (await res.json()) as { formatted_address?: string; zip?: string };
+            const data = (await res.json()) as {
+              formatted_address?: string;
+              zip?: string;
+              city?: string;
+            };
             const formattedAddress =
               typeof data.formatted_address === "string" ? data.formatted_address.trim() : "";
             const zip = typeof data.zip === "string" ? data.zip.trim() : "";
+            const city =
+              typeof data.city === "string" && data.city.trim() ? data.city.trim() : undefined;
             if (!formattedAddress || zip.length !== 5) {
               setLocateMessage("Could not decode that location into a U.S. address with ZIP.");
               setLocatingMe(false);
@@ -692,7 +702,7 @@ export default function App() {
               setLocatingMe(false);
               return;
             }
-            const sel = { formattedAddress, zip };
+            const sel = { formattedAddress, zip, ...(city ? { city } : {}) };
             setSelection(sel);
             addressRef.current?.setLocatedAddress(sel);
             setLocateMessage(null);
@@ -1290,7 +1300,7 @@ export default function App() {
         <section className="rg-panel rg-results-panel">
           <h2>Results</h2>
 
-          {reasoningStep ? (
+          {!busy && reasoningStep ? (
             <p className="rg-reasoning-step" aria-live="polite">
               <span className="rg-reasoning-step__label">Reasoning:</span> {reasoningStep}
             </p>
@@ -1303,9 +1313,16 @@ export default function App() {
           ) : null}
 
           {busy ? (
-            <div className="rg-phase" aria-live="polite">
+            <div className="rg-phase rg-phase--with-reasoning" aria-live="polite">
               <span className="rg-dot-pulse" aria-hidden />
-              <span className="rg-phase-primary">{agentStatusLine || phase}</span>
+              <div className="rg-phase-text">
+                <span className="rg-phase-primary">{agentStatusLine || phase}</span>
+                {reasoningStep ? (
+                  <p className="rg-reasoning-step rg-reasoning-step--inline">
+                    <span className="rg-reasoning-step__label">Reasoning:</span> {reasoningStep}
+                  </p>
+                ) : null}
+              </div>
               {sseConnectionLive ? (
                 <span className="rg-sse-live" title="Event stream connected">
                   <span className="rg-sse-live__dot" aria-hidden />

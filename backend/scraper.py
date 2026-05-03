@@ -105,8 +105,14 @@ def _scout_queries_for_location(
     if not ju or not addr:
         return (
             f"US {zip_tag} municipality county jurisdiction AHJ building permits — {zip_tag}",
-            f"US {zip_tag} building department permit applications electrical official — {zip_tag}",
-            f"US {zip_tag} adopted building code amendments codified law official — {zip_tag}",
+            (
+                f"US {zip_tag} building department permit applications electrical official — {zip_tag} | "
+                f"US {zip_tag} official building permit fees 2026"
+            ),
+            (
+                f"US {zip_tag} adopted building code amendments codified law official — {zip_tag} | "
+                f"US {zip_tag} NEC 2023 amendments"
+            ),
         )
 
     mode = str(ju.get("mode") or "").strip().lower()
@@ -132,7 +138,14 @@ def _scout_queries_for_location(
             f"IBC IRC — {zip_tag}"
         )
         fence = _locality_data_fence(city, county, st, mode)
-        return (juris + fence, permits + fence, codes + fence)
+        juris, permits, codes = juris + fence, permits + fence, codes + fence
+        fee_nec = (
+            f"{county_disp}, {st} official building permit fees 2026",
+            f"{county_disp}, {st} NEC 2023 amendments",
+        )
+        permits = f"{permits} | {fee_nec[0]}"
+        codes = f"{codes} | {fee_nec[1]}"
+        return (juris, permits, codes)
 
     city_disp = city or "the municipality"
     loc = city_st or (f"{city_disp}, {st}" if st else city_disp)
@@ -149,6 +162,12 @@ def _scout_queries_for_location(
     )
     fence = _locality_data_fence(city, county, st, mode)
     juris, permits, codes = juris + fence, permits + fence, codes + fence
+    fee_nec = (
+        f"{city_disp}, {st} official building permit fees 2026",
+        f"{city_disp}, {st} NEC 2023 amendments",
+    )
+    permits = f"{permits} | {fee_nec[0]}"
+    codes = f"{codes} | {fee_nec[1]}"
     if _is_plano_texas(city, st):
         permits = f"{permits} | {PLANO_SCOUT_FEE_SCHEDULE}"
         codes = f"{codes} | {PLANO_SCOUT_AMENDMENTS_NEC}"

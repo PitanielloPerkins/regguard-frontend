@@ -509,10 +509,10 @@ def reverse_geocode_address(latitude: float, longitude: float) -> Dict[str, str]
     Server-side reverse geocode (Google Geocoding API, no HTTP Referer) for Locate Me UX.
     """
     try:
-        formatted, zip5 = google_reverse_geocode_us_latlng(latitude, longitude)
+        formatted, zip5, city = google_reverse_geocode_us_latlng(latitude, longitude)
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
-    return {"formatted_address": formatted, "zip": zip5}
+    return {"formatted_address": formatted, "zip": zip5, "city": city or ""}
 
 
 @app.post("/research")
@@ -521,6 +521,10 @@ async def research(
     zip_code: str = Form(
         "",
         description="5-digit ZIP from address selection (cross-check with geocode.py)",
+    ),
+    client_city: str = Form(
+        "",
+        description="Google Places locality — aligns scout queries when forward-geocode differs slightly",
     ),
     job_description: str = Form(""),
     search_limit: int = Form(5),
@@ -598,6 +602,11 @@ async def research(
 
             zip_for_scout = profile.zip5
             scout_jurisdiction = profile.to_scout_dict()
+            cc = (client_city or "").strip()
+            if cc and str(scout_jurisdiction.get("mode")) == "city":
+                gc_city = str(scout_jurisdiction.get("city") or "").strip()
+                if not gc_city or gc_city.lower() != cc.lower():
+                    scout_jurisdiction = {**scout_jurisdiction, "city": cc}
             scout_site = profile.formatted_address or site_line
 
             photo_analysis: Optional[str] = None
@@ -698,10 +707,11 @@ async def research(
                     "step_building_permits": "pass 2/3 — building permits (Firecrawl)",
                     "step_building_codes": "pass 3/3 — adopted codes (Firecrawl)",
                 }
-                _scout_reasoning: Dict[str, str] = {
-                    "step_jurisdiction": "Cross-referencing city/county AHJ boundaries with municipal anchors and permit portals…",
-                    "step_building_permits": "Scouting building department fee schedules, applications, and inspection checklists…",
-                    "step_building_codes": "Cross-referencing adopted codes and local amendments with the NEC baseline…",
+                _city_label = str((scout_jurisdiction or {}).get("city") or "").strip() or "local"
+                _scout_reasoning = {
+                    "step_jurisdiction": f"Scouting {_city_label} jurisdiction, AHJ hints, and trusted .gov anchors…",
+                    "step_building_permits": f"Scouting {_city_label} Building Dept — fee schedules and permit portals…",
+                    "step_building_codes": f"Cross-referencing {_city_label} adopted codes and NEC 2023 amendment deltas…",
                 }
                 yield _reasoning_sse_frame(
                     "scout",

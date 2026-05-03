@@ -403,6 +403,25 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   line-height: 1.45;
   color: rgba(168, 197, 232, 0.82);
   letter-spacing: 0.01em;
+  text-transform: none;
+}
+
+.rg-reasoning-step--inline {
+  margin: 0;
+  max-width: min(100%, 44rem);
+  font-size: 0.76rem;
+}
+
+.rg-phase--with-reasoning {
+  align-items: flex-start;
+}
+
+.rg-phase-text {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  flex: 1;
+  min-width: 0;
 }
 
 .rg-reasoning-step__label {

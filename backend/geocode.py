@@ -132,9 +132,9 @@ def _denied_hint(extra: str) -> str:
     return ""
 
 
-def google_reverse_geocode_us_latlng(lat: float, lon: float) -> Tuple[str, str]:
+def google_reverse_geocode_us_latlng(lat: float, lon: float) -> Tuple[str, str, str]:
     """
-    Reverse geocode WGS‑84 coords to formatted U.S. address + ZIP (Geocoding API, server-side key).
+    Reverse geocode WGS‑84 coords to formatted U.S. address + ZIP + locality (Geocoding API).
     """
     key = require_google_maps_key()
     lat_f = round(float(lat), 7)
@@ -177,8 +177,18 @@ def google_reverse_geocode_us_latlng(lat: float, lon: float) -> Tuple[str, str]:
             m = re.search(r"\b(\d{5})(?:-\d{4})?\b", formatted)
             if m:
                 z = m.group(1)
+        city_locality = ""
+        locality = ""
+        subloc = ""
+        for c in components:
+            types = set(c.get("types") or [])
+            if "locality" in types:
+                locality = str((c.get("long_name") or c.get("short_name") or "")).strip()
+            if "sublocality" in types or "sublocality_level_1" in types:
+                subloc = str((c.get("long_name") or c.get("short_name") or "")).strip()
+        city_locality = (locality or subloc or "").strip()
         if formatted and len(z) == 5:
-            return formatted, z
+            return formatted, z, city_locality
 
     raise ValueError(
         "This location is outside the United States or has no postal code — pick an address manually."

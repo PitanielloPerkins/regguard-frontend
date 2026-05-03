@@ -167,6 +167,17 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             "with each relevant `- [ ]` line noting verification of adopted edition with the AHJ."
         )
 
+    if city and state:
+        consultant_role += (
+            f" Universal Scout included explicit discovery phrases **{city}, {state} official building permit fees 2026** "
+            f"and **{city}, {state} NEC 2023 amendments** — weight matching `.gov` / Municode hits accordingly."
+        )
+    elif county_disp and state:
+        consultant_role += (
+            f" Universal Scout included explicit discovery phrases **{county_disp}, {state} official building permit fees 2026** "
+            f"and **{county_disp}, {state} NEC 2023 amendments** — weight matching `.gov` / Municode hits accordingly."
+        )
+
     if city:
         fee_verify_exact = (
             f'If no specific fee is found in the search results, include a `- [ ]` line exactly: '
@@ -274,6 +285,23 @@ def build_research_digest(raw: Dict[str, Any], source_urls: List[str], enhanced_
     state_guess = str(ju_blob.get("state") or ju_blob.get("state_short") or "").strip()
     county_guess = str(ju_blob.get("county") or "").strip()
 
+    universal_expert_scout_targets: Dict[str, str] = {}
+    if city_guess and state_guess:
+        universal_expert_scout_targets["official_building_permit_fees_2026"] = (
+            f"{city_guess}, {state_guess} official building permit fees 2026"
+        )
+        universal_expert_scout_targets["nec_2023_amendments"] = f"{city_guess}, {state_guess} NEC 2023 amendments"
+    elif county_guess and state_guess:
+        cdn = (
+            f"{county_guess} County"
+            if county_guess and not county_guess.lower().endswith("county")
+            else county_guess
+        )
+        universal_expert_scout_targets["official_building_permit_fees_2026"] = (
+            f"{cdn}, {state_guess} official building permit fees 2026"
+        )
+        universal_expert_scout_targets["nec_2023_amendments"] = f"{cdn}, {state_guess} NEC 2023 amendments"
+
     steps_digest: List[Dict[str, Any]] = []
     for key in ("step_jurisdiction", "step_building_permits", "step_building_codes"):
         block = raw.get(key) or {}
@@ -304,6 +332,7 @@ def build_research_digest(raw: Dict[str, Any], source_urls: List[str], enhanced_
         "tagged_priority_hits": tagged_priority_hits,
         "unique_source_urls": source_urls,
         "enhanced_job_context": (enhanced_query or "").strip(),
+        "universal_expert_scout_targets": universal_expert_scout_targets,
         "inspector_digest_directive": _build_inspector_digest_directive(raw),
     }
     if scout_has_no_trusted_results(raw):

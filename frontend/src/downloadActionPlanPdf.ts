@@ -48,13 +48,26 @@ function slugDate(): string {
 
 /** Strip internal fallback / API error / dev-only prose so it never lands in client PDFs. */
 function shouldDropPdfLine(line: string): boolean {
-  const lower = line.toLowerCase();
+  const t = line.trim();
+  if (!t) {
+    return false;
+  }
+  const lower = t.toLowerCase();
+  if (/workflow\s*trace/i.test(t)) {
+    return true;
+  }
+  if (/generated\s+without\s+claude/i.test(lower)) {
+    return true;
+  }
+  if (/enable\s+anthropic_api_key/i.test(lower)) {
+    return true;
+  }
+  if (lower.includes("anthropic_api_key") && (lower.includes("enable") || lower.includes("set "))) {
+    return true;
+  }
   return (
     lower.includes("claude action plan unavailable") ||
-    lower.includes("failed: error code") ||
-    lower.includes("enable anthropic_api_key") ||
-    lower.includes("generated without claude") ||
-    lower.includes("workflow trace")
+    lower.includes("failed: error code")
   );
 }
 

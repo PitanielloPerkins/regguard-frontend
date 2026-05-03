@@ -9,10 +9,12 @@ import {
 
 const CALLBACK_PREFIX = "__rgGoogleMapsCb_";
 
-/** After a Places selection: Google's formatted line + ZIP for optional server cross-check. */
+/** After a Places selection: formatted line + ZIP + locality for server scout alignment. */
 export type AddressSelection = {
   formattedAddress: string;
   zip: string;
+  /** Google Places `locality` (or sublocality) — forwarded as ``client_city`` on research. */
+  city?: string;
 };
 
 export type AddressAutocompleteHandle = {
@@ -50,6 +52,17 @@ function extractZip5FromFormattedAddress(formatted: string): string | null {
     return null;
   }
   return m[1] ?? null;
+}
+
+function extractLocalityFromPlaceComponents(
+  components: google.maps.places.AddressComponent[],
+): string | null {
+  const locality = components.find((c) => c.types.includes("locality"));
+  const sub = components.find(
+    (c) => c.types.includes("sublocality") || c.types.includes("sublocality_level_1"),
+  );
+  const text = (locality?.longText ?? sub?.longText ?? "").trim();
+  return text.length > 0 ? text : null;
 }
 
 export function mapsAutocompleteEnabled(): boolean {
@@ -202,8 +215,13 @@ export const AddressAutocomplete = forwardRef<AddressAutocompleteHandle, Props>(
             onSelRef.current(null);
             return;
           }
+          const cityFromPlace = extractLocalityFromPlaceComponents(comp);
           lastCommittedAddr.current = formatted;
-          onSelRef.current({ formattedAddress: formatted, zip });
+          onSelRef.current({
+            formattedAddress: formatted,
+            zip,
+            ...(cityFromPlace ? { city: cityFromPlace } : {}),
+          });
         };
 
         const onInput = () => {
