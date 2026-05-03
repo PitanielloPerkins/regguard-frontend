@@ -63,13 +63,13 @@ _CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's **field punch list** wri
 
 Scout results favor **.gov** and **Municode** for the input locality. Act as a **Master Electrician for that specific city or county**; output **only** `- [ ]` technical punch list lines under the required headings (no narrative paragraphs).
 
-When the digest locality is **Plano, Texas**, you **MUST** include under **Technical Punch List** a **MANDATORY GOTCHA: Plano Ordinance 250.50** block with `- [ ]` tasks for **two 8-foot ground rods** spaced **20 feet** apart (**Plano local rule** — **not** the **6-foot** rod-spacing narrative from generic NEC discussion). Cross-check codified wording on official Plano / Municode sources when the digest allows.
+When the digest locality is **Plano, Texas**, you **MUST** include under **Technical Punch List** a **MANDATORY GOTCHA: Plano Ordinance 250.50** block with `- [ ]` tasks for **two 8-foot grounding rods** spaced **20 feet** apart, **connected by a 2/0 AWG conductor** between rods per Plano (**not** the **6-foot** rod-spacing narrative from generic NEC discussion). Cross-check codified wording on official Plano / Municode sources when the digest allows.
 
 When the digest locality is **Plano, Texas**, also prioritize City of Plano amendments vs base NEC, fee schedules (including **2026** when cited), and inspection nuance from **only** Plano-applicable hits.
 
 When the digest locality is **Plano, Texas**, under **Permit Costs** include a `- [ ]` line for **Reg Guard 2026 sync**: **$75.00** total electrical permit (**$65.00** base + **$10.00** laborer) — confirm on official City of Plano fee schedule.
 
-When the digest locality is **Dallas, Texas**, under **Permit Costs** include the **$167.00** minimum **trade** permit reference as already stated; under **Technical Punch List** include **MANDATORY GOTCHA: Oncor coordination** with `- [ ]` tasks for **mandatory Oncor** notification and coordination before **service disconnect**, **meter seal** / **pull**, or other **utility-side** work.
+When the digest locality is **Dallas, Texas**, under **Permit Costs** include a `- [ ]` line stating **$167.00** total minimum **trade** permit (incl. **administrative fees**); under **Technical Punch List** include **MANDATORY GOTCHA: Oncor coordination** with `- [ ]` tasks for **mandatory Oncor** notification and coordination before **service disconnect**, **meter seal** / **pull**, or other **utility-side** work.
 
 The JSON includes ``inspector_digest_directive`` and may include ``plano_ord_250_50_requirement``, ``plano_electrical_permit_fee_sync_usd``, ``plano_electrical_permit_fee_2026_note``, ``dallas_minimum_trade_permit_usd``, ``dallas_minimum_trade_permit_note``, ``dallas_oncor_disconnect_coordination``, and ``empty_scout_nec_2023_fallback``:
 - **consultant_role**, **gotchas_guidance**, **fee_and_code_guidance**, **output_format**
@@ -83,7 +83,7 @@ Then **exactly** these headings in order—only ``- [ ] `` task lines after opti
 
 ### Permit Costs
 ### Technical Punch List
-Place **MANDATORY GOTCHA:** lines (with supporting `- [ ]` items) for local amendments that **differ** from national NEC when the digest supports it—for Plano, **250.50 / dual rods / 20 ft** is mandatory; other examples: exterior disconnect labeling, stricter working space, etc. Do not fabricate ordinance text.
+Place **MANDATORY GOTCHA:** lines (with supporting `- [ ]` items) for local amendments that **differ** from national NEC when the digest supports it—for Plano, **250.50 / dual 8 ft rods / 20 ft apart / 2/0 AWG bond** between rods is mandatory; other examples: exterior disconnect labeling, stricter working space, etc. Do not fabricate ordinance text.
 
 ### Inspection Must-Haves
 ### Reference Links
@@ -310,8 +310,8 @@ def _research_action_plan_fallback_markdown(
     if city.lower() == "plano" and (state or "").strip().upper() == "TX":
         punch_core.insert(
             0,
-            "- [ ] **MANDATORY GOTCHA: Plano Ordinance 250.50** — **Two 8-foot ground rods** with **20 feet** separation between rods "
-            "(**not** **6-foot** generic NEC-spacing narrative); verify on official Plano / Municode.",
+            "- [ ] **MANDATORY GOTCHA: Plano Ordinance 250.50** — **Two 8-foot grounding rods** **20 feet** apart, **connected by 2/0 AWG** "
+            "between rods (**not** **6-foot** generic NEC-spacing narrative); verify on official Plano / Municode.",
         )
         punch_core.insert(
             1,

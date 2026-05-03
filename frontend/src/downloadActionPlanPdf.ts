@@ -121,6 +121,7 @@ const PLANO_ELECTRICAL_PERMIT_PDF_LINES = [
   "### Permit Costs",
   "",
   "- [ ] **Electrical permit (Plano, TX — Reg Guard fee sync):** **$75.00** total — **$65.00** base permit + **$10.00** laborer fee. Confirm on the official City of Plano fee schedule before posting fees.",
+  "- [ ] **Plano Ord. 250.50 (Reg Guard sync):** Two **8 ft** grounding rods **20 ft** apart **connected by 2/0 AWG** between rods (**not** 6 ft NEC-spacing narrative); verify on official Plano / Municode.",
   "",
 ].join("\n");
 

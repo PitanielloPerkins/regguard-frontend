@@ -160,7 +160,7 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             " For **Plano, Texas**, use only **City of Plano** **.gov** and **Municode** hits in this digest when stating local rules; "
             f"anchor tasks to {addr} and Plano, TX."
             " **2026 data fence:** cite **$75.00** total electrical permit (**$65.00** base + **$10.00** laborer) from the official fee table "
-            "and **Ordinance 250.50**: **two 8-foot ground rods** with **20 feet** separation between rods (**not** **6-foot** NEC-spacing narrative)."
+            "and **Ordinance 250.50**: **two 8-foot grounding rods** **20 feet** apart **connected by 2/0 AWG** between rods (**not** **6-foot** NEC-spacing narrative)."
         )
     if empty_scout:
         consultant_role += (
@@ -199,8 +199,8 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
     if is_plano_tx:
         gotchas_guidance = (
             "**MANDATORY — Plano Ordinance 250.50:** Under **Technical Punch List**, include **MANDATORY GOTCHA: "
-            "Plano Ordinance 250.50** with `- [ ]` tasks requiring **two 8-foot ground rods** installed with **20 feet** "
-            "separation between rods (Plano **local** amendment — **not** the typical **6-foot** NEC minimum-spacing narrative "
+            "Plano Ordinance 250.50** with `- [ ]` tasks requiring **two 8-foot grounding rods** spaced **20 feet** apart, "
+            "**connected by a 2/0 AWG conductor** between rods (Plano **local** rule — **not** the typical **6-foot** NEC minimum-spacing narrative "
             "some crews assume). Cross-check wording on current Plano codified ordinance / Municode when reconciling.\n"
             "**Permit Costs — Plano:** include an explicit `- [ ]` line stating **$75.00** total (**$65.00** base + **$10.00** laborer) "
             "per **Reg Guard 2026 sync**, with AHJ confirmation on the official fee schedule.\n"
@@ -212,7 +212,7 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             "**MANDATORY — Dallas / Oncor:** Under **Technical Punch List**, include **MANDATORY GOTCHA: Oncor coordination** "
             "with `- [ ]` tasks requiring **mandatory Oncor notification / coordination** before **service disconnect**, **meter seal**, "
             "or **utility-side** work; confirm current Oncor contractor rules and scheduled outage / reconnect steps.\n"
-            "**Permit Costs — Dallas:** include an explicit `- [ ]` line for the **$167.00** minimum **trade** permit total "
+            "**Permit Costs — Dallas:** include an explicit `- [ ]` line for the **$167.00** total minimum **trade** permit "
             "(incl. **administrative fees**) per **Reg Guard sync**, with confirmation on official Dallas permit / fee pages."
         )
     else:
@@ -259,11 +259,11 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
     if is_plano_tx:
         fee_extra = (
             " **Reg Guard 2026 sync (Plano, TX):** Electrical permit **$75.00** total (**$65.00** base + **$10.00** laborer) — "
-            "confirm on the official City of Plano fee schedule. Tie to **Ordinance 250.50** (**20-foot** ground-rod separation)."
+            "confirm on the official City of Plano fee schedule. Tie to **Ordinance 250.50** (**20-foot** rod spacing, **2/0 AWG** between rods)."
         )
     elif is_dallas_tx:
         fee_extra = (
-            " **Reg Guard sync (Dallas, TX):** Minimum **trade** permit total **$167.00** including **administrative fees** "
+            " **Reg Guard sync (Dallas, TX):** Minimum **trade** permit **$167.00** total including **administrative fees** "
             "(confirm on official Dallas permit / fee pages). **Oncor** utility coordination is **mandatory** for **disconnects** / meter work."
         )
     else:
@@ -355,7 +355,7 @@ def build_research_digest(raw: Dict[str, Any], source_urls: List[str], enhanced_
     if city_guess.lower() == "dallas" and (state_guess or "").strip().upper() in ("TX",):
         payload["dallas_minimum_trade_permit_usd"] = 167.0
         payload["dallas_minimum_trade_permit_note"] = (
-            "Reg Guard sync: Dallas, TX minimum trade permit $167.00 including administrative fees (confirm on official city pages)."
+            "Reg Guard sync: Dallas, TX minimum **trade** permit **$167.00** total including administrative fees (confirm on official city pages)."
         )
         payload["dallas_oncor_disconnect_coordination"] = (
             "HARD REQUIREMENT (Dallas, TX): Include **MANDATORY GOTCHA: Oncor coordination** under **Technical Punch List** — "
@@ -370,7 +370,7 @@ def build_research_digest(raw: Dict[str, Any], source_urls: List[str], enhanced_
         )
         payload["plano_ord_250_50_requirement"] = (
             "HARD REQUIREMENT (Plano, TX): Under **Technical Punch List**, include **MANDATORY GOTCHA: Plano Ordinance 250.50** "
-            "with `- [ ]` tasks for **two 8-foot ground rods** at **20 feet** separation between rods (**not** **6-foot** "
+            "with `- [ ]` tasks for **two 8-foot grounding rods** **20 feet** apart **connected by 2/0 AWG** between rods (**not** **6-foot** "
             "rod-spacing from generic NEC narrative). Under **Permit Costs**, state the **$75.00** sync fee line."
         )
     return json.dumps(payload, ensure_ascii=False, indent=2)

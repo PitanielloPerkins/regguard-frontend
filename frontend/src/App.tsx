@@ -1,7 +1,7 @@
 /**
  * Reg Guard — Expert Brain UI: SSE research → Contractor Action Plan, Accept (copy), PDF punch list export.
  * **Hard-sync:** Universal Scout **data fence** (City, ST on every query) + WA-state SERP drop live in `backend/scraper.py`;
- * digest + system prompt enforce **Plano Ord. 250.50** (two 8 ft rods, 20 ft apart — not 6 ft NEC narrative).
+ * digest + system prompt enforce **Plano Ord. 250.50** (two 8 ft grounding rods, 20 ft apart, 2/0 AWG between rods — not 6 ft NEC narrative).
  */
 import { fetchEventSource } from "@microsoft/fetch-event-source";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
