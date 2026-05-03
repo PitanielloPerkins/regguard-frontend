@@ -116,12 +116,31 @@ function isPlanoTexas(options: { city?: string | null; siteAddress?: string | nu
   return /\bplano\b/.test(addr) && /\b(tx|texas)\b/.test(addr);
 }
 
+function isDallasTexas(options: { city?: string | null; siteAddress?: string | null }): boolean {
+  if ((options.city || "").trim().toLowerCase() === "dallas") {
+    return true;
+  }
+  const addr = (options.siteAddress || "").toLowerCase();
+  return /\bdallas\b/.test(addr) && /\b(tx|texas)\b/.test(addr);
+}
+
+/** Hard-coded field sync — keep in lockstep with ``backend/research_memo.py``. */
+const REG_GUARD_PLANO_PERMIT_TOTAL_USD = "75.00";
+const REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD = "167.00";
+
 /** Plano Building Inspection — synced total for PDF Permit Costs (base + laborer). */
 const PLANO_ELECTRICAL_PERMIT_PDF_LINES = [
   "### Permit Costs",
   "",
-  "- [ ] **Electrical permit (Plano, TX — Reg Guard fee sync):** **$75.00** total — **$65.00** base permit + **$10.00** laborer fee. Confirm on the official City of Plano fee schedule before posting fees.",
-  "- [ ] **Plano Ord. 250.50 (Reg Guard sync):** Two **8 ft** grounding rods **20 ft** apart **connected by 2/0 AWG** between rods (**not** 6 ft NEC-spacing narrative); verify on official Plano / Municode.",
+  `- [ ] **Electrical permit (Plano, TX — Reg Guard fee sync):** **$${REG_GUARD_PLANO_PERMIT_TOTAL_USD}** total — **$65.00** base permit + **$10.00** laborer fee. Confirm on the official City of Plano fee schedule before posting fees.`,
+  `- [ ] **Plano Ord. 250.50 (Reg Guard sync):** Two **8 ft** grounding rods **20 ft** apart **connected by 2/0 AWG** between rods (**not** 6 ft NEC-spacing narrative); verify on official Plano / Municode.`,
+  "",
+].join("\n");
+
+const DALLAS_TRADE_PERMIT_PDF_LINES = [
+  "### Permit Costs",
+  "",
+  `- [ ] **Trade permit (Dallas, TX — Reg Guard fee sync):** **$${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD}** minimum total including **administrative fees** (confirm on official Dallas permit / fee pages).`,
   "",
 ].join("\n");
 
@@ -163,6 +182,9 @@ export function downloadActionPlanPdf(options: {
   county?: string | null;
 }): void {
   let trimmed = markdownForPdfBody(options.markdown);
+  if (isDallasTexas(options)) {
+    trimmed = `${DALLAS_TRADE_PERMIT_PDF_LINES}\n${trimmed}`.trim();
+  }
   if (isPlanoTexas(options)) {
     trimmed = `${PLANO_ELECTRICAL_PERMIT_PDF_LINES}\n${trimmed}`.trim();
   }

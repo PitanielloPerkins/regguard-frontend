@@ -271,18 +271,15 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             ),
         )
 
-    plano_fee = _pf_amt
-    dallas_fee = _df_amt
-
     fee_extra = ""
     if is_plano_tx:
         fee_extra = (
-            f" **Reg Guard 2026 sync (Plano, TX):** Electrical permit **{plano_fee}** total (**$65.00** base + **$10.00** laborer) — "
+            f" **Reg Guard 2026 sync (Plano, TX):** Electrical permit **{_pf_amt}** total (**$65.00** base + **$10.00** laborer) — "
             "confirm on the official City of Plano fee schedule. Tie to **Ordinance 250.50** (**20-foot** rod spacing, **2/0 AWG** between rods)."
         )
     elif is_dallas_tx:
         fee_extra = (
-            f" **Reg Guard sync (Dallas, TX):** Minimum **trade** permit **{dallas_fee}** total including **administrative fees** "
+            f" **Reg Guard sync (Dallas, TX):** Minimum **trade** permit **{_df_amt}** total including **administrative fees** "
             "(confirm on official Dallas permit / fee pages). **Oncor** utility coordination is **mandatory** for **disconnects** / meter work."
         )
     else:
