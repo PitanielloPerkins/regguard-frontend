@@ -12,9 +12,10 @@ export default defineConfig({
   envDir: frontendRoot,
   plugins: [react()],
   server: {
-    host: '0.0.0.0',
+    /** IPv4 loopback — avoids ::1 / dual-stack blank-screen issues in some setups. */
+    host: '127.0.0.1',
     port: 5173,
-    strictPort: false,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',
