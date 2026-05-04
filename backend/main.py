@@ -38,6 +38,11 @@ from research_memo import (
 # Firecrawl Universal Scout (/v2/search, tight caps) — see ``scraper.py``.
 from scraper import clear_scout_run_caches, iter_universal_scout, normalize_us_zip
 from vision import iter_job_site_image_text_stream, normalize_vision_text
+from vision_agent import (
+    gemini_configured,
+    iter_reality_capture_audit_stream,
+    scout_summary_for_reality_capture,
+)
 
 # Sync reference: Dallas Building Inspection — minimum trade permit (incl. admin) used in digest/fallback prompts.
 _DALLAS_TX_MIN_TRADE_PERMIT_USD = 167.00
@@ -164,13 +169,13 @@ def _research_sse_cors_headers(request: Request) -> Dict[str, str]:
 
 
 def _build_enhanced_query(job_description: str, photo_analysis: Optional[str]) -> str:
-    """Single research context string: voice (job) + optional Claude 3.5 Sonnet vision (photo)."""
+    """Single research context string: voice (job) + optional multimodal photo audit text."""
     parts: list[str] = []
     jd = (job_description or "").strip()
     if jd:
         parts.append(f"[Job description (voice or typed)]\n{jd}")
     if photo_analysis and photo_analysis.strip():
-        parts.append(f"[Job-site photo — Claude 3.5 Sonnet vision analysis]\n{photo_analysis.strip()}")
+        parts.append(f"[Job-site photo — Reality Capture Audit]\n{photo_analysis.strip()}")
     if not parts:
         return "— (no job description or image provided; ZIP-only research)"
     return "\n\n".join(parts)
@@ -465,6 +470,33 @@ def _vision_queue_producer(
         q.put(("error", e))
 
 
+def _vision_gemini_queue_producer(
+    q: Queue,
+    image_bytes: bytes,
+    content_type: Optional[str],
+    filename: Optional[str],
+    scout_summary: str,
+    city: str,
+    state: str,
+    visual_holder: List[Any],
+) -> None:
+    try:
+        for fragment in iter_reality_capture_audit_stream(
+            image_bytes,
+            content_type,
+            filename,
+            scout_summary=scout_summary,
+            city=city,
+            state=state,
+            visual_audit_holder=visual_holder,
+        ):
+            if fragment:
+                q.put(("delta", fragment))
+        q.put(("done", None))
+    except Exception as e:
+        q.put(("error", e))
+
+
 def _safe_sse_data_frame(chunk: Dict[str, Any]) -> str:
     """SSE frame with ``data: …\\n\\n``. Fallback to a plain-text line if JSON cannot encode."""
     try:
@@ -584,10 +616,12 @@ async def research(
 
     Each event's ``data`` field is one JSON object (same schema as the former NDJSON lines).
 
-    Emits immediately to avoid proxy/client JSON timeouts, then streams Claude vision (if any),
+    Emits immediately to avoid proxy/client JSON timeouts, then streams Claude vision (if any, when Gemini is not used),
+    Firecrawl scout steps, optional Gemini Reality Capture Audit after scout (when ``GEMINI_API_KEY`` is set),
     Firecrawl scout steps, and word-sized chunks of the Contractor Action Plan.
 
     Events include: ``open``, ``heartbeat`` (during slow Firecrawl/vision work), ``vision_delta``,
+    ``visual_audit`` (Gemini Reality Capture bounding boxes, when configured),
     ``context``, ``jurisdiction`` (when geocoded),
     ``step`` (including ``step_ahj_identification`` before Universal Scout), ``step`` (scout),
     ``summary_delta``, ``complete``.
@@ -652,7 +686,10 @@ async def research(
             scout_site = profile.formatted_address or site_line
 
             photo_analysis: Optional[str] = None
-            if image_bytes:
+            visual_audit_payload: Optional[Dict[str, Any]] = None
+            defer_gemini_audit = bool(image_bytes and gemini_configured())
+
+            if image_bytes and not defer_gemini_audit:
                 content_type, filename = image_meta
                 q: Queue = Queue()
                 thread = threading.Thread(
@@ -683,16 +720,26 @@ async def research(
                 photo_analysis = normalize_vision_text("".join(raw_parts))
                 _log_research_step("vision", detail="Claude vision — done")
 
-            enhanced_query = _build_enhanced_query(job_description, photo_analysis)
-            yield _safe_sse_data_frame(
-                {
-                    "event": "context",
-                    "enhanced_query": enhanced_query,
-                    "job_description": jd,
-                    "photo_analysis": photo_analysis,
-                }
+            scout_enhanced_query = _build_enhanced_query(
+                job_description,
+                None if defer_gemini_audit else photo_analysis,
             )
-            _log_research_step("context", detail="enhanced query ready for scout")
+
+            if defer_gemini_audit:
+                enhanced_query = None
+            else:
+                enhanced_query = scout_enhanced_query
+
+            if not defer_gemini_audit:
+                yield _safe_sse_data_frame(
+                    {
+                        "event": "context",
+                        "enhanced_query": enhanced_query,
+                        "job_description": jd,
+                        "photo_analysis": photo_analysis,
+                    }
+                )
+                _log_research_step("context", detail="enhanced query ready for scout")
             yield _reasoning_sse_frame(
                 "scout",
                 "Scout — Packaging job context for jurisdiction-scoped discovery (gov & code publishers)…",
@@ -738,7 +785,7 @@ async def research(
                     iter_universal_scout(
                         zip_for_scout,
                         search_limit=lim,
-                        enhanced_context=enhanced_query,
+                        enhanced_context=scout_enhanced_query,
                         site_address=scout_site,
                         jurisdiction=scout_jurisdiction,
                         ahj_identification=ahj_for_scout,
@@ -808,6 +855,76 @@ async def research(
 
             raw = final_raw
             source_urls = filter_source_urls(_collect_source_urls(raw))
+
+            if defer_gemini_audit and image_bytes:
+                content_type, filename = image_meta
+                scout_text = scout_summary_for_reality_capture(raw)
+                city_j = str((scout_jurisdiction or {}).get("city") or "")
+                state_j = str((scout_jurisdiction or {}).get("state") or "")
+                visual_holder: List[Any] = []
+                q_vis: Queue = Queue()
+                thread_vis = threading.Thread(
+                    target=_vision_gemini_queue_producer,
+                    args=(
+                        q_vis,
+                        image_bytes,
+                        content_type,
+                        filename,
+                        scout_text,
+                        city_j,
+                        state_j,
+                        visual_holder,
+                    ),
+                    daemon=True,
+                )
+                _log_research_step(
+                    "vision",
+                    detail="Gemini Reality Capture Audit — multimodal vs scout hits",
+                )
+                yield _reasoning_sse_frame(
+                    "audit",
+                    "Reality Capture — Auditing site photo against scout hits (Gemini multimodal)…",
+                )
+                thread_vis.start()
+                raw_vis_parts: List[str] = []
+                while True:
+                    kind_v: str
+                    val_v: Any
+                    async for pkt in _with_heartbeats(run_in_threadpool(q_vis.get)):
+                        if isinstance(pkt, tuple) and pkt[0] == "__done__":
+                            kind_v, val_v = pkt[1]
+                            break
+                        yield pkt
+                    if kind_v == "delta":
+                        raw_vis_parts.append(cast(str, val_v))
+                        yield _safe_sse_data_frame({"event": "vision_delta", "text": cast(str, val_v)})
+                    elif kind_v == "done":
+                        break
+                    else:
+                        err_v = cast(Exception, val_v)
+                        yield _safe_sse_data_frame({"event": "error", "message": str(err_v)})
+                        return
+                photo_analysis = normalize_vision_text("".join(raw_vis_parts))
+                visual_audit_payload = visual_holder[0] if visual_holder else None
+                _log_research_step("vision", detail="Gemini Reality Capture Audit — done")
+                yield _safe_sse_data_frame({"event": "visual_audit", "payload": visual_audit_payload})
+                enhanced_query = _build_enhanced_query(job_description, photo_analysis)
+                yield _safe_sse_data_frame(
+                    {
+                        "event": "context",
+                        "enhanced_query": enhanced_query,
+                        "job_description": jd,
+                        "photo_analysis": photo_analysis,
+                    }
+                )
+                _log_research_step("context", detail="enhanced query + Reality Capture ready for digest")
+
+            if enhanced_query is None:
+                yield _safe_sse_data_frame(
+                    {"event": "error", "message": "Research digest missing enhanced query context."}
+                )
+                return
+
             _log_research_step("digest", detail="building structured research digest")
             yield _reasoning_sse_frame(
                 "scout",
@@ -885,6 +1002,7 @@ async def research(
                     "enhanced_query": enhanced_query,
                     "job_description": jd,
                     "photo_analysis": photo_analysis,
+                    "visual_audit": visual_audit_payload,
                 }
             )
         finally:
