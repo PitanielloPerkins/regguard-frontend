@@ -62,6 +62,56 @@ function parseVisualAuditPayload(v: unknown): VisualAuditPayload | null {
   return v as VisualAuditPayload;
 }
 
+type FutureRiskHit = {
+  step?: string;
+  title?: string;
+  url?: string;
+  snippet?: string;
+};
+
+type FutureRiskAlertPayload = {
+  active: boolean;
+  banner?: string;
+  severity?: string;
+  hits?: FutureRiskHit[];
+  notes?: string;
+};
+
+function parseFutureRiskPayload(v: unknown): FutureRiskAlertPayload | null {
+  if (v == null || typeof v !== "object") {
+    return null;
+  }
+  const o = v as Record<string, unknown>;
+  if (o.active === false) {
+    return { active: false, hits: [] };
+  }
+  if (o.active !== true) {
+    return null;
+  }
+  const hitsRaw = o.hits;
+  const hits: FutureRiskHit[] = [];
+  if (Array.isArray(hitsRaw)) {
+    for (const h of hitsRaw) {
+      if (h != null && typeof h === "object") {
+        const hr = h as Record<string, unknown>;
+        hits.push({
+          step: typeof hr.step === "string" ? hr.step : undefined,
+          title: typeof hr.title === "string" ? hr.title : undefined,
+          url: typeof hr.url === "string" ? hr.url : undefined,
+          snippet: typeof hr.snippet === "string" ? hr.snippet : undefined,
+        });
+      }
+    }
+  }
+  return {
+    active: true,
+    banner: typeof o.banner === "string" ? o.banner : "FUTURE RISK ALERT",
+    severity: typeof o.severity === "string" ? o.severity : undefined,
+    hits,
+    notes: typeof o.notes === "string" ? o.notes : undefined,
+  };
+}
+
 type NdjsonLine =
   | { event: "open" }
   | { event: "heartbeat"; ts?: number }
@@ -79,6 +129,7 @@ type NdjsonLine =
     }
   | { event: "step"; step?: string; data?: unknown }
   | { event: "reasoning"; phase?: string; text: string }
+  | { event: "future_risk_alert"; payload?: unknown }
   | { event: "summary_delta"; text: string }
   | {
       event: "complete";
@@ -91,6 +142,7 @@ type NdjsonLine =
       jurisdiction?: unknown;
       visual_audit?: unknown;
       ahj_label?: string | null;
+      future_risk_alert?: unknown;
     }
   | { event: "visual_audit"; payload: unknown }
   | { event: "error"; message: string };
@@ -260,6 +312,7 @@ export default function App() {
   const actionPlanPanelRef = useRef<HTMLDivElement | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [visualAudit, setVisualAudit] = useState<VisualAuditPayload | null>(null);
+  const [futureRiskAlert, setFutureRiskAlert] = useState<FutureRiskAlertPayload | null>(null);
   const [resultsTab, setResultsTab] = useState<"plan" | "visual">("plan");
   const [photoObjectUrl, setPhotoObjectUrl] = useState<string | null>(null);
 
@@ -358,6 +411,7 @@ export default function App() {
     setSseConnectionLive(false);
     setReasoningStep(null);
     setVisualAudit(null);
+    setFutureRiskAlert(null);
     setResultsTab("plan");
   }, []);
 
@@ -570,6 +624,11 @@ export default function App() {
               }
               break;
             }
+            case "future_risk_alert": {
+              const parsed = parseFutureRiskPayload((payload as { payload?: unknown }).payload);
+              setFutureRiskAlert(parsed?.active ? parsed : null);
+              break;
+            }
             case "step": {
               const name = typeof payload.step === "string" ? payload.step : "step";
               setPhase(`Research: ${name}`);
@@ -630,6 +689,12 @@ export default function App() {
                 const parsed = parseVisualAuditPayload(payload.visual_audit);
                 if (parsed) {
                   setVisualAudit(parsed);
+                }
+              }
+              if ("future_risk_alert" in payload && payload.future_risk_alert != null) {
+                const fr = parseFutureRiskPayload(payload.future_risk_alert);
+                if (fr?.active) {
+                  setFutureRiskAlert(fr);
                 }
               }
               break;
@@ -1487,6 +1552,38 @@ export default function App() {
             <div>
               <strong className="rg-subheading">Vision (streaming)</strong>
               <div className="vision-snippet">{visionText}</div>
+            </div>
+          ) : null}
+
+          {futureRiskAlert?.active ? (
+            <div className="rg-future-risk-alert" role="alert" aria-live="polite">
+              <div className="rg-future-risk-alert__title">{futureRiskAlert.banner ?? "FUTURE RISK ALERT"}</div>
+              <p className="rg-future-risk-alert__lead">
+                Scout flagged a <strong>future code edition or adoption-cycle signal</strong> for this jurisdiction (for
+                example <strong>2026 NEC</strong> or a pending ordinance). Confirm effective dates and amendments with
+                the AHJ before locking scope.
+              </p>
+              {futureRiskAlert.notes ? (
+                <p className="rg-future-risk-alert__notes">{futureRiskAlert.notes}</p>
+              ) : null}
+              {(futureRiskAlert.hits ?? []).length > 0 ? (
+                <ul className="rg-future-risk-alert__hits">
+                  {(futureRiskAlert.hits ?? []).map((h, i) => (
+                    <li key={`${h.url ?? h.title ?? "hit"}-${i}`}>
+                      {h.url ? (
+                        <a href={h.url} target="_blank" rel="noreferrer noopener">
+                          {h.title?.trim() || h.url}
+                        </a>
+                      ) : (
+                        <span>{h.title ?? "Source"}</span>
+                      )}
+                      {h.snippet?.trim() ? (
+                        <span className="rg-future-risk-alert__snippet"> — {h.snippet.trim()}</span>
+                      ) : null}
+                    </li>
+                  ))}
+                </ul>
+              ) : null}
             </div>
           ) : null}
 

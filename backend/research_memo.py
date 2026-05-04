@@ -10,10 +10,12 @@ import json
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, Iterator, List, Set
+from typing import Any, Dict, Iterator, List, Optional, Set
 
 from anthropic import Anthropic
 from dotenv import load_dotenv
+
+from scraper import future_risk_alerts_from_raw
 
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
@@ -363,7 +365,13 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def build_research_digest(raw: Dict[str, Any], source_urls: List[str], enhanced_query: str) -> str:
+def build_research_digest(
+    raw: Dict[str, Any],
+    source_urls: List[str],
+    enhanced_query: str,
+    *,
+    future_risk: Optional[Dict[str, Any]] = None,
+) -> str:
     """Compact research context for the action-plan model (no full page bodies)."""
     ju = raw.get("jurisdiction")
     ju_blob: Dict[str, Any] = ju if isinstance(ju, dict) else {}
@@ -411,6 +419,16 @@ def build_research_digest(raw: Dict[str, Any], source_urls: List[str], enhanced_
 
     tagged_priority_hits = _merge_tagged_hits(steps_digest)
 
+    fr = future_risk if future_risk is not None else future_risk_alerts_from_raw(raw)
+
+    directive = dict(_build_inspector_digest_directive(raw))
+    if fr.get("active"):
+        directive["future_risk_watchdog"] = (
+            "The digest includes `future_code_change_watchdog` with active=true. Open the Contractor Action Plan with "
+            'a prominent "### FUTURE RISK ALERT" section citing watchdog URLs and NEC-edition signals before routine '
+            "permit fee narrative."
+        )
+
     payload: Dict[str, Any] = {
         "zip": raw.get("zip"),
         "site_address": raw.get("site_address"),
@@ -421,7 +439,8 @@ def build_research_digest(raw: Dict[str, Any], source_urls: List[str], enhanced_
         "unique_source_urls": source_urls,
         "enhanced_job_context": (enhanced_query or "").strip(),
         "universal_expert_scout_targets": universal_expert_scout_targets,
-        "inspector_digest_directive": _build_inspector_digest_directive(raw),
+        "future_code_change_watchdog": fr,
+        "inspector_digest_directive": directive,
     }
     if scout_has_no_trusted_results(raw):
         payload["empty_scout_nec_2023_fallback"] = True

@@ -36,7 +36,13 @@ from research_memo import (
     scout_has_no_trusted_results,
 )
 # Firecrawl Universal Scout (/v2/search, tight caps) — see ``scraper.py``.
-from scraper import clear_scout_run_caches, iter_universal_scout, normalize_us_zip
+from scraper import (
+    clear_scout_run_caches,
+    format_future_risk_markdown,
+    future_risk_alerts_from_raw,
+    iter_universal_scout,
+    normalize_us_zip,
+)
 from calculations import permit_draft_calculation_response
 from vision_agent import (
     gemini_configured,
@@ -832,6 +838,8 @@ async def research(
 
             raw = final_raw
             source_urls = filter_source_urls(_collect_source_urls(raw))
+            future_risk_snapshot = future_risk_alerts_from_raw(raw)
+            yield _safe_sse_data_frame({"event": "future_risk_alert", "payload": future_risk_snapshot})
 
             if image_bytes:
                 content_type, filename = image_meta
@@ -908,7 +916,9 @@ async def research(
                 "scout",
                 "Scout complete — normalizing URLs and building a structured research digest…",
             )
-            digest = build_research_digest(raw, source_urls, enhanced_query)
+            digest = build_research_digest(
+                raw, source_urls, enhanced_query, future_risk=future_risk_snapshot
+            )
 
             summary: str
             if (os.getenv("ANTHROPIC_API_KEY") or "").strip():
@@ -965,6 +975,10 @@ async def research(
                     yield _safe_sse_data_frame({"event": "summary_delta", "text": chunk})
                     await asyncio.sleep(0)
 
+            fr_md = format_future_risk_markdown(future_risk_snapshot)
+            if fr_md:
+                summary = fr_md + "\n\n" + summary
+
             _log_research_step("complete", detail="streaming final payload to client")
             ju_complete = scout_jurisdiction or {}
             yield _safe_sse_data_frame(
@@ -982,6 +996,7 @@ async def research(
                     "job_description": jd,
                     "photo_analysis": photo_analysis,
                     "visual_audit": visual_audit_payload,
+                    "future_risk_alert": future_risk_snapshot,
                 }
             )
         finally:
