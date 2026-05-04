@@ -25,6 +25,41 @@ import {
 } from "./speech-recognition";
 import { downloadActionPlanPdf } from "./downloadActionPlanPdf";
 
+/** Gemini Reality Capture Audit payload (SSE ``visual_audit`` / ``complete``). */
+export type VisualDetection = {
+  label: string;
+  box_2d: [number, number, number, number];
+  status?: "ok" | "violation" | "unknown";
+};
+
+export type VisualAuditPayload = {
+  image_width: number;
+  image_height: number;
+  detections: VisualDetection[];
+  model_id?: string;
+  austin_clearance?: {
+    applies?: boolean;
+    edge_distance_px?: number | null;
+    estimated_clearance_inches?: number | null;
+    violates_36_in_rule?: boolean | null;
+    notes?: string;
+  };
+};
+
+function parseVisualAuditPayload(v: unknown): VisualAuditPayload | null {
+  if (v == null || typeof v !== "object") {
+    return null;
+  }
+  const o = v as Record<string, unknown>;
+  const w = o.image_width;
+  const h = o.image_height;
+  const dets = o.detections;
+  if (typeof w !== "number" || typeof h !== "number" || !Array.isArray(dets)) {
+    return null;
+  }
+  return v as VisualAuditPayload;
+}
+
 type NdjsonLine =
   | { event: "open" }
   | { event: "heartbeat"; ts?: number }
@@ -52,7 +87,9 @@ type NdjsonLine =
       city?: string | null;
       county?: string | null;
       jurisdiction?: unknown;
+      visual_audit?: unknown;
     }
+  | { event: "visual_audit"; payload: unknown }
   | { event: "error"; message: string };
 
 /** Markdown slice for live Universal Scout step payloads shown in the Contractor Action Plan panel. */
@@ -218,6 +255,9 @@ export default function App() {
   const [reasoningStep, setReasoningStep] = useState<string | null>(null);
   const actionPlanPanelRef = useRef<HTMLDivElement | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
+  const [visualAudit, setVisualAudit] = useState<VisualAuditPayload | null>(null);
+  const [resultsTab, setResultsTab] = useState<"plan" | "visual">("plan");
+  const [photoObjectUrl, setPhotoObjectUrl] = useState<string | null>(null);
 
   const setJobDescriptionRef = useRef(setJobDescription);
   setJobDescriptionRef.current = setJobDescription;
@@ -229,6 +269,23 @@ export default function App() {
   const canSubmit = useMemo(() => {
     return Boolean(selection?.formattedAddress && selection.zip && !busy);
   }, [selection, busy]);
+
+  useEffect(() => {
+    if (!imageFile) {
+      setPhotoObjectUrl((prev) => {
+        if (prev) {
+          URL.revokeObjectURL(prev);
+        }
+        return null;
+      });
+      return;
+    }
+    const url = URL.createObjectURL(imageFile);
+    setPhotoObjectUrl(url);
+    return () => {
+      URL.revokeObjectURL(url);
+    };
+  }, [imageFile]);
 
   /** Subtle reasoning trace above results (live scout / synthesis cues). */
   const agentStatusLine = useMemo(() => {
@@ -296,6 +353,8 @@ export default function App() {
     setPlanToolbarMsg(null);
     setSseConnectionLive(false);
     setReasoningStep(null);
+    setVisualAudit(null);
+    setResultsTab("plan");
   }, []);
 
   const handleNewJob = useCallback(() => {
@@ -514,6 +573,14 @@ export default function App() {
               }
               break;
             }
+            case "visual_audit": {
+              const rawPay = (payload as { payload?: unknown }).payload;
+              const parsed = parseVisualAuditPayload(rawPay);
+              if (parsed) {
+                setVisualAudit(parsed);
+              }
+              break;
+            }
             case "summary_delta": {
               const piece = typeof payload.text === "string" ? payload.text : "";
               if (!piece) {
@@ -543,6 +610,12 @@ export default function App() {
                 city: typeof payload.city === "string" ? payload.city : undefined,
                 county: typeof payload.county === "string" ? payload.county : undefined,
               });
+              if ("visual_audit" in payload && payload.visual_audit != null) {
+                const parsed = parseVisualAuditPayload(payload.visual_audit);
+                if (parsed) {
+                  setVisualAudit(parsed);
+                }
+              }
               break;
             }
             case "error": {
@@ -1372,6 +1445,44 @@ export default function App() {
             </div>
           ) : null}
 
+          <div className="rg-results-tabs" role="tablist" aria-label="Results views">
+            <button
+              type="button"
+              role="tab"
+              className={`rg-results-tab${resultsTab === "plan" ? " rg-results-tab--active" : ""}`}
+              aria-selected={resultsTab === "plan"}
+              id="rg-tab-plan"
+              aria-controls="rg-tab-panel-plan"
+              onClick={() => setResultsTab("plan")}
+            >
+              Contractor action plan
+            </button>
+            <button
+              type="button"
+              role="tab"
+              className={`rg-results-tab${resultsTab === "visual" ? " rg-results-tab--active" : ""}`}
+              aria-selected={resultsTab === "visual"}
+              id="rg-tab-visual"
+              aria-controls="rg-tab-panel-visual"
+              disabled={!photoObjectUrl}
+              title={
+                photoObjectUrl
+                  ? "Photo overlay from Reality Capture Audit"
+                  : "Attach a job-site photo to enable Visual Audit"
+              }
+              onClick={() => setResultsTab("visual")}
+            >
+              Visual Audit
+            </button>
+          </div>
+
+          <div
+            id="rg-tab-panel-plan"
+            role="tabpanel"
+            aria-labelledby="rg-tab-plan"
+            hidden={resultsTab !== "plan"}
+            className="rg-results-tab-panel"
+          >
           <div id="contractor-action-plan">
             <div className="rg-action-plan-header">
               <strong className="rg-subheading">Contractor action plan</strong>
@@ -1431,6 +1542,104 @@ export default function App() {
               </ul>
             </div>
           ) : null}
+          </div>
+
+          <div
+            id="rg-tab-panel-visual"
+            role="tabpanel"
+            aria-labelledby="rg-tab-visual"
+            hidden={resultsTab !== "visual"}
+            className="rg-results-tab-panel"
+          >
+            {!photoObjectUrl ? (
+              <p className="field-hint">Attach a photo on the left to use Visual Audit.</p>
+            ) : (
+              <>
+                <p className="field-hint rg-visual-audit-intro">
+                  Bounding boxes from the Reality Capture Audit (Gemini when <code>GEMINI_API_KEY</code> is set on
+                  the API). Red indicates a flagged clearance concern for labeled gas/electrical pairs (Austin
+                  heuristic); green is OK; neutral when geometry or labels are ambiguous.
+                </p>
+                <div className="rg-visual-audit-frame">
+                  <img src={photoObjectUrl} alt="Job-site photo for visual audit" className="rg-visual-audit-img" />
+                  {visualAudit?.detections?.length ? (
+                    <svg
+                      className="rg-visual-audit-svg"
+                      viewBox="0 0 1000 1000"
+                      preserveAspectRatio="none"
+                      aria-hidden
+                    >
+                      {visualAudit.detections.map((det, i) => {
+                        const [ymin, xmin, ymax, xmax] = det.box_2d;
+                        const bw = Math.max(0, xmax - xmin);
+                        const bh = Math.max(0, ymax - ymin);
+                        const strokeClass =
+                          det.status === "violation"
+                            ? "rg-vbox--bad"
+                            : det.status === "ok"
+                              ? "rg-vbox--ok"
+                              : "rg-vbox--unknown";
+                        return (
+                          <g key={`${det.label}-${i}`}>
+                            <rect
+                              x={xmin}
+                              y={ymin}
+                              width={bw}
+                              height={bh}
+                              className={`rg-vbox ${strokeClass}`}
+                            />
+                            <text x={xmin + 6} y={ymin + 22} className="rg-vbox-label">
+                              {det.label}
+                            </text>
+                          </g>
+                        );
+                      })}
+                    </svg>
+                  ) : null}
+                </div>
+                {visualAudit?.austin_clearance?.applies ? (
+                  <div className="rg-visual-audit-clearance" role="status">
+                    <strong>Austin clearance check</strong>
+                    {visualAudit.austin_clearance.edge_distance_px != null ? (
+                      <span>
+                        {" "}
+                        — edge distance ≈ {String(visualAudit.austin_clearance.edge_distance_px)} px
+                      </span>
+                    ) : null}
+                    {visualAudit.austin_clearance.estimated_clearance_inches != null ? (
+                      <span>
+                        {" "}
+                        (~{String(visualAudit.austin_clearance.estimated_clearance_inches)} in heuristic vs 36 in
+                        rule)
+                      </span>
+                    ) : null}
+                    {visualAudit.austin_clearance.violates_36_in_rule === true ? (
+                      <span className="rg-visual-flag"> — Flagged: likely under 36 in.</span>
+                    ) : null}
+                    {visualAudit.austin_clearance.violates_36_in_rule === false ? (
+                      <span className="rg-visual-ok"> — Heuristic spacing OK.</span>
+                    ) : null}
+                    {visualAudit.austin_clearance.notes ? (
+                      <p className="rg-visual-audit-notes">{visualAudit.austin_clearance.notes}</p>
+                    ) : null}
+                  </div>
+                ) : visualAudit ? (
+                  <p className="field-hint">
+                    No Austin-specific clearance geometry for this run (non-Austin locality or missing gas +
+                    electrical detections).
+                  </p>
+                ) : (
+                  <p className="field-hint">
+                    No structured overlay yet — finish a research run with the multimodal path (Gemini API key on the
+                    server). Claude-only vision does not emit bounding boxes.
+                  </p>
+                )}
+                {visualAudit?.model_id ? (
+                  <p className="field-hint rg-visual-model-id">Model: {visualAudit.model_id}</p>
+                ) : null}
+              </>
+            )}
+          </div>
         </section>
       </div>
 

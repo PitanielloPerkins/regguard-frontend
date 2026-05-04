@@ -5,3 +5,5 @@ python-dotenv
 pydantic
 python-multipart
 anthropic
+google-generativeai
+Pillow
