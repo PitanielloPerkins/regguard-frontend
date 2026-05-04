@@ -37,10 +37,10 @@ from research_memo import (
 )
 # Firecrawl Universal Scout (/v2/search, tight caps) — see ``scraper.py``.
 from scraper import clear_scout_run_caches, iter_universal_scout, normalize_us_zip
-from vision import iter_job_site_image_text_stream, normalize_vision_text
 from vision_agent import (
     gemini_configured,
     iter_reality_capture_audit_stream,
+    normalize_vision_text,
     scout_summary_for_reality_capture,
 )
 
@@ -455,21 +455,6 @@ def _iter_summary_word_chunks(text: str) -> Iterator[str]:
         yield m.group(0)
 
 
-def _vision_queue_producer(
-    q: Queue,
-    image_bytes: bytes,
-    content_type: Optional[str],
-    filename: Optional[str],
-) -> None:
-    try:
-        for fragment in iter_job_site_image_text_stream(image_bytes, content_type, filename):
-            if fragment:
-                q.put(("delta", fragment))
-        q.put(("done", None))
-    except Exception as e:
-        q.put(("error", e))
-
-
 def _vision_gemini_queue_producer(
     q: Queue,
     image_bytes: bytes,
@@ -478,6 +463,7 @@ def _vision_gemini_queue_producer(
     scout_summary: str,
     city: str,
     state: str,
+    zip5: str,
     visual_holder: List[Any],
 ) -> None:
     try:
@@ -488,6 +474,7 @@ def _vision_gemini_queue_producer(
             scout_summary=scout_summary,
             city=city,
             state=state,
+            zip5=zip5,
             visual_audit_holder=visual_holder,
         ):
             if fragment:
@@ -616,12 +603,12 @@ async def research(
 
     Each event's ``data`` field is one JSON object (same schema as the former NDJSON lines).
 
-    Emits immediately to avoid proxy/client JSON timeouts, then streams Claude vision (if any, when Gemini is not used),
-    Firecrawl scout steps, optional Gemini Reality Capture Audit after scout (when ``GEMINI_API_KEY`` is set),
-    Firecrawl scout steps, and word-sized chunks of the Contractor Action Plan.
+    Emits immediately to avoid proxy/client JSON timeouts, then runs Universal Scout, then **Gemini**
+    Reality Capture photo audit after scout when an image is included (requires API keys).
+    Streams word-sized chunks of the Contractor Action Plan.
 
     Events include: ``open``, ``heartbeat`` (during slow Firecrawl/vision work), ``vision_delta``,
-    ``visual_audit`` (Gemini Reality Capture bounding boxes, when configured),
+    ``visual_audit`` (Gemini Reality Capture bounding boxes; requires ``GEMINI_API_KEY`` / ``GOOGLE_API_KEY`` when a photo is sent),
     ``context``, ``jurisdiction`` (when geocoded),
     ``step`` (including ``step_ahj_identification`` before Universal Scout), ``step`` (scout),
     ``summary_delta``, ``complete``.
@@ -687,50 +674,29 @@ async def research(
 
             photo_analysis: Optional[str] = None
             visual_audit_payload: Optional[Dict[str, Any]] = None
-            defer_gemini_audit = bool(image_bytes and gemini_configured())
 
-            if image_bytes and not defer_gemini_audit:
-                content_type, filename = image_meta
-                q: Queue = Queue()
-                thread = threading.Thread(
-                    target=_vision_queue_producer,
-                    args=(q, image_bytes, content_type, filename),
-                    daemon=True,
+            if image_bytes and not gemini_configured():
+                yield _safe_sse_data_frame(
+                    {
+                        "event": "error",
+                        "message": (
+                            "Photo audit requires GEMINI_API_KEY or GOOGLE_API_KEY on the API "
+                            "(google-generativeai). Claude image analysis has been removed."
+                        ),
+                    }
                 )
-                _log_research_step("vision", detail="Claude vision — analyzing job-site image")
-                thread.start()
-                raw_parts: List[str] = []
-                while True:
-                    kind: str
-                    val: Any
-                    async for pkt in _with_heartbeats(run_in_threadpool(q.get)):
-                        if isinstance(pkt, tuple) and pkt[0] == "__done__":
-                            kind, val = pkt[1]
-                            break
-                        yield pkt
-                    if kind == "delta":
-                        raw_parts.append(cast(str, val))
-                        yield _safe_sse_data_frame({"event": "vision_delta", "text": cast(str, val)})
-                    elif kind == "done":
-                        break
-                    else:
-                        err = cast(Exception, val)
-                        yield _safe_sse_data_frame({"event": "error", "message": str(err)})
-                        return
-                photo_analysis = normalize_vision_text("".join(raw_parts))
-                _log_research_step("vision", detail="Claude vision — done")
+                return
 
-            scout_enhanced_query = _build_enhanced_query(
-                job_description,
-                None if defer_gemini_audit else photo_analysis,
-            )
+            pending_photo_audit = bool(image_bytes)
 
-            if defer_gemini_audit:
+            scout_enhanced_query = _build_enhanced_query(job_description, None)
+
+            if pending_photo_audit:
                 enhanced_query = None
             else:
                 enhanced_query = scout_enhanced_query
 
-            if not defer_gemini_audit:
+            if not pending_photo_audit:
                 yield _safe_sse_data_frame(
                     {
                         "event": "context",
@@ -856,7 +822,7 @@ async def research(
             raw = final_raw
             source_urls = filter_source_urls(_collect_source_urls(raw))
 
-            if defer_gemini_audit and image_bytes:
+            if image_bytes:
                 content_type, filename = image_meta
                 scout_text = scout_summary_for_reality_capture(raw)
                 city_j = str((scout_jurisdiction or {}).get("city") or "")
@@ -873,6 +839,7 @@ async def research(
                         scout_text,
                         city_j,
                         state_j,
+                        zip_for_scout,
                         visual_holder,
                     ),
                     daemon=True,

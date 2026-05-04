@@ -43,6 +43,8 @@ export type VisualAuditPayload = {
     estimated_clearance_inches?: number | null;
     violates_36_in_rule?: boolean | null;
     notes?: string;
+    trigger_zip?: string | null;
+    gas_meter_detected_for_trigger?: boolean;
   };
 };
 
@@ -1556,9 +1558,9 @@ export default function App() {
             ) : (
               <>
                 <p className="field-hint rg-visual-audit-intro">
-                  Bounding boxes from the Reality Capture Audit (Gemini when <code>GEMINI_API_KEY</code> is set on
-                  the API). Red indicates a flagged clearance concern for labeled gas/electrical pairs (Austin
-                  heuristic); green is OK; neutral when geometry or labels are ambiguous.
+                  Bounding boxes from Reality Capture (Gemini). ZIP 78704: automated Austin gas-meter vs electrical 36-inch
+                  clearance geometry runs only when the site ZIP is 78704 and a gas meter appears in labels.
+                  Red / green reflect heuristic clearance on gas + electrical pairs; amber when ambiguous.
                 </p>
                 <div className="rg-visual-audit-frame">
                   <img src={photoObjectUrl} alt="Job-site photo for visual audit" className="rg-visual-audit-img" />
@@ -1599,7 +1601,7 @@ export default function App() {
                 </div>
                 {visualAudit?.austin_clearance?.applies ? (
                   <div className="rg-visual-audit-clearance" role="status">
-                    <strong>Austin clearance check</strong>
+                    <strong>Austin 78704 gas clearance</strong>
                     {visualAudit.austin_clearance.edge_distance_px != null ? (
                       <span>
                         {" "}
@@ -1625,13 +1627,12 @@ export default function App() {
                   </div>
                 ) : visualAudit ? (
                   <p className="field-hint">
-                    No Austin-specific clearance geometry for this run (non-Austin locality or missing gas +
-                    electrical detections).
+                    No Austin 78704 gas-meter clearance block for this run (different ZIP, no gas meter label, or
+                    incomplete geometry).
                   </p>
                 ) : (
                   <p className="field-hint">
-                    No structured overlay yet — finish a research run with the multimodal path (Gemini API key on the
-                    server). Claude-only vision does not emit bounding boxes.
+                    No structured overlay yet — finish research with <code>GEMINI_API_KEY</code> on the server (photos use Gemini only).
                   </p>
                 )}
                 {visualAudit?.model_id ? (

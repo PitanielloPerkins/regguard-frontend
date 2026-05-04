@@ -2,7 +2,8 @@
 Reg Guard — Reality Capture Audit: Gemini multimodal analysis of job-site photos vs scout context.
 
 Uses Gemini 1.5 Pro (configurable) with JSON output for observations + normalized bounding boxes.
-For Austin, TX + gas meter present: estimates clearance using pixel geometry (meter width heuristic).
+**Austin 78704 gas clearance:** pixel geometry runs only when the site ZIP is **78704** and the model labels
+include a **gas meter** (see ``_gas_meter_detected_in_detections``).
 """
 from __future__ import annotations
 
@@ -20,7 +21,13 @@ from PIL import Image
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
 
-from vision import normalize_vision_text
+
+def normalize_vision_text(raw: str) -> str:
+    """Normalize concatenated audit text to a stable bullet-oriented shape."""
+    out = re.sub(r"[\n\r]{2,}", "\n", (raw or "").strip())
+    if not out:
+        return "• (No text returned from vision model; try a clearer photo.)"
+    return out
 
 try:
     import google.generativeai as genai  # type: ignore[import-untyped]
@@ -128,10 +135,23 @@ def _axis_aligned_rect_edge_distance_px(
 
 
 _GAS_LABEL = re.compile(r"gas.*(meter|valve)|meter.*gas|relief|regulator", re.I)
+_GAS_METER_LABEL = re.compile(
+    r"(gas\s*meter|meter.*\bgas\b|natural\s+gas\s*meter|gas\s+service\s+meter)",
+    re.I,
+)
 _ELEC_LABEL = re.compile(
     r"electrical|panel|disconnect|service|meter\s+socket|main|breaker|conduit|weatherhead",
     re.I,
 )
+
+
+def _gas_meter_detected_in_detections(detections: List[Dict[str, Any]]) -> bool:
+    """True when vision labels include an explicit gas *meter* (not valve-only)."""
+    for det in detections:
+        lab = str(det.get("label") or "")
+        if _GAS_METER_LABEL.search(lab):
+            return True
+    return False
 
 
 def _label_bucket(label: str) -> Optional[str]:
@@ -148,7 +168,7 @@ def _austin_clearance_geometry(
     height: int,
 ) -> Dict[str, Any]:
     """
-    Austin Design Criteria: ~36 in radial clearance between gas relief/meter zone and electrical equipment.
+    Austin Design Criteria (78704 program path): ~36 in clearance gas meter zone vs electrical equipment.
     Pixel distance + heuristic PPI from assumed residential gas meter width (~11 in).
     """
     gas_rects: List[Tuple[float, float, float, float]] = []
@@ -185,7 +205,7 @@ def _austin_clearance_geometry(
 
     if not gas_rects or not elec_rects:
         out["notes"] = (
-            "Austin 36-inch clearance check skipped — need both a gas meter/valve detection "
+            "Austin 78704 — 36-inch gas clearance check skipped — need both a gas meter detection "
             "and electrical equipment in frame."
         )
         return out
@@ -215,7 +235,7 @@ def _austin_clearance_geometry(
     if est_in is not None:
         out["violates_36_in_rule"] = est_in < 36.0
         out["notes"] = (
-            f"Heuristic: ~{est_in:.1f} in separation (edge-to-edge), assuming ~{assumed_meter_width_in:.0f} in "
+            f"Austin 78704 — heuristic ~{est_in:.1f} in separation (edge-to-edge), assuming ~{assumed_meter_width_in:.0f} in "
             f"visible gas-meter span for scale. AHJ field verification required."
         )
     return out
@@ -229,6 +249,20 @@ def _strip_json_fence(raw: str) -> str:
     return s.strip()
 
 
+def _austin_78704_clearance_skip_notes(zip5: str, detections: List[Dict[str, Any]]) -> str:
+    z = (zip5 or "").strip()
+    if z != "78704":
+        return (
+            "Austin 78704 — 36-inch gas-meter radial clearance geometry runs only when the job-site ZIP is **78704**."
+        )
+    if not _gas_meter_detected_in_detections(detections):
+        return (
+            "ZIP 78704 — gas-meter 36-inch clearance check skipped because no **gas meter** was detected in vision labels "
+            "(valve-only labels do not trigger this path)."
+        )
+    return ""
+
+
 def _run_gemini_audit_sync(
     image_bytes: bytes,
     content_type: Optional[str],
@@ -237,6 +271,7 @@ def _run_gemini_audit_sync(
     scout_summary: str,
     city: str,
     state: str,
+    zip5: str,
     width: int,
     height: int,
 ) -> Dict[str, Any]:
@@ -254,13 +289,22 @@ def _run_gemini_audit_sync(
     model = genai.GenerativeModel(_gemini_model_name())
     media = _normalize_media_type(content_type, filename)
 
-    locality = ", ".join(p for p in (city.strip(), state.strip()) if p) or "unknown locality"
+    zip_clean = (zip5 or "").strip()
+    locality_bits = [p for p in (city.strip(), state.strip()) if p]
+    if zip_clean:
+        locality_bits.append(f"ZIP {zip_clean}")
+    locality = ", ".join(locality_bits) or "unknown locality"
     austin_note = ""
-    if city.strip().lower() == "austin" and state.strip().upper() == "TX":
+    if zip_clean == "78704":
         austin_note = (
-            "LOCAL RULE FOCUS (City of Austin, TX): City Design Criteria require roughly **36 inches** clearance "
-            "between **gas relief / meter equipment** and **electrical equipment**. "
-            "If both appear in frame, flag likely violations using geometry from your boxes."
+            "LOCAL RULE FOCUS — **Austin ZIP 78704**: City Design Criteria include **36-inch** clearance between "
+            "**gas meter / relief** equipment and **electrical equipment**. "
+            "Label any visible **gas meter** clearly and box electrical gear tightly—geometry may be verified server-side."
+        )
+    elif city.strip().lower() == "austin" and state.strip().upper() == "TX":
+        austin_note = (
+            "Site is Austin, TX — note adopted codes / Design Criteria from scout context; "
+            "**78704-only** automated gas-meter clearance geometry applies elsewhere."
         )
 
     schema_instructions = (
@@ -329,16 +373,25 @@ def _run_gemini_audit_sync(
                 continue
             detections.append({"label": lab, "box_2d": box_n})
 
-    is_austin = city.strip().lower() == "austin" and state.strip().upper() == "TX"
-    geo_clearance = _austin_clearance_geometry(detections, width, height) if is_austin else {
-        "applies": False,
-        "gas_meter_detected": False,
-        "electrical_equipment_detected": False,
-        "edge_distance_px": None,
-        "estimated_clearance_inches": None,
-        "violates_36_in_rule": None,
-        "notes": "Austin-only radial clearance geometry not evaluated for this locality.",
-    }
+    run_78704_gas_geometry = zip_clean == "78704" and _gas_meter_detected_in_detections(detections)
+    strict_meter = _gas_meter_detected_in_detections(detections)
+    elec_label_seen = any(
+        _label_bucket(str(d.get("label") or "")) == "electrical" for d in detections
+    )
+    if run_78704_gas_geometry:
+        geo_clearance = _austin_clearance_geometry(detections, width, height)
+    else:
+        geo_clearance = {
+            "applies": False,
+            "gas_meter_detected": strict_meter,
+            "electrical_equipment_detected": elec_label_seen,
+            "edge_distance_px": None,
+            "estimated_clearance_inches": None,
+            "violates_36_in_rule": None,
+            "notes": _austin_78704_clearance_skip_notes(zip_clean, detections),
+        }
+    geo_clearance["trigger_zip"] = "78704" if zip_clean == "78704" else None
+    geo_clearance["gas_meter_detected_for_trigger"] = strict_meter
 
     model_clearance = data.get("austin_clearance")
     notes_extra = ""
@@ -379,7 +432,7 @@ def _run_gemini_audit_sync(
 
     if clearance_block.get("applies") and isinstance(obs_text, str):
         extra = (
-            f"\n• **Reality Capture (Austin clearance):** edge distance ≈ {clearance_block.get('edge_distance_px')} px; "
+            f"\n• **Reality Capture (Austin 78704 gas clearance):** edge distance ≈ {clearance_block.get('edge_distance_px')} px; "
             f"estimated ~{clearance_block.get('estimated_clearance_inches')} in separation (heuristic). "
             f"{'FLAG: under 36 in — verify in field.' if violates is True else ''}"
             f"{'Passes heuristic 36 in spacing.' if violates is False else ''}"
@@ -397,6 +450,7 @@ def run_reality_capture_audit(
     scout_summary: str,
     city: str,
     state: str,
+    zip5: str,
 ) -> Dict[str, Any]:
     """Blocking Gemini multimodal audit; returns photo_analysis + visual_audit dict."""
     img = Image.open(io.BytesIO(image_bytes))
@@ -408,6 +462,7 @@ def run_reality_capture_audit(
         scout_summary=scout_summary,
         city=city,
         state=state,
+        zip5=zip5,
         width=int(width),
         height=int(height),
     )
@@ -421,6 +476,7 @@ def iter_reality_capture_audit_stream(
     scout_summary: str,
     city: str,
     state: str,
+    zip5: str,
     visual_audit_holder: Optional[List[Any]] = None,
 ) -> Iterator[str]:
     """Yield incremental text fragments (bullet lines) for SSE vision_delta."""
@@ -431,6 +487,7 @@ def iter_reality_capture_audit_stream(
         scout_summary=scout_summary,
         city=city,
         state=state,
+        zip5=zip5,
     )
     if visual_audit_holder is not None:
         visual_audit_holder.append(audit.get("visual_audit"))
