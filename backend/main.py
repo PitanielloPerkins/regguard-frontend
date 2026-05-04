@@ -37,6 +37,7 @@ from research_memo import (
 )
 # Firecrawl Universal Scout (/v2/search, tight caps) — see ``scraper.py``.
 from scraper import clear_scout_run_caches, iter_universal_scout, normalize_us_zip
+from calculations import permit_draft_calculation_response
 from vision_agent import (
     gemini_configured,
     iter_reality_capture_audit_stream,
@@ -537,6 +538,16 @@ def root() -> Dict[str, str]:
     }
 
 
+@app.get("/permit-draft-calculations")
+def permit_draft_calculations(job_description: str = "") -> Dict[str, Any]:
+    """
+    NEC Article 220 / 310 illustrative snapshot for **200 A upgrade** permit drafts.
+
+    Drives the frontend **Permit Submittal Package** PDF section (load VA, feeder amps, copper size).
+    """
+    return permit_draft_calculation_response(job_description)
+
+
 @app.get("/dashboard-revision")
 def dashboard_revision() -> Dict[str, str]:
     """
@@ -963,6 +974,7 @@ async def research(
                     "site_address": raw.get("site_address"),
                     "city": ju_complete.get("city") or None,
                     "county": ju_complete.get("county") or None,
+                    "ahj_label": ju_complete.get("label") or None,
                     "jurisdiction": raw.get("jurisdiction"),
                     "summary": summary,
                     "source_urls": source_urls,
