@@ -390,6 +390,56 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   color: var(--rg-muted);
 }
 
+/** Code-Change Monitoring Agent — prominent NEC / adoption-cycle cue above results tabs. */
+.rg-future-risk-alert {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 2px solid rgba(251, 191, 36, 0.75);
+  background: linear-gradient(135deg, rgba(251, 191, 36, 0.14), rgba(245, 158, 11, 0.08));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.rg-future-risk-alert__title {
+  font-family: "Inter", "Roboto", system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 0.95rem;
+  letter-spacing: 0.06em;
+  color: #fcd34d;
+  margin-bottom: 0.45rem;
+}
+
+.rg-future-risk-alert__lead {
+  margin: 0 0 0.35rem;
+  font-size: 0.88rem;
+  line-height: 1.5;
+  color: var(--rg-text);
+}
+
+.rg-future-risk-alert__notes {
+  margin: 0 0 0.5rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--rg-muted);
+}
+
+.rg-future-risk-alert__hits {
+  margin: 0.35rem 0 0;
+  padding-left: 1.15rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+}
+
+.rg-future-risk-alert__hits a {
+  color: #fde68a;
+  font-weight: 600;
+}
+
+.rg-future-risk-alert__snippet {
+  color: var(--rg-muted);
+  font-weight: 400;
+}
+
 .rg-results-panel h2 {
   margin-bottom: 0.5rem;
 }
