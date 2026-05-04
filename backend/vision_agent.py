@@ -360,12 +360,14 @@ def _run_gemini_audit_sync(
 
     for det in detections:
         bucket = _label_bucket(det["label"])
-        if violates is True:
-            det["status"] = "violation" if bucket else "unknown"
-        elif violates is False:
-            det["status"] = "ok" if bucket else "unknown"
-        else:
+        if violates is True and bucket in ("gas", "electrical"):
+            det["status"] = "violation"
+        elif violates is False and bucket in ("gas", "electrical"):
+            det["status"] = "ok"
+        elif bucket in ("gas", "electrical"):
             det["status"] = "unknown"
+        else:
+            det["status"] = "ok"
 
     visual_audit = {
         "image_width": width,
