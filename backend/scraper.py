@@ -56,7 +56,44 @@ AUSTIN_SCOUT_DESIGN_CRITERIA_ELECTRICAL = (
 )
 
 
-def _locality_data_fence(city: str, county: str, st: str, mode: str) -> str:
+# Code-Change Monitoring Agent — SERP cues merged into the building-codes pass (trusted domains only).
+CODE_CHANGE_SCOUT_UPCOMING_ADOPTION = (
+    "upcoming building code adoption NEC NFPA 70 effective date transition council workshop"
+)
+CODE_CHANGE_SCOUT_ORDINANCE_MINUTES = (
+    "city council agenda minutes ordinance building code amendment hearing first reading"
+)
+
+
+def _append_code_change_monitor_queries(
+    codes_line: str,
+    *,
+    zip_tag: str,
+    city: str,
+    county: str,
+    st: str,
+    mode: str,
+) -> str:
+    """Augment Universal Scout 3 (codes) with localized adoption-cycle / minutes discovery."""
+    city = (city or "").strip()
+    county = (county or "").strip()
+    st = (st or "").strip()
+    m = (mode or "").strip().lower()
+    if m == "county" or (not city and county):
+        county_disp = f"{county} County" if county and not county.lower().endswith("county") else county
+        loc = f"{county_disp}, {st}".strip().strip(",") if st else county_disp
+        extra = (
+            f"{loc} {CODE_CHANGE_SCOUT_UPCOMING_ADOPTION} — {zip_tag} | "
+            f"{loc} {CODE_CHANGE_SCOUT_ORDINANCE_MINUTES} — {zip_tag}"
+        )
+        return f"{codes_line} | {extra}"
+    city_disp = city or "municipality"
+    loc_cs = f"{city_disp}, {st}".strip().strip(",") if st else city_disp
+    extra = (
+        f"{loc_cs} {CODE_CHANGE_SCOUT_UPCOMING_ADOPTION} — {zip_tag} | "
+        f"{loc_cs} {CODE_CHANGE_SCOUT_ORDINANCE_MINUTES} — {zip_tag}"
+    )
+    return f"{codes_line} | {extra}"
     """
     Append a **looser** locality cue on every scout line (still names City, ST or County, ST) so queries read like
     official permit/code discovery—not a harsh ``ONLY …`` filter that can zero-out SERP. Documented from ``main``.
@@ -125,7 +162,8 @@ def _scout_queries_for_location(
             ),
             (
                 f"US {zip_tag} adopted building code amendments codified law official — {zip_tag} | "
-                f"US {zip_tag} NEC 2023 amendments"
+                f"US {zip_tag} NEC 2023 amendments | "
+                f"US {zip_tag} upcoming NEC code adoption ordinance council agenda minutes — {zip_tag}"
             ),
         )
 
@@ -159,6 +197,14 @@ def _scout_queries_for_location(
         )
         permits = f"{permits} | {fee_nec[0]}"
         codes = f"{codes} | {fee_nec[1]}"
+        codes = _append_code_change_monitor_queries(
+            codes,
+            zip_tag=zip_tag,
+            city=city,
+            county=county,
+            st=st,
+            mode=mode,
+        )
         return (juris, permits, codes)
 
     city_disp = city or "the municipality"
@@ -188,6 +234,14 @@ def _scout_queries_for_location(
     if _is_austin_texas(city, st):
         permits = f"{permits} | {AUSTIN_SCOUT_DEVELOPMENT_FEES_SURCHARGE}"
         codes = f"{codes} | {AUSTIN_SCOUT_DESIGN_CRITERIA_ELECTRICAL}"
+    codes = _append_code_change_monitor_queries(
+        codes,
+        zip_tag=zip_tag,
+        city=city,
+        county=county,
+        st=st,
+        mode=mode,
+    )
     return (juris, permits, codes)
 
 # Reuse cached scrapes where possible (24h) when single-page scrape is enabled elsewhere.
@@ -545,7 +599,8 @@ def _final_scout_response(
             "Universal Scout 1 — Jurisdiction: city/county AHJ hints (trusted hosts).",
             "Universal Scout 2 — Permits: **city** or **county** building department (steered from address).",
             "Universal Scout 3 — Building codes: **city-specific** (incorporated) or **county-specific** "
-            "(unincorporated) adopted codes and amendments.",
+            "(unincorporated) adopted codes and amendments, plus **Code-Change Monitoring** cues "
+            "(upcoming adoptions / council minutes keywords).",
         ]
     )
     out: Dict[str, Any] = {
@@ -586,6 +641,140 @@ def _final_scout_response(
     if ahj:
         out["step_ahj_identification"] = ahj
     return out
+
+
+_FUTURE_YEAR_RE = re.compile(r"\b20(2[6-9]|3[0-9])\b")
+
+
+def _blob_future_code_signal(blob: str) -> bool:
+    """Heuristic: upcoming cycle language + future-looking edition years on NEC / building codes."""
+    if not _FUTURE_YEAR_RE.search(blob or ""):
+        return False
+    b = (blob or "").lower()
+    code_ok = any(
+        x in b
+        for x in (
+            "nec",
+            "national electrical code",
+            "nfpa 70",
+            "nfpa-70",
+            "electrical code",
+            "building code",
+            "ibc",
+            "irc",
+            "energy code",
+            "ordinance",
+        )
+    )
+    if not code_ok:
+        return False
+    proc_ok = any(
+        x in b
+        for x in (
+            "adopt",
+            "adoption",
+            "effective",
+            "implement",
+            "transition",
+            "propose",
+            "proposed",
+            "ordinance",
+            "council",
+            "commission",
+            "hearing",
+            "reading",
+            "agenda",
+            "minutes",
+            "workshop",
+            "upcoming",
+            "schedule",
+            "scheduled",
+            "future",
+            "amendment",
+            "code change",
+            "cycle",
+        )
+    )
+    span_ok = bool(
+        re.search(r"\b20(2[6-9]|3[0-9])\b\s*.{0,72}\b(nec|nfpa\s*70|electrical\s+code)\b", b, re.I)
+        or re.search(r"\b(nec|nfpa\s*70)\b\s*.{0,72}\b20(2[6-9]|3[0-9])\b", b, re.I)
+    )
+    return proc_ok or span_ok
+
+
+def future_risk_alerts_from_raw(raw: Dict[str, Any]) -> Dict[str, Any]:
+    """Scan trusted scout rows for newer NEC / adoption-cycle signals (Code-Change Monitoring Agent)."""
+    seen: set[str] = set()
+    hits_out: List[Dict[str, Any]] = []
+    for step_key in ("step_jurisdiction", "step_building_permits", "step_building_codes"):
+        if len(hits_out) >= 10:
+            break
+        block = raw.get(step_key)
+        if not isinstance(block, dict):
+            continue
+        for item in block.get("results") or []:
+            if len(hits_out) >= 10:
+                break
+            if not isinstance(item, dict):
+                continue
+            url = str(item.get("url") or "").strip()
+            title = str(item.get("title") or "")
+            desc = str(item.get("description") or "")
+            blob = f"{title} {desc}"
+            if not _blob_future_code_signal(blob):
+                continue
+            dedupe = url or f"{title}|{desc[:80]}"
+            if dedupe in seen:
+                continue
+            seen.add(dedupe)
+            hits_out.append(
+                {
+                    "step": step_key,
+                    "title": title or url or "(untitled)",
+                    "url": url,
+                    "snippet": (desc or "")[:360],
+                }
+            )
+    active = bool(hits_out)
+    return {
+        "active": active,
+        "banner": "FUTURE RISK ALERT",
+        "severity": "future_code_cycle_signal" if active else "none",
+        "hits": hits_out,
+        "notes": (
+            "Automated scan of Universal Scout titles/snippets on trusted domains only. "
+            "Confirm council actions and effective dates with the AHJ."
+        ),
+    }
+
+
+def format_future_risk_markdown(fr: Dict[str, Any]) -> str:
+    """Markdown block prepended to the Contractor Action Plan so PDF exports retain watchdog output."""
+    if not fr.get("active"):
+        return ""
+    lines = [
+        "### FUTURE RISK ALERT",
+        "",
+        "**Watchdog — Code-change monitoring:** Scout hits reference a **future code edition or adoption-cycle signal** "
+        "(for example **2026 NEC** or a later cycle). Verify the **effective NEC edition** and **local amendments** with "
+        "the AHJ before locking specifications or inspection expectations.",
+        "",
+        "**Automated source flags (review live pages):**",
+        "",
+    ]
+    for h in fr.get("hits") or []:
+        title = str(h.get("title") or "Source").strip()
+        url = str(h.get("url") or "").strip()
+        lines.append(f"- **{title}** — {url}" if url else f"- **{title}**")
+    lines.extend(
+        [
+            "",
+            "- [ ] **Mandatory:** Confirm jurisdiction **code adoption schedule** (readings, ordinance numbers, effective date) "
+            "and whether **2026 NEC** (or newer) is pending vs currently enforced.",
+            "",
+        ]
+    )
+    return "\n".join(lines)
 
 
 def iter_universal_scout(
