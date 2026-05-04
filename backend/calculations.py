@@ -3,7 +3,7 @@ Reg Guard — NEC-oriented permit drafting helpers (illustrative baseline).
 
 These routines support **Autonomous Permit Draftsman** PDF output. Values follow a **NEC 2023-style**
 dwelling **Article 220** standard-method narrative sized for a typical **200 A service upgrade**
-when explicit Betterment schedules are not supplied on the job description.
+when explicit field-verified load schedules are not supplied on the job description.
 
 **Important:** Adopted NEC edition, local amendments, utility allowances, and AHJ worksheets control
 in the field — this module is a planning aid only.

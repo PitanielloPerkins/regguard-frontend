@@ -184,12 +184,153 @@ function markdownForPdfBody(raw: string): string {
   return bodyLines.join("\n").trim();
 }
 
+/** JSON from ``GET /permit-draft-calculations`` — mirrors ``backend/calculations.py``. */
+export type PermitDraftCalculations = {
+  scope: string;
+  nec_edition_note: string;
+  article_220: {
+    line_items: Array<{ description: string; va: number; ref: string }>;
+    total_calculated_va: number;
+    feeder_amps_at_240v: number;
+    main_breaker_frame_a: number;
+    calculation_notes: string[];
+  };
+  article_310: {
+    conductor_material: string;
+    insulation_assumption: string;
+    minimum_ampacity_target_a: number;
+    main_breaker_frame_a: number;
+    selected_conductor_display: string;
+    tabular_ampacity_a: number;
+    table_ref: string;
+    ocpd_notes?: string[];
+    notes: string;
+  };
+  disclaimer: string;
+};
+
+/** Minimal vision overlay input (matches ``VisualAuditPayload`` without importing App). */
+export type PermitVisionOverlay = {
+  detections?: Array<{
+    label: string;
+    box_2d: [number, number, number, number];
+    status?: string;
+  }>;
+} | null;
+
+export async function fetchPermitDraftCalculations(jobDescription: string): Promise<PermitDraftCalculations> {
+  const q = new URLSearchParams();
+  if (jobDescription.trim()) {
+    q.set("job_description", jobDescription.trim());
+  }
+  const res = await fetch(`/api/permit-draft-calculations?${q}`, { cache: "no-store" });
+  if (!res.ok) {
+    const t = await res.text().catch(() => "");
+    throw new Error(t.trim() || `Permit calculations failed (HTTP ${res.status}).`);
+  }
+  return (await res.json()) as PermitDraftCalculations;
+}
+
+/** Rasterize the uploaded photo with Vision Agent boxes for PDF embedding. */
+export async function renderAnnotatedSitePhotoDataUrl(
+  photoObjectUrl: string | null,
+  vision: PermitVisionOverlay,
+): Promise<string | null> {
+  if (!photoObjectUrl) {
+    return null;
+  }
+  return new Promise((resolve) => {
+    const img = new Image();
+    img.onload = () => {
+      try {
+        const w = img.naturalWidth;
+        const h = img.naturalHeight;
+        if (!w || !h) {
+          resolve(null);
+          return;
+        }
+        const canvas = document.createElement("canvas");
+        canvas.width = w;
+        canvas.height = h;
+        const ctx = canvas.getContext("2d");
+        if (!ctx) {
+          resolve(null);
+          return;
+        }
+        ctx.drawImage(img, 0, 0);
+        const dets = vision?.detections;
+        if (dets?.length) {
+          const lw = Math.max(2, Math.round(w / 380));
+          for (const det of dets) {
+            const [ymin, xmin, ymax, xmax] = det.box_2d;
+            const sx = (xmin / 1000) * w;
+            const sy = (ymin / 1000) * h;
+            const sw = ((xmax - xmin) / 1000) * w;
+            const sh = ((ymax - ymin) / 1000) * h;
+            ctx.strokeStyle =
+              det.status === "violation" ? "#dc2626" : det.status === "ok" ? "#16a34a" : "#ca8a04";
+            ctx.lineWidth = lw;
+            ctx.strokeRect(sx, sy, sw, sh);
+            const fs = Math.max(13, Math.round(w / 52));
+            ctx.font = `600 ${fs}px Helvetica, Arial, sans-serif`;
+            ctx.fillStyle = "rgba(248,250,252,0.95)";
+            ctx.strokeStyle = "rgba(15,23,42,0.85)";
+            ctx.lineWidth = Math.ceil(lw * 0.9);
+            const ly = sy + fs + 4;
+            ctx.strokeText(det.label, sx + 4, ly);
+            ctx.fillText(det.label, sx + 4, ly);
+          }
+        }
+        resolve(canvas.toDataURL("image/jpeg", 0.88));
+      } catch {
+        resolve(null);
+      }
+    };
+    img.onerror = () => resolve(null);
+    img.src = photoObjectUrl;
+  });
+}
+
+export async function downloadPermitPackagePdf(options: {
+  markdown: string;
+  siteAddress?: string | null;
+  zip?: string | null;
+  city?: string | null;
+  county?: string | null;
+  jobDescription: string;
+  visualAudit: PermitVisionOverlay;
+  photoObjectUrl: string | null;
+  ahjLabel: string | null;
+}): Promise<void> {
+  const [calculations, annotatedPhotoDataUrl] = await Promise.all([
+    fetchPermitDraftCalculations(options.jobDescription),
+    renderAnnotatedSitePhotoDataUrl(options.photoObjectUrl, options.visualAudit),
+  ]);
+  downloadActionPlanPdf({
+    markdown: options.markdown,
+    siteAddress: options.siteAddress,
+    zip: options.zip,
+    city: options.city,
+    county: options.county,
+    permitPackage: {
+      calculations,
+      annotatedPhotoDataUrl,
+      ahjLabel: options.ahjLabel,
+    },
+  });
+}
+
 export function downloadActionPlanPdf(options: {
   markdown: string;
   siteAddress?: string | null;
   zip?: string | null;
   city?: string | null;
   county?: string | null;
+  permitPackage?: {
+    calculations: PermitDraftCalculations;
+    annotatedPhotoDataUrl: string | null;
+    ahjLabel: string | null;
+  };
 }): void {
   let trimmed = markdownForPdfBody(options.markdown);
   if (isDallasTexas(options)) {
@@ -201,6 +342,8 @@ export function downloadActionPlanPdf(options: {
   if (!trimmed) {
     return;
   }
+
+  const permitPkg = options.permitPackage;
 
   const pdf = new jsPDF({ unit: "mm", format: "letter", orientation: "portrait" });
   const pageW = pdf.internal.pageSize.getWidth();
@@ -405,6 +548,98 @@ export function downloadActionPlanPdf(options: {
   pdf.line(margin, y, pageW - margin, y);
   y += 6;
 
+  /* ----- PERMIT SUBMITTAL PACKAGE (Autonomous Permit Draftsman) ----- */
+  if (permitPkg) {
+    const a220 = permitPkg.calculations.article_220;
+    const a310 = permitPkg.calculations.article_310;
+    checkBreak(52);
+    pdf.setFont(PDF_SANS, "bold");
+    pdf.setFontSize(11);
+    pdf.setTextColor(...RG_NAVY);
+    pdf.text("PERMIT SUBMITTAL PACKAGE", margin, y);
+    y += 7;
+    pdf.setFont(PDF_SANS, "normal");
+    pdf.setFontSize(8.4);
+    pdf.setTextColor(...RG_BODY_TEXT);
+    const pkgIntro = pdf.splitTextToSize(
+      `${permitPkg.calculations.nec_edition_note} Load schedule follows NEC Article 220-style dwelling assumptions for a 200 A upgrade; conductor excerpt Article 310.`,
+      innerW,
+    );
+    for (const ln of pkgIntro) {
+      pdf.text(ln, margin, y);
+      y += 4.05;
+    }
+    y += 2;
+    pdf.setFont(PDF_SANS, "bold");
+    pdf.setFontSize(9.8);
+    pdf.setTextColor(...RG_NAVY);
+    pdf.text("Article 220 — Calculated load", margin, y);
+    y += 5.2;
+    pdf.setFont(PDF_SANS, "normal");
+    pdf.setFontSize(8.8);
+    pdf.text(`Total calculated VA: ${a220.total_calculated_va.toLocaleString()} VA`, margin, y);
+    y += 4.4;
+    pdf.text(
+      `Calculated feeder demand @ 240 V: ${a220.feeder_amps_at_240v} A  |  Planning main frame: ${a220.main_breaker_frame_a} A`,
+      margin,
+      y,
+    );
+    y += 5.5;
+    pdf.setFont(PDF_SANS, "bold");
+    pdf.setFontSize(9.8);
+    pdf.text("Article 310 — Required conductor (copper)", margin, y);
+    y += 5.2;
+    pdf.setFont(PDF_SANS, "normal");
+    pdf.setFontSize(8.8);
+    pdf.text(`${a310.selected_conductor_display} — ${a310.table_ref}`, margin, y);
+    y += 4.4;
+    pdf.text(`Tabulated ampacity (75 deg C column reference): ${a310.tabular_ampacity_a} A`, margin, y);
+    y += 4.8;
+    if (a310.ocpd_notes?.length) {
+      pdf.setFontSize(7.9);
+      pdf.setTextColor(90, 95, 105);
+      for (const note of a310.ocpd_notes) {
+        for (const ln of pdf.splitTextToSize(note, innerW)) {
+          pdf.text(ln, margin, y);
+          y += 3.85;
+        }
+      }
+      pdf.setTextColor(...RG_BODY_TEXT);
+      y += 2;
+    }
+
+    if (permitPkg.annotatedPhotoDataUrl) {
+      pdf.setFont(PDF_SANS, "bold");
+      pdf.setFontSize(9.3);
+      pdf.setTextColor(...RG_NAVY);
+      pdf.text("Annotated site photo (Vision Agent)", margin, y);
+      y += 5.5;
+      pdf.setFont(PDF_SANS, "normal");
+      pdf.setFontSize(8.8);
+      pdf.setTextColor(...RG_BODY_TEXT);
+      try {
+        const url = permitPkg.annotatedPhotoDataUrl;
+        const props = pdf.getImageProperties(url);
+        const imgWmm = innerW;
+        const imgHmm = (props.height / props.width) * imgWmm;
+        checkBreak(Math.min(imgHmm + 8, 115));
+        pdf.addImage(url, "JPEG", margin, y, imgWmm, imgHmm);
+        y += imgHmm + 6;
+      } catch {
+        pdf.setFont(PDF_SANS, "italic");
+        pdf.setFontSize(8);
+        pdf.text("(Annotated photo could not be embedded in this PDF.)", margin, y);
+        y += 5;
+        pdf.setFont(PDF_SANS, "normal");
+      }
+    }
+
+    pdf.setDrawColor(210, 215, 222);
+    pdf.setLineWidth(0.25);
+    pdf.line(margin, y, pageW - margin, y);
+    y += 6;
+  }
+
   /* ----- Body: balanced two columns for readability (headings full width) ----- */
   const bodyColGap = 5;
   const bodyColW = (innerW - bodyColGap) / 2;
@@ -564,6 +799,78 @@ export function downloadActionPlanPdf(options: {
   syncBodyY();
   y = Math.max(yCol0, yCol1);
 
+  if (permitPkg) {
+    startContinuedPage();
+    let wy = 28;
+    const a220w = permitPkg.calculations.article_220;
+    const a310w = permitPkg.calculations.article_310;
+    pdf.setFont(PDF_SANS, "bold");
+    pdf.setFontSize(12.5);
+    pdf.setTextColor(...RG_NAVY);
+    pdf.text("AHJ electrical permit application worksheet", margin, wy);
+    wy += 7;
+    pdf.setFont(PDF_SANS, "normal");
+    pdf.setFontSize(8.8);
+    pdf.setTextColor(...RG_BODY_TEXT);
+    const ahjLine = `Authority Having Jurisdiction (scout): ${(permitPkg.ahjLabel || "").trim() || "_______________________________"}`;
+    for (const ln of pdf.splitTextToSize(ahjLine, innerW)) {
+      pdf.text(ln, margin, wy);
+      wy += 4.2;
+    }
+    wy += 2;
+    const addrBlurb = `Job site: ${projAddr} | ZIP ${projZip} | ${localityLabel}`;
+    for (const ln of pdf.splitTextToSize(addrBlurb, innerW)) {
+      pdf.text(ln, margin, wy);
+      wy += 4.2;
+    }
+    wy += 3;
+    pdf.setFont(PDF_SANS, "bold");
+    pdf.text("Scope (draft)", margin, wy);
+    wy += 5;
+    pdf.setFont(PDF_SANS, "normal");
+    for (const ln of pdf.splitTextToSize(
+      "Residential electrical service upgrade — 200 A planning basis per attached Reg Guard NEC excerpt.",
+      innerW,
+    )) {
+      pdf.text(ln, margin, wy);
+      wy += 4.2;
+    }
+    wy += 2;
+    pdf.text(
+      `Declared calculated load (planning): ${a220w.feeder_amps_at_240v} A @ 240 V (${a220w.total_calculated_va.toLocaleString()} VA)`,
+      margin,
+      wy,
+    );
+    wy += 4.5;
+    pdf.text(`Proposed service conductors (planning): ${a310w.selected_conductor_display}`, margin, wy);
+    wy += 6;
+    pdf.setFont(PDF_SANS, "italic");
+    pdf.setFontSize(8);
+    for (const ln of pdf.splitTextToSize(
+      "Applicant name: ___________________________  Signature: _______________________  Date: __________",
+      innerW,
+    )) {
+      pdf.text(ln, margin, wy);
+      wy += 4;
+    }
+    wy += 2;
+    for (const ln of pdf.splitTextToSize(
+      "Licensed contractor / master electrician: ___________________________  License #: _______________________",
+      innerW,
+    )) {
+      pdf.text(ln, margin, wy);
+      wy += 4;
+    }
+    wy += 4;
+    pdf.setFont(PDF_SANS, "normal");
+    pdf.setFontSize(7.8);
+    pdf.setTextColor(82, 88, 98);
+    for (const ln of pdf.splitTextToSize(permitPkg.calculations.disclaimer, innerW)) {
+      pdf.text(ln, margin, wy);
+      wy += 3.8;
+    }
+  }
+
   const totalPages = pdf.getNumberOfPages();
   const stamp = new Date().toLocaleString(undefined, {
     dateStyle: "medium",
@@ -585,5 +892,5 @@ export function downloadActionPlanPdf(options: {
     pdf.text(`Page ${i} of ${totalPages} · Generated ${stamp}`, margin, pageNumY);
   }
 
-  pdf.save(`RegGuard-punch-list-${slugDate()}.pdf`);
+  pdf.save(permitPkg ? `RegGuard-permit-package-${slugDate()}.pdf` : `RegGuard-punch-list-${slugDate()}.pdf`);
 }

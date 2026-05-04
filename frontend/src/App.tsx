@@ -23,7 +23,7 @@ import {
   DICTATION_SILENCE_MS,
   scheduleDictationSilenceStop,
 } from "./speech-recognition";
-import { downloadActionPlanPdf } from "./downloadActionPlanPdf";
+import { downloadActionPlanPdf, downloadPermitPackagePdf } from "./downloadActionPlanPdf";
 
 /** Gemini Reality Capture Audit payload (SSE ``visual_audit`` / ``complete``). */
 export type VisualDetection = {
@@ -90,6 +90,7 @@ type NdjsonLine =
       county?: string | null;
       jurisdiction?: unknown;
       visual_audit?: unknown;
+      ahj_label?: string | null;
     }
   | { event: "visual_audit"; payload: unknown }
   | { event: "error"; message: string };
@@ -251,6 +252,7 @@ export default function App() {
     zip?: string;
     city?: string | null;
     county?: string | null;
+    ahjLabel?: string | null;
   } | null>(null);
   const [planToolbarMsg, setPlanToolbarMsg] = useState<string | null>(null);
   /** Live line from backend Scout/Audit status frames (SSE ``reasoning``). */
@@ -546,9 +548,17 @@ export default function App() {
               const site = payload.site_address;
               const prof = payload.profile;
               if (site != null || prof != null) {
+                const label =
+                  prof != null &&
+                  typeof prof === "object" &&
+                  "label" in prof &&
+                  typeof (prof as { label?: unknown }).label === "string"
+                    ? ((prof as { label: string }).label || "").trim() || undefined
+                    : undefined;
                 setMeta((m) => ({
                   ...m,
                   site: typeof site === "string" ? site : m?.site,
+                  ...(label ? { ahjLabel: label } : {}),
                 }));
               }
               break;
@@ -606,12 +616,16 @@ export default function App() {
               if (Array.isArray(urls)) {
                 setSourceUrls(urls.filter((u): u is string => typeof u === "string"));
               }
-              setMeta({
-                site: typeof payload.site_address === "string" ? payload.site_address : undefined,
-                zip: typeof payload.zip === "string" ? payload.zip : undefined,
-                city: typeof payload.city === "string" ? payload.city : undefined,
-                county: typeof payload.county === "string" ? payload.county : undefined,
-              });
+              setMeta((m) => ({
+                site: typeof payload.site_address === "string" ? payload.site_address : m?.site,
+                zip: typeof payload.zip === "string" ? payload.zip : m?.zip,
+                city: typeof payload.city === "string" ? payload.city : m?.city,
+                county: typeof payload.county === "string" ? payload.county : m?.county,
+                ahjLabel:
+                  typeof payload.ahj_label === "string" && payload.ahj_label.trim()
+                    ? payload.ahj_label.trim()
+                    : m?.ahjLabel,
+              }));
               if ("visual_audit" in payload && payload.visual_audit != null) {
                 const parsed = parseVisualAuditPayload(payload.visual_audit);
                 if (parsed) {
@@ -1044,6 +1058,35 @@ export default function App() {
       toast.error(`Could not generate PDF: ${msg}`);
     }
   }, [actionPlan, meta, selection]);
+
+  const handleGeneratePermitPackage = useCallback(() => {
+    const md = actionPlan.trim();
+    if (!md) {
+      setPlanToolbarMsg("Nothing to export — run research first so the Contractor Action Plan is available.");
+      window.setTimeout(() => setPlanToolbarMsg(null), 4000);
+      return;
+    }
+    void (async () => {
+      try {
+        await downloadPermitPackagePdf({
+          markdown: md,
+          siteAddress: meta?.site ?? selection?.formattedAddress ?? null,
+          zip: meta?.zip ?? selection?.zip ?? null,
+          city: meta?.city ?? null,
+          county: meta?.county ?? null,
+          jobDescription: jobDescription.trim() || "200A upgrade",
+          visualAudit,
+          photoObjectUrl,
+          ahjLabel: meta?.ahjLabel ?? null,
+        });
+        setPlanToolbarMsg("Permit package PDF downloaded.");
+        window.setTimeout(() => setPlanToolbarMsg(null), 3500);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        toast.error(`Could not generate permit package: ${msg}`);
+      }
+    })();
+  }, [actionPlan, meta, selection, jobDescription, visualAudit, photoObjectUrl]);
 
   const dismissBackendNotice = useCallback(() => {
     dismissedRevisionRef.current = lastPollRevisionRef.current;
@@ -1497,6 +1540,14 @@ export default function App() {
                   onClick={() => void handleAcceptActionPlan()}
                 >
                   Accept
+                </button>
+                <button
+                  type="button"
+                  className="rg-btn rg-btn--primary rg-btn--compact rg-plan-action-btn rg-plan-action-btn--package"
+                  title="Download punch list plus NEC load/conductor memo, Vision photo overlay, and AHJ worksheet"
+                  onClick={handleGeneratePermitPackage}
+                >
+                  Generate Permit Package
                 </button>
                 <button
                   type="button"
