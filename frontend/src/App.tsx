@@ -209,7 +209,9 @@ function scoutStepDataToMarkdown(stepKey: string, data: unknown): string {
         ? "### Building permits (live scout)"
         : stepKey === "step_jurisdiction"
           ? "### Jurisdiction (live scout)"
-          : `### Scout: ${stepKey}`;
+          : stepKey === "step_federal_fast41"
+            ? "### Federal FAST-41 permitting (live scout)"
+            : `### Scout: ${stepKey}`;
   let md = `\n\n${heading}\n\n`;
   if (query) {
     md += `**Query:** ${query}\n\n`;
@@ -328,6 +330,13 @@ export default function App() {
   const [selection, setSelection] = useState<AddressSelection | null>(null);
   const [jobDescription, setJobDescription] = useState("");
   const [searchLimit, setSearchLimit] = useState(5);
+  const [tradeElectrician, setTradeElectrician] = useState(true);
+  const [tradePlumber, setTradePlumber] = useState(false);
+  const [tradeHvac, setTradeHvac] = useState(false);
+  const [missionCriticalDc, setMissionCriticalDc] = useState(false);
+  const [scoutVertical, setScoutVertical] = useState<"building" | "infrastructure" | "data_center">(
+    "building",
+  );
   const [imageFile, setImageFile] = useState<File | null>(null);
 
   const [busy, setBusy] = useState(false);
@@ -460,6 +469,9 @@ export default function App() {
       if (phase.startsWith("Research: step_building_codes")) {
         return "Status — Analyzing adopted codes, NEC 2023 baseline & local amendment deltas…";
       }
+      if (phase.startsWith("Research: step_federal_fast41")) {
+        return "Status — Scanning FAST-41 / federal permitting status cues (Infrastructure or Data Center vertical)…";
+      }
       if (phase === "Writing Contractor Action Plan") {
         return "Status — Synthesizing Master Electrician punch list (fees, technical gotchas, inspections)…";
       }
@@ -527,6 +539,11 @@ export default function App() {
     setJobDescription("");
     setImageFile(null);
     setSearchLimit(5);
+    setTradeElectrician(true);
+    setTradePlumber(false);
+    setTradeHvac(false);
+    setMissionCriticalDc(false);
+    setScoutVertical("building");
     setLocateMessage(null);
     setBusy(false);
     resetOutput();
@@ -744,6 +761,19 @@ export default function App() {
     }
     form.append("job_description", jobDescription.trim());
     form.append("search_limit", String(searchLimit));
+    const trades: string[] = [];
+    if (tradeElectrician) {
+      trades.push("electrician");
+    }
+    if (tradePlumber) {
+      trades.push("plumber");
+    }
+    if (tradeHvac) {
+      trades.push("hvac");
+    }
+    form.append("scout_trades", trades.join(","));
+    form.append("mission_critical_dc", missionCriticalDc ? "true" : "false");
+    form.append("scout_vertical", scoutVertical);
     if (imageFile) {
       form.append("image", imageFile);
     }
@@ -911,7 +941,8 @@ export default function App() {
               if (
                 name === "step_building_codes" ||
                 name === "step_building_permits" ||
-                name === "step_jurisdiction"
+                name === "step_jurisdiction" ||
+                name === "step_federal_fast41"
               ) {
                 appendToActionPlan(scoutStepDataToMarkdown(name, payload.data));
               }
@@ -1050,7 +1081,19 @@ export default function App() {
       setBusy(false);
       setSseConnectionLive(false);
     }
-  }, [selection, jobDescription, searchLimit, imageFile, resetOutput, bimBridgeReport]);
+  }, [
+    selection,
+    jobDescription,
+    searchLimit,
+    tradeElectrician,
+    tradePlumber,
+    tradeHvac,
+    missionCriticalDc,
+    scoutVertical,
+    imageFile,
+    resetOutput,
+    bimBridgeReport,
+  ]);
 
   const geolocationReadOptions = useMemo<PositionOptions>(
     () => ({
@@ -1702,6 +1745,72 @@ export default function App() {
               onChange={(e) => setJobDescription(e.target.value)}
               aria-describedby={speechHint ? "job-desc-speech-hint" : undefined}
             />
+          </div>
+
+          <div className="rg-field">
+            <div className="rg-field-label-text" id="universal-scout-profile-label">
+              Universal Scout — trades &amp; vertical
+            </div>
+            <div className="rg-trade-toggles" role="group" aria-labelledby="universal-scout-profile-label">
+              <button
+                type="button"
+                className={`rg-btn rg-btn--compact${tradeElectrician ? " rg-btn--primary" : " rg-btn--ghost"}`}
+                aria-pressed={tradeElectrician}
+                disabled={busy}
+                onClick={() => setTradeElectrician((v) => !v)}
+              >
+                Electrician
+              </button>
+              <button
+                type="button"
+                className={`rg-btn rg-btn--compact${tradePlumber ? " rg-btn--primary" : " rg-btn--ghost"}`}
+                aria-pressed={tradePlumber}
+                disabled={busy}
+                onClick={() => setTradePlumber((v) => !v)}
+              >
+                Plumber
+              </button>
+              <button
+                type="button"
+                className={`rg-btn rg-btn--compact${tradeHvac ? " rg-btn--primary" : " rg-btn--ghost"}`}
+                aria-pressed={tradeHvac}
+                disabled={busy}
+                onClick={() => setTradeHvac((v) => !v)}
+              >
+                HVAC
+              </button>
+            </div>
+            <div className="rg-scout-vertical-row">
+              <label htmlFor="scout-vertical" className="rg-scout-vertical-label">
+                Project vertical
+              </label>
+              <select
+                id="scout-vertical"
+                className="rg-input rg-input--select"
+                disabled={busy}
+                value={scoutVertical}
+                onChange={(e) =>
+                  setScoutVertical(e.target.value as "building" | "infrastructure" | "data_center")
+                }
+              >
+                <option value="building">Building / general</option>
+                <option value="infrastructure">Infrastructure</option>
+                <option value="data_center">Data center</option>
+              </select>
+            </div>
+            <label className="rg-mission-critical">
+              <input
+                type="checkbox"
+                checked={missionCriticalDc}
+                disabled={busy}
+                onChange={(e) => setMissionCriticalDc(e.target.checked)}
+              />{" "}
+              Mission critical (data center) — Tier III/IV redundancy + liquid cooling / containment code scout
+            </label>
+            <p className="field-hint">
+              <strong>Infrastructure</strong> or <strong>Data center</strong> adds a FAST-41 federal permitting pass.
+              Selected trades append IPC/UPC, Manual J/IMC, and multi-trade coordination phrases to scout queries.
+            </p>
           </div>
 
           <div className="rg-field">

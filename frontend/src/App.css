@@ -1179,3 +1179,47 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   gap: 0.35rem;
   align-items: center;
 }
+
+.rg-trade-toggles {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  margin: 0.45rem 0 0.65rem;
+}
+
+.rg-scout-vertical-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 0.75rem;
+  margin-bottom: 0.5rem;
+}
+
+.rg-scout-vertical-label {
+  font-size: 0.8125rem;
+  font-weight: 600;
+  color: var(--rg-muted);
+}
+
+.rg-input--select {
+  flex: 1;
+  min-width: 11rem;
+  max-width: 20rem;
+  cursor: pointer;
+}
+
+.rg-mission-critical {
+  display: flex;
+  align-items: flex-start;
+  gap: 0.35rem;
+  font-size: 0.8125rem;
+  line-height: 1.45;
+  cursor: pointer;
+  margin: 0 0 0.35rem;
+  color: var(--rg-text);
+}
+
+.rg-mission-critical input {
+  margin-top: 0.2rem;
+  flex-shrink: 0;
+}

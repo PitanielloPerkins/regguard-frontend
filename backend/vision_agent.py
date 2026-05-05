@@ -73,7 +73,7 @@ def scout_summary_for_reality_capture(raw: Dict[str, Any], *, limit_hits: int = 
     """Flatten Universal Scout hits into a short text block for the multimodal prompt."""
     lines: List[str] = []
     n = 0
-    for step in ("step_jurisdiction", "step_building_permits", "step_building_codes"):
+    for step in ("step_jurisdiction", "step_building_permits", "step_building_codes", "step_federal_fast41"):
         block = raw.get(step) or {}
         if not isinstance(block, dict):
             continue

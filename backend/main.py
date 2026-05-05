@@ -216,6 +216,7 @@ def _collect_source_urls(raw: Dict[str, Any]) -> List[str]:
         "step_jurisdiction",
         "step_building_permits",
         "step_building_codes",
+        "step_federal_fast41",
     ):
         block = raw.get(step) or {}
         for item in block.get("results") or []:
@@ -224,6 +225,11 @@ def _collect_source_urls(raw: Dict[str, Any]) -> List[str]:
                 seen.add(u)
                 ordered.append(u)
     return ordered
+
+
+def _form_wants_fast41_scout(vertical: str) -> bool:
+    x = (vertical or "").strip().lower().replace(" ", "_").replace("-", "_")
+    return x in ("infrastructure", "infra", "critical_infrastructure", "data_center", "datacenter", "dc")
 
 
 def _research_action_plan_fallback_markdown(
@@ -782,6 +788,18 @@ async def research(
         "",
         description="Optional JSON from POST /bim/import (RegGuard BIM bridge) — merged into digest for clash-zone routing",
     ),
+    scout_trades: str = Form(
+        "",
+        description="Comma-separated trade toggles: electrician, plumber, hvac (Universal Scout MEP augment)",
+    ),
+    mission_critical_dc: str = Form(
+        "false",
+        description="When true, scout adds Tier III/IV redundancy + liquid-cooling containment code cues",
+    ),
+    scout_vertical: str = Form(
+        "building",
+        description="building | infrastructure | data_center — triggers FAST-41 pass when infrastructure or data_center",
+    ),
     image: Optional[UploadFile] = File(None),
 ):
     """
@@ -800,9 +818,14 @@ async def research(
     ``vision_delta``,
     ``visual_audit`` (Gemini Reality Capture bounding boxes; requires ``GEMINI_API_KEY`` / ``GOOGLE_API_KEY`` when a photo is sent),
     ``context``, ``jurisdiction`` (when geocoded),
-    ``step`` (including ``step_ahj_identification`` before Universal Scout), ``step`` (scout),
+    ``step`` (including ``step_ahj_identification`` before Universal Scout), ``step`` (scout:
+    ``step_jurisdiction``, ``step_building_permits``, ``step_building_codes``, and when vertical is
+    **infrastructure** or **data_center**, ``step_federal_fast41``),
     ``future_risk_alert``, ``community_inspector_feedback`` (ZIP-indexed crowdsourced inspector notes when present),
     ``summary_delta``, ``complete``.
+
+    Multipart fields **scout_trades** (comma list: electrician, plumber, hvac), **mission_critical_dc**, and
+    **scout_vertical** (building | infrastructure | data_center) steer Universal Scout MEP augmentation and FAST-41.
     """
     try:
         lim = _parse_search_limit(search_limit)
@@ -818,6 +841,11 @@ async def research(
 
     jd = (job_description or "").strip()
     site_line = (site_address or "").strip()
+    scout_profile_payload: Dict[str, Any] = {
+        "trades": (scout_trades or "").strip(),
+        "mission_critical_dc": str(mission_critical_dc or "").strip().lower() in ("1", "true", "yes", "on"),
+        "vertical": (scout_vertical or "").strip() or "building",
+    }
 
     if not site_line:
         raise HTTPException(
@@ -946,12 +974,15 @@ async def research(
                         site_address=scout_site,
                         jurisdiction=scout_jurisdiction,
                         ahj_identification=ahj_for_scout,
+                        scout_profile=scout_profile_payload,
                     )
                 )
+                _pass_total = 4 if _form_wants_fast41_scout(scout_vertical) else 3
                 _scout_labels = {
-                    "step_jurisdiction": "pass 1/3 — jurisdiction & AHJ hints (Firecrawl)",
-                    "step_building_permits": "pass 2/3 — building permits (Firecrawl)",
-                    "step_building_codes": "pass 3/3 — adopted codes (Firecrawl)",
+                    "step_jurisdiction": f"pass 1/{_pass_total} — jurisdiction & AHJ hints (Firecrawl)",
+                    "step_building_permits": f"pass 2/{_pass_total} — building permits (Firecrawl)",
+                    "step_building_codes": f"pass 3/{_pass_total} — adopted codes (Firecrawl)",
+                    "step_federal_fast41": f"pass {_pass_total}/{_pass_total} — FAST-41 federal permitting (Firecrawl)",
                 }
                 _city_label = str((scout_jurisdiction or {}).get("city") or "").strip() or "local"
                 _st_scout = str((scout_jurisdiction or {}).get("state") or "").strip().upper()
@@ -960,6 +991,10 @@ async def research(
                     "step_jurisdiction": f"Scouting {_city_label} jurisdiction, AHJ hints, and trusted .gov anchors…",
                     "step_building_permits": f"Scouting {_city_label} Building Dept — fee schedules and permit portals…",
                     "step_building_codes": f"Cross-referencing {_city_label} adopted codes and NEC 2023 amendment deltas…",
+                    "step_federal_fast41": (
+                        f"Checking FAST-41 / Permitting Council federal status cues for "
+                        f"{_city_label} ({scout_profile_payload.get('vertical') or 'vertical'}) scope…"
+                    ),
                 }
                 if _dallas_tx:
                     _scout_reasoning["step_building_permits"] = (
@@ -997,6 +1032,7 @@ async def research(
                         "step_jurisdiction",
                         "step_building_permits",
                         "step_building_codes",
+                        "step_federal_fast41",
                     ):
                         await asyncio.sleep(0.5)
             except Exception:

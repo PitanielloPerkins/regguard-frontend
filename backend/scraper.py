@@ -94,6 +94,9 @@ def _append_code_change_monitor_queries(
         f"{loc_cs} {CODE_CHANGE_SCOUT_ORDINANCE_MINUTES} — {zip_tag}"
     )
     return f"{codes_line} | {extra}"
+
+
+def _locality_data_fence(city: str, county: str, st: str, mode: str) -> str:
     """
     Append a **looser** locality cue on every scout line (still names City, ST or County, ST) so queries read like
     official permit/code discovery—not a harsh ``ONLY …`` filter that can zero-out SERP. Documented from ``main``.
@@ -103,15 +106,168 @@ def _append_code_change_monitor_queries(
         return ""
     c = (city or "").strip()
     co = (county or "").strip()
-    county_disp = ""
     if co:
         county_disp = f"{co} County" if not co.lower().endswith("county") else co
+    else:
+        county_disp = ""
     m = (mode or "").strip().lower()
     if county_disp and (m == "county" or not c):
         return f" | LOCALITY_LOCK {county_disp}, {stx} official county building permits and adopted code"
     if c:
         return f" | LOCALITY_LOCK {c}, {stx} official city code and building permits"
     return ""
+
+
+def _normalize_scout_vertical(v: Optional[str]) -> str:
+    x = (v or "").strip().lower().replace(" ", "_").replace("-", "_")
+    if x in ("infrastructure", "infra", "critical_infrastructure"):
+        return "infrastructure"
+    if x in ("data_center", "datacenter", "dc", "colocation"):
+        return "data_center"
+    return "building"
+
+
+def _normalize_trade_tokens(raw: Any) -> List[str]:
+    if raw is None:
+        return []
+    if isinstance(raw, str):
+        parts = [p.strip().lower() for p in re.split(r"[,;\s]+", raw) if p.strip()]
+    elif isinstance(raw, (list, tuple, set)):
+        parts = [str(p).strip().lower() for p in raw if str(p).strip()]
+    else:
+        return []
+    aliases = {
+        "electrical": "electrician",
+        "electric": "electrician",
+        "mechanical": "hvac",
+        "plumbing": "plumber",
+    }
+    out: List[str] = []
+    for p in parts:
+        p = aliases.get(p, p)
+        if p in ("electrician", "plumber", "hvac") and p not in out:
+            out.append(p)
+    return out
+
+
+def _append_mep_trade_segments(
+    juris: str,
+    permits: str,
+    codes: str,
+    *,
+    zip_tag: str,
+    city: str,
+    county: str,
+    st: str,
+    mode: str,
+    trades: List[str],
+    mission_critical_dc: bool,
+    vertical: str,
+) -> tuple[str, str, str]:
+    """Augment scout lines for selected MEP trades, data-center mission-critical mode, and vertical."""
+    if not trades and not mission_critical_dc and vertical not in ("infrastructure", "data_center"):
+        return juris, permits, codes
+
+    city = (city or "").strip()
+    county = (county or "").strip()
+    st = (st or "").strip()
+    mode_l = (mode or "").strip().lower()
+    if not (city or county or st):
+        loc = f"US {zip_tag}"
+    elif mode_l == "county" or (not city and county):
+        county_disp = f"{county} County" if county and not county.lower().endswith("county") else county
+        loc = f"{county_disp}, {st}".strip().strip(",") if st else county_disp
+    else:
+        city_disp = city or "municipality"
+        loc = f"{city_disp}, {st}".strip().strip(",") if st else city_disp
+
+    chunks: List[str] = []
+    if "electrician" in trades:
+        chunks.append(
+            f"{loc} electrical subcontractor permit NEC NFPA 70 amendments utility coordination — {zip_tag}"
+        )
+    if "plumber" in trades:
+        chunks.append(
+            f"{loc} plumbing permit IPC UPC adopted amendments drainage water pipe sizing inspections — {zip_tag}"
+        )
+    if "hvac" in trades:
+        chunks.append(
+            f"{loc} mechanical HVAC permit IMC energy code load calculation ACCA Manual J adoption — {zip_tag}"
+        )
+    if len(trades) >= 3:
+        chunks.append(
+            f"{loc} combined MEP multi-trade permitting mechanical electrical plumbing coordination — {zip_tag}"
+        )
+
+    if mission_critical_dc:
+        chunks.append(
+            f"{loc} data center Tier III Tier IV redundancy 2N N+1 concurrent maintainability "
+            f"mission critical facility code adopted amendments — {zip_tag}"
+        )
+        chunks.append(
+            f"{loc} liquid cooling containment CDU rear door heat exchanger data hall "
+            f"fire code mechanical electrical safety adopted requirements — {zip_tag}"
+        )
+
+    if vertical == "data_center" and not mission_critical_dc:
+        chunks.append(
+            f"{loc} data center colocation facility mechanical electrical uptime staging "
+            f"AHJ adopted codes — {zip_tag}"
+        )
+    if vertical == "infrastructure":
+        chunks.append(
+            f"{loc} infrastructure utility mission critical building mechanical electrical "
+            f"permitting adopted code — {zip_tag}"
+        )
+
+    if not chunks:
+        return juris, permits, codes
+
+    segment = " | ".join(chunks)
+    permits = f"{permits} | {segment}"
+    codes = f"{codes} | {segment}"
+    return juris, permits, codes
+
+
+def _fast41_query_line(
+    *,
+    zip_tag: str,
+    city: str,
+    county: str,
+    st: str,
+    mode: str,
+    site_address: Optional[str],
+    vertical: str,
+) -> str:
+    site = (site_address or "").strip()
+    loc_bits: List[str] = []
+    if site:
+        loc_bits.append(site)
+    city = (city or "").strip()
+    county = (county or "").strip()
+    st = (st or "").strip()
+    mode_l = (mode or "").strip().lower()
+    if mode_l == "county" or (not city and county):
+        county_disp = f"{county} County" if county and not county.lower().endswith("county") else county
+        if county_disp and st:
+            loc_bits.append(f"{county_disp}, {st}")
+    elif city and st:
+        loc_bits.append(f"{city}, {st}")
+    loc = " ".join(loc_bits).strip()
+    vlabel = "infrastructure" if vertical == "infrastructure" else "data center"
+    return (
+        f"FAST-41 federal permitting Title 41 Permitting Council covered project status "
+        f"{vlabel} environmental review milestone dashboard {loc} — {zip_tag}"
+    )
+
+
+def _coerce_scout_profile(raw: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
+    r = dict(raw or {})
+    trades = _normalize_trade_tokens(r.get("trades"))
+    vert = _normalize_scout_vertical(str(r.get("vertical") or "building"))
+    mc = r.get("mission_critical_dc")
+    mc_bool = mc is True or (isinstance(mc, str) and mc.strip().lower() in ("1", "true", "yes", "on"))
+    return {"trades": trades, "vertical": vert, "mission_critical_dc": mc_bool}
 
 
 def _reject_serp_for_project_state(blob: str, project_state: Optional[str]) -> bool:
@@ -138,6 +294,7 @@ def _scout_queries_for_location(
     z: str,
     site_address: Optional[str],
     jurisdiction: Optional[Mapping[str, Any]],
+    scout_profile: Optional[Mapping[str, Any]] = None,
 ) -> tuple[str, str, str]:
     """
     Build (jurisdiction, permits, codes) search lines for Universal Scout.
@@ -145,7 +302,11 @@ def _scout_queries_for_location(
     Every line includes **explicit locality** (``City, ST`` or ``County, ST``) when geocoding
     provides it, plus ZIP where helpful. Queries are combined in ``_append_scope`` with
     ``(site:gov OR site:municode.com)``.
+
+    ``scout_profile`` carries **Full MEP** trade selections, **mission-critical data-center** cues,
+    and project **vertical** (building / infrastructure / data_center) for query augmentation.
     """
+    prof = _coerce_scout_profile(scout_profile)
     addr = (site_address or "").strip()
     ju = jurisdiction
     if ju:
@@ -154,18 +315,30 @@ def _scout_queries_for_location(
     zip_tag = f"ZIP {z}"
 
     if not ju or not addr:
-        return (
-            f"US {zip_tag} municipality county jurisdiction AHJ building permits — {zip_tag}",
-            (
-                f"US {zip_tag} building department permit applications electrical official — {zip_tag} | "
-                f"US {zip_tag} official building permit fees 2026"
-            ),
-            (
-                f"US {zip_tag} adopted building code amendments codified law official — {zip_tag} | "
-                f"US {zip_tag} NEC 2023 amendments | "
-                f"US {zip_tag} upcoming NEC code adoption ordinance council agenda minutes — {zip_tag}"
-            ),
+        juris = f"US {zip_tag} municipality county jurisdiction AHJ building permits — {zip_tag}"
+        permits = (
+            f"US {zip_tag} building department permit applications electrical official — {zip_tag} | "
+            f"US {zip_tag} official building permit fees 2026"
         )
+        codes = (
+            f"US {zip_tag} adopted building code amendments codified law official — {zip_tag} | "
+            f"US {zip_tag} NEC 2023 amendments | "
+            f"US {zip_tag} upcoming NEC code adoption ordinance council agenda minutes — {zip_tag}"
+        )
+        juris, permits, codes = _append_mep_trade_segments(
+            juris,
+            permits,
+            codes,
+            zip_tag=zip_tag,
+            city="",
+            county="",
+            st="",
+            mode="",
+            trades=prof["trades"],
+            mission_critical_dc=prof["mission_critical_dc"],
+            vertical=prof["vertical"],
+        )
+        return (juris, permits, codes)
 
     mode = str(ju.get("mode") or "").strip().lower()
     city = str(ju.get("city") or "").strip()
@@ -205,6 +378,19 @@ def _scout_queries_for_location(
             st=st,
             mode=mode,
         )
+        juris, permits, codes = _append_mep_trade_segments(
+            juris,
+            permits,
+            codes,
+            zip_tag=zip_tag,
+            city=city,
+            county=county,
+            st=st,
+            mode=mode,
+            trades=prof["trades"],
+            mission_critical_dc=prof["mission_critical_dc"],
+            vertical=prof["vertical"],
+        )
         return (juris, permits, codes)
 
     city_disp = city or "the municipality"
@@ -241,6 +427,19 @@ def _scout_queries_for_location(
         county=county,
         st=st,
         mode=mode,
+    )
+    juris, permits, codes = _append_mep_trade_segments(
+        juris,
+        permits,
+        codes,
+        zip_tag=zip_tag,
+        city=city,
+        county=county,
+        st=st,
+        mode=mode,
+        trades=prof["trades"],
+        mission_critical_dc=prof["mission_critical_dc"],
+        vertical=prof["vertical"],
     )
     return (juris, permits, codes)
 
@@ -574,6 +773,9 @@ def _final_scout_response(
     site_address: Optional[str] = None,
     jurisdiction: Optional[Mapping[str, Any]] = None,
     ahj_identification: Optional[Mapping[str, Any]] = None,
+    scout_profile: Optional[Mapping[str, Any]] = None,
+    fast41_hits: Optional[List[Dict[str, Optional[str]]]] = None,
+    fast41_meta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     addr = (site_address or "").strip()
     ju = dict(jurisdiction) if jurisdiction else None
@@ -603,10 +805,22 @@ def _final_scout_response(
             "(upcoming adoptions / council minutes keywords).",
         ]
     )
+    prof_snap = _coerce_scout_profile(scout_profile)
+    trades_nice = ", ".join(prof_snap["trades"]) if prof_snap["trades"] else "none selected"
+    wf.append(
+        f"Scout profile — **Trades**: {trades_nice}; **vertical**: {prof_snap['vertical']}; "
+        f"**mission-critical DC scout**: {'on' if prof_snap['mission_critical_dc'] else 'off'}."
+    )
+    if meta4 is not None:
+        wf.append(
+            "Universal Scout 4 — **FAST-41** federal permitting / Title 41 Permitting Council status cues "
+            "(Infrastructure or Data Center vertical)."
+        )
     out: Dict[str, Any] = {
         "zip": z,
         "site_address": addr or None,
         "jurisdiction": ju,
+        "scout_profile": prof_snap,
         "scout": {
             "mode": "search_web",
             "search_domain_scope": SEARCH_DOMAIN_SCOPE,
@@ -638,6 +852,8 @@ def _final_scout_response(
         "step_building_permits": _step_result_dict(hits2, meta2),
         "step_building_codes": _step_result_dict(hits3, meta3),
     }
+    if fast41_meta is not None:
+        out["step_federal_fast41"] = _step_result_dict(fast41_hits or [], fast41_meta)
     if ahj:
         out["step_ahj_identification"] = ahj
     return out
@@ -785,6 +1001,7 @@ def iter_universal_scout(
     site_address: Optional[str] = None,
     jurisdiction: Optional[Mapping[str, Any]] = None,
     ahj_identification: Optional[Mapping[str, Any]] = None,
+    scout_profile: Optional[Mapping[str, Any]] = None,
 ):
     """
     Yield one event dict per Universal Scout step, then a terminal ``complete`` event.
@@ -796,6 +1013,10 @@ def iter_universal_scout(
     When ``jurisdiction`` is present (from geocoding), Universal Scout search lines name the
     resolved **city** or **county** for permits and **building codes**. Optional
     ``ahj_identification`` is echoed into the final payload for the memo.
+
+    ``scout_profile`` enables **Full MEP** trade scoping, **mission-critical data-center** code
+    discovery, project **vertical**, and (for **infrastructure** / **data_center**) a **FAST-41**
+    federal-permitting pass.
     """
     z = normalize_us_zip(zip_code)
     ctx = (enhanced_context or "").strip() or None
@@ -803,12 +1024,13 @@ def iter_universal_scout(
     addr = (site_address or "").strip() or None
     ju: Optional[Mapping[str, Any]] = jurisdiction if jurisdiction else None
     ahj_snap: Optional[Mapping[str, Any]] = ahj_identification if ahj_identification else None
+    prof = _coerce_scout_profile(scout_profile)
 
     st_for_filter: Optional[str] = None
     if ju:
         st_for_filter = str(ju.get("state") or ju.get("state_short") or "").strip() or None
 
-    q1_core, q2_core, q3_core = _scout_queries_for_location(z, addr, ju)
+    q1_core, q2_core, q3_core = _scout_queries_for_location(z, addr, ju, scout_profile=prof)
     q1 = _with_context(q1_core, ctx)
     hits1, meta1 = _scout_search(fc, q1, user_limit=search_limit, project_state=st_for_filter)
     yield {"event": "step", "step": "step_jurisdiction", "data": _step_result_dict(hits1, meta1)}
@@ -825,6 +1047,29 @@ def iter_universal_scout(
     hits3, meta3 = _scout_search(fc, q3, user_limit=search_limit, project_state=st_for_filter)
     yield {"event": "step", "step": "step_building_codes", "data": _step_result_dict(hits3, meta3)}
 
+    fast41_hits: Optional[List[Dict[str, Optional[str]]]] = None
+    fast41_meta: Optional[Dict[str, Any]] = None
+    if prof["vertical"] in ("infrastructure", "data_center"):
+        zip_tag = f"ZIP {z}"
+        city = str(ju.get("city") or "") if ju else ""
+        county = str(ju.get("county") or "") if ju else ""
+        st_j = str(ju.get("state") or ju.get("state_short") or "") if ju else ""
+        mode_j = str(ju.get("mode") or "") if ju else ""
+        q4_core = _fast41_query_line(
+            zip_tag=zip_tag,
+            city=city,
+            county=county,
+            st=st_j,
+            mode=mode_j,
+            site_address=addr,
+            vertical=prof["vertical"],
+        )
+        q4 = _with_context(q4_core, ctx)
+        fast41_hits, fast41_meta = _scout_search(
+            fc, q4, user_limit=search_limit, project_state=st_for_filter
+        )
+        yield {"event": "step", "step": "step_federal_fast41", "data": _step_result_dict(fast41_hits, fast41_meta)}
+
     full = _final_scout_response(
         z,
         ctx,
@@ -837,6 +1082,9 @@ def iter_universal_scout(
         site_address=addr,
         jurisdiction=ju,
         ahj_identification=ahj_snap,
+        scout_profile=prof,
+        fast41_hits=fast41_hits,
+        fast41_meta=fast41_meta,
     )
     yield {"event": "complete", "raw": full}
 
@@ -846,19 +1094,24 @@ def search_local_building_codes_by_zip(
     *,
     search_limit: int = 5,
     enhanced_context: str = "",
+    scout_profile: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Universal Scout workflow (ZIP-centric, three passes):
+    Universal Scout workflow (ZIP-centric — three core passes plus optional FAST-41):
 
     1. Jurisdiction hints for the ZIP (trusted domains only).
     2. Building department / permits for that area.
     3. Adopted codes and amendments.
+    4. (Optional) FAST-41 federal permitting when ``scout_profile`` vertical is infrastructure/data center.
 
     Each step uses Firecrawl **/v2/search** (``web`` source only): URL + snippet discovery
     without bundled full-page scrape; capped at a few SERP rows per query.
     """
     for ev in iter_universal_scout(
-        zip_code, search_limit=search_limit, enhanced_context=enhanced_context
+        zip_code,
+        search_limit=search_limit,
+        enhanced_context=enhanced_context,
+        scout_profile=scout_profile,
     ):
         if ev.get("event") == "complete":
             return ev["raw"]

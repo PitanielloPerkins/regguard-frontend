@@ -188,7 +188,7 @@ def cross_reference_universal_scout(
         }
 
     trusted: List[Dict[str, Any]] = []
-    for step_key in ("step_jurisdiction", "step_building_permits", "step_building_codes"):
+    for step_key in ("step_jurisdiction", "step_building_permits", "step_building_codes", "step_federal_fast41"):
         block = scout_raw.get(step_key)
         if not isinstance(block, dict):
             continue

@@ -163,6 +163,59 @@ def nec_article_310_service_conductor_copper(
     }
 
 
+def ipc_upc_drainage_slope_placeholder(
+    *,
+    pipe_diameter_in: Optional[float] = None,
+    fixture_units: Optional[float] = None,
+) -> Dict[str, Any]:
+    """
+    Placeholder for **IPC / UPC** drainage slope and sizing — wire to adopted plumbing code tables + local amendments.
+
+    Returns structure only; no field sizing until AHJ edition and slope exceptions are confirmed.
+    """
+    return {
+        "hook": "ipc_upc_plumbing_slope",
+        "status": "placeholder",
+        "inputs": {
+            "pipe_diameter_in": pipe_diameter_in,
+            "fixture_units": fixture_units,
+        },
+        "notes": [
+            "Confirm whether IPC or UPC (or state amend) controls at the AHJ.",
+            "Typical horizontal drainage slopes reference code tables (e.g. IPC Table 704.1 class of examples); verify live edition.",
+            "Special wastes (grease, sand-oil interceptors) may override generic slope narratives.",
+        ],
+    }
+
+
+def manual_j_hvac_load_placeholder(
+    *,
+    conditioned_sqft: Optional[float] = None,
+    climate_zone_hint: Optional[str] = None,
+    job_description: str = "",
+) -> Dict[str, Any]:
+    """
+    Placeholder for **ACCA Manual J**-class residential / light-commercial block loads — not a substitute for MJ8/MJ9 software output.
+
+    Attach real MJ printouts from approved tools for permit submittal.
+    """
+    jd = (job_description or "").strip()
+    return {
+        "hook": "acca_manual_j_hvac_load",
+        "status": "placeholder",
+        "inputs": {
+            "conditioned_sqft": conditioned_sqft,
+            "climate_zone_hint": climate_zone_hint,
+            "job_text_present": bool(jd),
+        },
+        "notes": [
+            "Block / room-by-room Manual J must come from ACCA-approved software or equivalent engineering.",
+            "Coordinate with adopted energy code (IECC / local) and utility rebate programs if applicable.",
+            "Commercial / data-center process loads are out of scope for this placeholder — use engineered load criteria.",
+        ],
+    }
+
+
 def permit_draft_calculation_response(job_description: str = "") -> Dict[str, Any]:
     """Single JSON blob for `/permit-draft-calculations` + Permit Submittal Package PDF."""
     sqft = _parse_sqft(job_description) or 2400.0
@@ -177,6 +230,16 @@ def permit_draft_calculation_response(job_description: str = "") -> Dict[str, An
         "nec_edition_note": "Illustrative NEC 2023-style baseline — confirm adopted edition + amendments with AHJ.",
         "article_220": art220,
         "article_310": art310,
+        "mep_hooks": {
+            "ipc_upc_slope": ipc_upc_drainage_slope_placeholder(
+                fixture_units=None,
+                pipe_diameter_in=None,
+            ),
+            "manual_j_hvac": manual_j_hvac_load_placeholder(
+                conditioned_sqft=sqft,
+                job_description=job_description,
+            ),
+        },
         "disclaimer": (
             "Reg Guard calculations are planning aids only. Licensed design professionals must verify "
             "all loads, conductor selections, and utility requirements."

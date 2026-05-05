@@ -144,7 +144,7 @@ def _merge_tagged_hits(
 
 def scout_has_no_trusted_results(raw: Dict[str, Any]) -> bool:
     """True when all three Universal Scout steps have zero ``results`` rows (no SERP hits in batch)."""
-    for key in ("step_jurisdiction", "step_building_permits", "step_building_codes"):
+    for key in ("step_jurisdiction", "step_building_permits", "step_building_codes", "step_federal_fast41"):
         block = raw.get(key)
         if isinstance(block, dict) and (block.get("results") or []):
             return False
@@ -205,6 +205,26 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             " **Empty scout:** there are no trusted `.gov` / Municode rows in this digest—complete **Technical Punch List** "
             "and **Inspection Must-Haves** using **NEC 2023** model knowledge for a **200A** service/panel upgrade, "
             "with each relevant `- [ ]` line noting verification of adopted edition with the AHJ."
+        )
+
+    sp = raw.get("scout_profile") if isinstance(raw.get("scout_profile"), dict) else {}
+    trades_list = [str(t).strip().lower() for t in (sp.get("trades") or []) if str(t).strip()]
+    vert_sp = str(sp.get("vertical") or "").strip().lower()
+    mc_sp = bool(sp.get("mission_critical_dc"))
+    if trades_list:
+        consultant_role += (
+            f" **Universal Scout trades toggled:** {', '.join(trades_list)} — extend the punch list for each selected trade "
+            "(IPC/UPC plumbing, IMC / energy code / Manual J-class HVAC evidence, NEC electrical) using only trusted `.gov` / Municode rows in this digest for locality claims."
+        )
+    if mc_sp:
+        consultant_role += (
+            " **Mission-critical data center scout:** add checklist items for **Tier III/IV redundancy** themes, **concurrent maintainability**, "
+            "and **liquid cooling / containment** (CDU, data-hall mechanical-electrical interfaces) when sources in the digest support them."
+        )
+    if vert_sp in ("data_center", "infrastructure"):
+        consultant_role += (
+            " **Project vertical (data center / infrastructure):** if `step_federal_fast41` hits reference **FAST-41** or **Title 41 Permitting Council**, "
+            "include federal permitting coordination `- [ ]` tasks; otherwise note counsel / program verification."
         )
 
     if city and state:
@@ -399,7 +419,9 @@ def build_research_digest(
         universal_expert_scout_targets["nec_2023_amendments"] = f"{cdn}, {state_guess} NEC 2023 amendments"
 
     steps_digest: List[Dict[str, Any]] = []
-    for key in ("step_jurisdiction", "step_building_permits", "step_building_codes"):
+    for key in ("step_jurisdiction", "step_building_permits", "step_building_codes", "step_federal_fast41"):
+        if key == "step_federal_fast41" and key not in raw:
+            continue
         block = raw.get(key) or {}
         if not isinstance(block, dict):
             continue
