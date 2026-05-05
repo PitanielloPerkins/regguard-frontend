@@ -48,12 +48,18 @@ from scraper import (
 from bim_sync import run_bim_sync_bridge
 from calculations import permit_draft_calculation_response
 from community_gotchas import append_note, list_notes_for_zip
+from cost_tracking import log_api_usage
+from router import model_for_community_note_context, model_for_permit_scout_text
 from vision_agent import (
     gemini_configured,
     iter_reality_capture_audit_stream,
     normalize_vision_text,
     scout_summary_for_reality_capture,
 )
+
+# ROI calculator defaults — unit economics for admin / dashboard.
+_ROI_MANUAL_HOUR_USD = 75.0
+_ROI_FAILED_INSPECTION_USD = 1200.0
 
 # Sync reference: Dallas Building Inspection — minimum trade permit (incl. admin) used in digest/fallback prompts.
 _DALLAS_TX_MIN_TRADE_PERMIT_USD = 167.00
@@ -635,6 +641,30 @@ def dashboard_revision() -> Dict[str, str]:
     }
 
 
+@app.get("/roi-stats")
+def roi_stats(
+    manual_hours_saved: float = 0,
+    failed_inspections_avoided: float = 0,
+) -> Dict[str, Any]:
+    """
+    Unit economics snapshot: ``(manual_hours_saved * $75) + (failed_inspections_avoided * $1200)``.
+    """
+    mh = float(manual_hours_saved)
+    fi = float(failed_inspections_avoided)
+    labor = mh * _ROI_MANUAL_HOUR_USD
+    inspection = fi * _ROI_FAILED_INSPECTION_USD
+    total = labor + inspection
+    return {
+        "manual_hours_saved": mh,
+        "failed_inspections_avoided": fi,
+        "dollars_per_manual_hour": _ROI_MANUAL_HOUR_USD,
+        "dollars_per_failed_inspection_avoided": _ROI_FAILED_INSPECTION_USD,
+        "labor_savings_usd": round(labor, 2),
+        "inspection_risk_savings_usd": round(inspection, 2),
+        "total_savings_usd": round(total, 2),
+    }
+
+
 @app.get("/geocode-zip")
 def geocode_zip(latitude: float, longitude: float) -> Dict[str, str]:
     """
@@ -658,6 +688,12 @@ def post_community_gotcha(
     except ValueError as e:
         raise HTTPException(status_code=400, detail=str(e)) from e
     z = normalize_us_zip(zip_code)
+    log_api_usage(
+        project_key=z,
+        route="community_note_write",
+        model=model_for_community_note_context(),
+        meta={"action": "append"},
+    )
     return {"ok": True, "zip": z, "note": note}
 
 
@@ -992,6 +1028,18 @@ async def research(
                         "notes": _community_notes,
                     }
                 )
+            log_api_usage(
+                project_key=zip_for_scout,
+                route="community_note_retrieval",
+                model=model_for_community_note_context(),
+                meta={"note_count": len(_community_notes)},
+            )
+            log_api_usage(
+                project_key=zip_for_scout,
+                route="permit_fee_scout",
+                model=model_for_permit_scout_text(),
+                meta={"phase": "universal_scout_complete", "has_image": bool(image_bytes)},
+            )
 
             if image_bytes:
                 content_type, filename = image_meta

@@ -15,8 +15,10 @@ import re
 from pathlib import Path
 from typing import Any, Dict, Iterator, List, Optional, Tuple
 
+from cost_tracking import log_api_usage
 from dotenv import load_dotenv
 from PIL import Image
+from router import model_for_reality_capture
 
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
@@ -45,7 +47,8 @@ def _gemini_api_key() -> str:
 
 
 def _gemini_model_name() -> str:
-    return (os.environ.get("GEMINI_VISION_MODEL") or "gemini-1.5-pro").strip()
+    """Backward-compatible alias — Reality Capture uses the spatial (Pro-class) router."""
+    return model_for_reality_capture()
 
 
 def _normalize_media_type(content_type: Optional[str], filename: Optional[str]) -> str:
@@ -249,6 +252,23 @@ def _strip_json_fence(raw: str) -> str:
     return s.strip()
 
 
+def _extract_gemini_usage(resp: Any) -> Tuple[Optional[int], Optional[int]]:
+    um = getattr(resp, "usage_metadata", None)
+    if um is None:
+        return None, None
+    inp = getattr(um, "prompt_token_count", None)
+    out = getattr(um, "candidates_token_count", None)
+    try:
+        inp_i = int(inp) if inp is not None else None
+    except (TypeError, ValueError):
+        inp_i = None
+    try:
+        out_i = int(out) if out is not None else None
+    except (TypeError, ValueError):
+        out_i = None
+    return inp_i, out_i
+
+
 def _austin_78704_clearance_skip_notes(zip5: str, detections: List[Dict[str, Any]]) -> str:
     z = (zip5 or "").strip()
     if z != "78704":
@@ -285,8 +305,9 @@ def _run_gemini_audit_sync(
     if not key:
         raise ValueError("GEMINI_API_KEY or GOOGLE_API_KEY is not set.")
 
+    spatial_model = model_for_reality_capture()
     genai.configure(api_key=key)
-    model = genai.GenerativeModel(_gemini_model_name())
+    model = genai.GenerativeModel(spatial_model)
     media = _normalize_media_type(content_type, filename)
 
     zip_clean = (zip5 or "").strip()
@@ -337,6 +358,15 @@ def _run_gemini_audit_sync(
             temperature=0.2,
             response_mime_type="application/json",
         ),
+    )
+    in_tok, out_tok = _extract_gemini_usage(resp)
+    log_api_usage(
+        project_key=zip_clean or "unknown",
+        route="reality_capture",
+        model=spatial_model,
+        input_tokens=in_tok,
+        output_tokens=out_tok,
+        meta={"phase": "gemini_multimodal_audit"},
     )
     raw_text = ""
     if hasattr(resp, "text") and resp.text:
@@ -427,7 +457,7 @@ def _run_gemini_audit_sync(
         "image_height": height,
         "detections": detections,
         "austin_clearance": clearance_block,
-        "model_id": _gemini_model_name(),
+        "model_id": spatial_model,
     }
 
     if clearance_block.get("applies") and isinstance(obs_text, str):
