@@ -333,7 +333,7 @@ export default function App() {
   const [tradeElectrician, setTradeElectrician] = useState(true);
   const [tradePlumber, setTradePlumber] = useState(false);
   const [tradeHvac, setTradeHvac] = useState(false);
-  const [missionCriticalDc, setMissionCriticalDc] = useState(false);
+  const [missionCriticalDc, setMissionCriticalDc] = useState(true);
   const [scoutVertical, setScoutVertical] = useState<"building" | "infrastructure" | "data_center">(
     "building",
   );
@@ -542,7 +542,7 @@ export default function App() {
     setTradeElectrician(true);
     setTradePlumber(false);
     setTradeHvac(false);
-    setMissionCriticalDc(false);
+    setMissionCriticalDc(true);
     setScoutVertical("building");
     setLocateMessage(null);
     setBusy(false);
