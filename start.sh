@@ -23,7 +23,11 @@ cleanup() {
 trap cleanup EXIT INT TERM
 
 cd "${ROOT}/backend"
-python3 main.py &
+PY="${ROOT}/backend/venv/bin/python"
+if [ ! -x "${PY}" ]; then
+  PY="python3"
+fi
+"${PY}" main.py &
 BACK_PID=$!
 
 cd "${ROOT}/frontend"
