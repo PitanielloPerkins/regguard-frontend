@@ -440,6 +440,100 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   font-weight: 400;
 }
 
+/** Community Scout Moat — ZIP-indexed crowdsourced inspector tips. */
+.rg-community-scout-alert {
+  margin: 0 0 1rem;
+  padding: 0.85rem 1rem;
+  border-radius: 10px;
+  border: 2px solid rgba(56, 189, 248, 0.65);
+  background: linear-gradient(135deg, rgba(14, 165, 233, 0.12), rgba(59, 130, 246, 0.08));
+  box-shadow: 0 0 0 1px rgba(0, 0, 0, 0.2);
+}
+
+.rg-community-scout-alert__title {
+  font-family: "Inter", "Roboto", system-ui, sans-serif;
+  font-weight: 800;
+  font-size: 0.92rem;
+  letter-spacing: 0.04em;
+  color: #7dd3fc;
+  margin-bottom: 0.4rem;
+}
+
+.rg-community-scout-alert__meta {
+  margin: 0 0 0.5rem;
+  font-size: 0.8rem;
+  line-height: 1.45;
+  color: var(--rg-muted);
+}
+
+.rg-community-scout-alert__list {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 0.85rem;
+  line-height: 1.5;
+  color: var(--rg-text);
+}
+
+.rg-inspector-note-modal-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 20000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 1.25rem;
+  background: rgba(15, 23, 42, 0.72);
+}
+
+.rg-inspector-note-modal {
+  width: 100%;
+  max-width: 420px;
+  border-radius: 12px;
+  border: 1px solid var(--rg-border);
+  background: var(--rg-panel-bg);
+  box-shadow: 0 16px 48px rgba(0, 0, 0, 0.45);
+  padding: 1.15rem 1.25rem 1.25rem;
+}
+
+.rg-inspector-note-modal__title {
+  margin: 0 0 0.5rem;
+  font-size: 1.05rem;
+  font-weight: 700;
+}
+
+.rg-inspector-note-modal__hint {
+  margin: 0 0 0.65rem;
+  font-size: 0.82rem;
+  line-height: 1.45;
+  color: var(--rg-muted);
+}
+
+.rg-inspector-note-modal__textarea {
+  width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 0.85rem;
+  padding: 0.6rem 0.65rem;
+  border-radius: 8px;
+  border: 1px solid var(--rg-border);
+  background: rgba(0, 0, 0, 0.2);
+  color: var(--rg-text);
+  font-family: inherit;
+  font-size: 0.88rem;
+  resize: vertical;
+  min-height: 5.5rem;
+}
+
+.rg-inspector-note-modal__textarea:focus {
+  outline: 2px solid rgba(56, 189, 248, 0.5);
+  outline-offset: 1px;
+}
+
+.rg-inspector-note-modal__actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.5rem;
+}
+
 .rg-results-panel h2 {
   margin-bottom: 0.5rem;
 }
