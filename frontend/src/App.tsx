@@ -145,6 +145,18 @@ function parseCommunityInspectorNotesPayload(
   return { zip: z, notes };
 }
 
+type MaintenanceSubscription = {
+  id: string;
+  project_name: string;
+  zip: string;
+  site_address?: string;
+  sensor_profile?: string;
+  alert_threshold_note?: string;
+  maintenance_mode_enabled?: boolean;
+  created_at?: string;
+  ai_evaluation_note?: string;
+};
+
 type NdjsonLine =
   | { event: "open" }
   | { event: "heartbeat"; ts?: number }
@@ -355,6 +367,34 @@ export default function App() {
   const [inspectorNoteSaving, setInspectorNoteSaving] = useState(false);
   const [resultsTab, setResultsTab] = useState<"plan" | "visual">("plan");
   const [photoObjectUrl, setPhotoObjectUrl] = useState<string | null>(null);
+  const [maintenanceSubs, setMaintenanceSubs] = useState<MaintenanceSubscription[]>([]);
+  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
+  const [maintProjectName, setMaintProjectName] = useState("");
+  const [maintAlertNote, setMaintAlertNote] = useState("");
+  const [maintSensorProfile, setMaintSensorProfile] = useState("thermal_vibration");
+  const [maintSaving, setMaintSaving] = useState(false);
+  const [bimBridgeReport, setBimBridgeReport] = useState<Record<string, unknown> | null>(null);
+  const [bimImportBusy, setBimImportBusy] = useState(false);
+  const [bimJsonDraft, setBimJsonDraft] = useState("");
+
+  const refreshMaintenanceSubs = useCallback(async () => {
+    setMaintenanceLoading(true);
+    try {
+      const r = await fetch("/api/maintenance/subscriptions");
+      if (!r.ok) {
+        return;
+      }
+      const j = (await r.json()) as { subscriptions?: unknown };
+      const raw = j.subscriptions;
+      setMaintenanceSubs(Array.isArray(raw) ? (raw as MaintenanceSubscription[]) : []);
+    } finally {
+      setMaintenanceLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    void refreshMaintenanceSubs();
+  }, [refreshMaintenanceSubs]);
 
   const setJobDescriptionRef = useRef(setJobDescription);
   setJobDescriptionRef.current = setJobDescription;
@@ -492,6 +532,8 @@ export default function App() {
     resetOutput();
     addressRef.current?.clearForNewJob();
     setFileInputKey((k) => k + 1);
+    setBimBridgeReport(null);
+    setBimJsonDraft("");
 
     window.requestAnimationFrame(() => {
       cancelPendingLocateApplyRef.current = false;
@@ -542,6 +584,144 @@ export default function App() {
     }
   }, [inspectorNoteDraft, selection?.zip]);
 
+  const handleCreateMaintenanceSubscription = useCallback(async () => {
+    if (!maintProjectName.trim()) {
+      toast.error("Enter a project name.");
+      return;
+    }
+    const zip = selection?.zip?.trim();
+    if (!zip) {
+      toast.error("Select a job site with a ZIP first.");
+      return;
+    }
+    setMaintSaving(true);
+    try {
+      const form = new FormData();
+      form.append("project_name", maintProjectName.trim());
+      form.append("zip_code", zip);
+      form.append("site_address", selection?.formattedAddress ?? "");
+      form.append("sensor_profile", maintSensorProfile);
+      form.append("alert_threshold_note", maintAlertNote.trim());
+      form.append("maintenance_mode_enabled", "true");
+      const res = await fetch("/api/maintenance/subscriptions", { method: "POST", body: form });
+      if (!res.ok) {
+        const detail = await detailFromBadResponse(res);
+        toast.error(detail.length > 200 ? `${detail.slice(0, 200)}…` : detail);
+        return;
+      }
+      toast.success("Maintenance Mode subscription saved.");
+      setMaintProjectName("");
+      setMaintAlertNote("");
+      await refreshMaintenanceSubs();
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save subscription.");
+    } finally {
+      setMaintSaving(false);
+    }
+  }, [
+    maintProjectName,
+    maintAlertNote,
+    maintSensorProfile,
+    selection?.zip,
+    selection?.formattedAddress,
+    refreshMaintenanceSubs,
+  ]);
+
+  const handleToggleMaintenanceMode = useCallback(
+    async (id: string, enabled: boolean) => {
+      try {
+        const res = await fetch(`/api/maintenance/subscriptions/${encodeURIComponent(id)}`, {
+          method: "PATCH",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({ maintenance_mode_enabled: enabled }),
+        });
+        if (!res.ok) {
+          const detail = await detailFromBadResponse(res);
+          toast.error(detail.length > 220 ? `${detail.slice(0, 220)}…` : detail);
+          return;
+        }
+        toast.success(enabled ? "Maintenance Mode on" : "Maintenance Mode paused", {
+          autoClose: 2200,
+          hideProgressBar: true,
+        });
+        await refreshMaintenanceSubs();
+      } catch (e) {
+        toast.error(e instanceof Error ? e.message : "Update failed.");
+      }
+    },
+    [refreshMaintenanceSubs],
+  );
+
+  const handleBimImport = useCallback(async () => {
+    let parsed: Record<string, unknown>;
+    try {
+      parsed = JSON.parse(bimJsonDraft) as Record<string, unknown>;
+    } catch {
+      toast.error("BIM JSON is not valid.");
+      return;
+    }
+    setBimImportBusy(true);
+    try {
+      const res = await fetch("/api/bim/import", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(parsed),
+      });
+      if (!res.ok) {
+        const detail = await detailFromBadResponse(res);
+        toast.error(detail.length > 240 ? `${detail.slice(0, 240)}…` : detail);
+        return;
+      }
+      const report = (await res.json()) as Record<string, unknown>;
+      setBimBridgeReport(report);
+      const clashes = report.clash_zones;
+      const n = Array.isArray(clashes) ? clashes.length : 0;
+      toast.success(
+        n > 0
+          ? `BIM import: ${n} Austin gas/conduit clash zone(s) — will merge into the next research for this ZIP.`
+          : "BIM import complete — cross-referenced to Universal Scout archive.",
+        { autoClose: 4200, hideProgressBar: true },
+      );
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "BIM import failed.");
+    } finally {
+      setBimImportBusy(false);
+    }
+  }, [bimJsonDraft]);
+
+  const loadSampleBimJson = useCallback(() => {
+    setBimJsonDraft(
+      JSON.stringify(
+        {
+          zip: "78704",
+          project: {
+            name: "RegGuard BIM sample",
+            city: "Austin",
+            state: "TX",
+            zip: "78704",
+            units: "ft",
+          },
+          elements: [
+            {
+              id: "c-demo-1",
+              category: "Conduits",
+              family: "EMT",
+              curve: { start: [0, 0, 0], end: [2.5, 0, 0] },
+            },
+            {
+              id: "g-demo-1",
+              category: "Mechanical Equipment",
+              family: "Gas Meter",
+              location: [2.4, 0, 0],
+            },
+          ],
+        },
+        null,
+        2,
+      ),
+    );
+  }, []);
+
   const runResearch = useCallback(async () => {
     if (!selection) {
       return;
@@ -566,6 +746,13 @@ export default function App() {
     form.append("search_limit", String(searchLimit));
     if (imageFile) {
       form.append("image", imageFile);
+    }
+    if (
+      bimBridgeReport &&
+      typeof bimBridgeReport.zip === "string" &&
+      bimBridgeReport.zip === selection.zip
+    ) {
+      form.append("bim_bridge_json", JSON.stringify(bimBridgeReport));
     }
 
     try {
@@ -863,7 +1050,7 @@ export default function App() {
       setBusy(false);
       setSseConnectionLive(false);
     }
-  }, [selection, jobDescription, searchLimit, imageFile, resetOutput]);
+  }, [selection, jobDescription, searchLimit, imageFile, resetOutput, bimBridgeReport]);
 
   const geolocationReadOptions = useMemo<PositionOptions>(
     () => ({
@@ -1554,6 +1741,125 @@ export default function App() {
                 setSearchLimit(Math.min(20, Math.max(1, Math.round(n))));
               }}
             />
+          </div>
+
+          <div className="rg-field rg-service-bridge">
+            <h3 className="rg-service-bridge__title">Service Bridge — BIM &amp; maintenance</h3>
+            <p className="field-hint">
+              <strong>BIM:</strong> paste a Revit-style JSON export. The backend cross-references your archived{" "}
+              <strong>Universal Scout</strong> snapshot for that ZIP and flags <strong>clash zones</strong> where conduit
+              encroaches on Austin&apos;s ~36-inch gas-relief / meter clearance pattern (787 / Austin). Seed the archive
+              by running compliance research once per ZIP before BIM import. Matching ZIP merges into the next research
+              automatically.
+            </p>
+            <div className="rg-service-bridge__row">
+              <button
+                type="button"
+                className="rg-btn rg-btn--ghost rg-btn--compact"
+                disabled={busy || bimImportBusy}
+                onClick={loadSampleBimJson}
+              >
+                Load Austin sample JSON
+              </button>
+              {bimBridgeReport && typeof bimBridgeReport.zip === "string" ? (
+                <span className="field-hint rg-service-bridge__badge">
+                  Last BIM bridge: ZIP <strong>{String(bimBridgeReport.zip)}</strong>
+                  {Array.isArray(bimBridgeReport.clash_zones) ? (
+                    <> — {bimBridgeReport.clash_zones.length} clash zone(s)</>
+                  ) : null}
+                </span>
+              ) : null}
+            </div>
+            <textarea
+              className="rg-input rg-service-bridge__textarea"
+              rows={5}
+              placeholder={'{"zip":"78704","project":{...},"elements":[...]}'}
+              value={bimJsonDraft}
+              disabled={busy || bimImportBusy}
+              onChange={(e) => setBimJsonDraft(e.target.value)}
+            />
+            <button
+              type="button"
+              className="rg-btn rg-btn--primary rg-btn--compact rg-service-bridge__bim-btn"
+              disabled={busy || bimImportBusy || !bimJsonDraft.trim()}
+              onClick={() => void handleBimImport()}
+            >
+              {bimImportBusy ? "Importing…" : "Run BIM import"}
+            </button>
+
+            <hr className="rg-service-bridge__hr" />
+
+            <p className="field-hint">
+              <strong>Maintenance Mode:</strong> configure AI-driven sensor alert targets for a{" "}
+              <strong>completed</strong> project—describe wear signals to catch before an outage.
+            </p>
+            <div className="rg-maintenance-form">
+              <input
+                className="rg-input"
+                placeholder="Project name"
+                value={maintProjectName}
+                disabled={busy || maintSaving}
+                onChange={(e) => setMaintProjectName(e.target.value)}
+              />
+              <input
+                className="rg-input"
+                placeholder="Sensor profile (e.g. thermal_vibration)"
+                value={maintSensorProfile}
+                disabled={busy || maintSaving}
+                onChange={(e) => setMaintSensorProfile(e.target.value)}
+              />
+              <textarea
+                className="rg-input rg-maintenance-form__note"
+                rows={2}
+                placeholder="Alert thresholds / failure precursors to monitor…"
+                value={maintAlertNote}
+                disabled={busy || maintSaving}
+                onChange={(e) => setMaintAlertNote(e.target.value)}
+              />
+              <button
+                type="button"
+                className="rg-btn rg-btn--primary rg-btn--compact"
+                disabled={busy || maintSaving || !selection?.zip}
+                onClick={() => void handleCreateMaintenanceSubscription()}
+              >
+                {maintSaving ? "Saving…" : "Add maintenance subscription"}
+              </button>
+            </div>
+            {maintenanceLoading ? (
+              <p className="field-hint">Loading subscriptions…</p>
+            ) : maintenanceSubs.length === 0 ? (
+              <p className="field-hint">No maintenance subscriptions yet.</p>
+            ) : (
+              <ul className="rg-maintenance-list">
+                {maintenanceSubs.map((s) => (
+                  <li key={s.id} className="rg-maintenance-list__item">
+                    <div className="rg-maintenance-list__head">
+                      <strong>{s.project_name}</strong>
+                      <span className="field-hint">
+                        {" "}
+                        ZIP {s.zip}
+                        {s.maintenance_mode_enabled !== false ? (
+                          <span className="rg-maintenance-on"> — Maintenance Mode on</span>
+                        ) : (
+                          <span className="rg-maintenance-off"> — paused</span>
+                        )}
+                      </span>
+                    </div>
+                    {s.alert_threshold_note ? (
+                      <p className="rg-maintenance-list__note">{s.alert_threshold_note}</p>
+                    ) : null}
+                    <label className="rg-maintenance-toggle">
+                      <input
+                        type="checkbox"
+                        checked={s.maintenance_mode_enabled !== false}
+                        onChange={(e) => void handleToggleMaintenanceMode(s.id, e.target.checked)}
+                      />{" "}
+                      Sensor alerts active
+                    </label>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
 
           <div className="rg-actions">

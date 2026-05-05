@@ -372,6 +372,7 @@ def build_research_digest(
     *,
     future_risk: Optional[Dict[str, Any]] = None,
     community_scout_notes: Optional[List[Dict[str, Any]]] = None,
+    bim_clash_report: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Compact research context for the action-plan model (no full page bodies)."""
     ju = raw.get("jurisdiction")
@@ -455,6 +456,30 @@ def build_research_digest(
             + ", not codified law—do not imply they are ordinance."
         )
 
+    bim_payload: Dict[str, Any] = {}
+    if isinstance(bim_clash_report, dict):
+        cz = bim_clash_report.get("clash_zones")
+        scr = bim_clash_report.get("scout_cross_reference")
+        if isinstance(cz, list) and cz:
+            directive["bim_clash_zone_moat"] = (
+                "HARD REQUIREMENT: Under **### Technical Punch List**, after any **COMMUNITY ALERT** block (if present), "
+                "emit **CLASH ZONES (BIM vs Universal Scout)** as its own bold line, then one `- [ ]` line per object in "
+                "`bim_clash_zones` citing conduit vs gas element ids, modeled clearance vs **36-inch** Austin Design Criteria "
+                "(gas relief / meter envelope), and explicit **field-verify / reroute** language. Treat values as model heuristics."
+            )
+            bim_payload["bim_clash_zones"] = cz
+        if isinstance(scr, dict):
+            bim_payload["bim_scout_cross_reference"] = scr
+        bz = str(bim_clash_report.get("zip") or "").strip()
+        if bz:
+            bim_payload["bim_bridge_zip"] = bz
+        if isinstance(scr, dict) and scr.get("archive_hit") and not (isinstance(cz, list) and cz):
+            directive["bim_integration_crossref"] = (
+                "The digest includes `bim_scout_cross_reference` from the BIM export. Add one `- [ ]` under **### Technical Punch List** "
+                "to reconcile the federated model against the archived **Universal Scout** `.gov` anchors (cross-reference block) "
+                "before finalizing conduit routing."
+            )
+
     payload: Dict[str, Any] = {
         "zip": raw.get("zip"),
         "site_address": raw.get("site_address"),
@@ -469,6 +494,7 @@ def build_research_digest(
         "inspector_digest_directive": directive,
         "community_scout_inspector_notes": comm,
     }
+    payload.update(bim_payload)
     if scout_has_no_trusted_results(raw):
         payload["empty_scout_nec_2023_fallback"] = True
     if city_guess.lower() == "dallas" and (state_guess or "").strip().upper() in ("TX",):
@@ -527,13 +553,14 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                     "role": "user",
                     "content": (
                         "Read `inspector_digest_directive` first (`consultant_role`, `logic_steps`, `fee_and_code_guidance`, "
-                        "`gotchas_guidance`, `output_format`, and `community_inspector_moat` if present), then `plano_ord_250_50_requirement`, "
+                        "`gotchas_guidance`, `output_format`, `community_inspector_moat`, `bim_clash_zone_moat`, and `bim_integration_crossref` if present), then `plano_ord_250_50_requirement`, "
                         "`plano_electrical_permit_fee_sync_usd` / `plano_electrical_permit_fee_2026_note`, "
                         "`dallas_minimum_trade_permit_usd` / `dallas_minimum_trade_permit_note`, `dallas_oncor_disconnect_coordination`, "
                         "`austin_design_criteria_requirement`, `austin_development_services_fees_url`, `austin_safety_surcharge_note`, "
                         "`austin_central_zip_service_upgrade`, "
                         "and `empty_scout_nec_2023_fallback` if present, then "
                         "`community_scout_inspector_notes` (when non-empty you MUST satisfy `community_inspector_moat` under **### Technical Punch List**), "
+                        "`bim_clash_zones` / `bim_scout_cross_reference` when present (satisfy `bim_clash_zone_moat` and/or `bim_integration_crossref`), "
                         "`tagged_priority_hits` and the rest of the JSON. "
                         "Follow the role and logic steps; obey `output_format` and `gotchas_guidance`. "
                         f"When `plano_ord_250_50_requirement` is set, you MUST satisfy it under **### Technical Punch List** "

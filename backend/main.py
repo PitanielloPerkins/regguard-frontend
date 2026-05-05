@@ -22,19 +22,21 @@ from pathlib import Path
 from queue import Queue
 from typing import Any, Dict, Iterator, List, Optional, Tuple, cast
 
-from fastapi import FastAPI, File, Form, HTTPException, Request, UploadFile
+from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
 from jurisdiction import JurisdictionProfile, geocode_profile_from_address
+from maintenance_mode import create_subscription, list_subscriptions, set_maintenance_mode
 from research_memo import (
     build_research_digest,
     filter_source_urls,
     iter_contractor_action_plan_stream,
     scout_has_no_trusted_results,
 )
+from universal_scout_archive import save_scout_snapshot
 # Firecrawl Universal Scout (/v2/search, tight caps) — see ``scraper.py``.
 from scraper import (
     clear_scout_run_caches,
@@ -43,6 +45,7 @@ from scraper import (
     iter_universal_scout,
     normalize_us_zip,
 )
+from bim_sync import run_bim_sync_bridge
 from calculations import permit_draft_calculation_response
 from community_gotchas import append_note, list_notes_for_zip
 from vision_agent import (
@@ -77,6 +80,8 @@ _CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's **field punch list** wri
 
 Scout results favor **.gov** and **Municode** for the input locality. Act as a **Master Electrician for that specific city or county**; output **only** `- [ ]` technical punch list lines under the required headings (no narrative paragraphs).
 
+When non-empty ``bim_clash_zones`` is present, you **MUST** follow ``inspector_digest_directive.bim_clash_zone_moat`` under **### Technical Punch List** (Austin **36-inch** gas-relief / meter clearance vs modeled conduit). When ``bim_integration_crossref`` is present, satisfy that cross-reference line item against archived scout URLs.
+
 When the digest JSON includes non-empty ``community_scout_inspector_notes``, you **MUST** follow ``inspector_digest_directive.community_inspector_moat``: under **### Technical Punch List**, lead with **COMMUNITY ALERT: Recent Inspector Feedback** and checkbox lines for each crowdsourced note (tag **verify with AHJ**).
 
 When the digest locality is **Plano, Texas**, you **MUST** include under **Technical Punch List** a **MANDATORY GOTCHA: Plano Ordinance 250.50** block with `- [ ]` tasks for **two 8-foot grounding rods** spaced **20 feet** apart, **connected by a 2/0 AWG conductor** between rods per Plano (**not** the **6-foot** rod-spacing narrative from generic NEC discussion). Cross-check codified wording on official Plano / Municode sources when the digest allows.
@@ -89,7 +94,7 @@ When the digest locality is **Dallas, Texas**, under **Permit Costs** include a 
 
 When the digest locality is **Austin, Texas**, under **### Technical Punch List** include **MANDATORY GOTCHA: City of Austin Design Criteria** with `- [ ]` tasks for **36-inch** clearance from **gas relief valves** and, for **service upgrades** (incl. **78704** / **787** Austin), the **225A** interior **panel bus** with **200A** main / **Solar-Ready** pattern where Austin requires it. Under **Permit Costs**, itemize **Safety Surcharges** from **austintexas.gov/development-services/fees**.
 
-The JSON includes ``inspector_digest_directive`` and may include ``community_scout_inspector_notes``, ``plano_ord_250_50_requirement``, ``plano_electrical_permit_fee_sync_usd``, ``plano_electrical_permit_fee_2026_note``, ``dallas_minimum_trade_permit_usd``, ``dallas_minimum_trade_permit_note``, ``dallas_oncor_disconnect_coordination``, ``austin_design_criteria_requirement``, ``austin_development_services_fees_url``, ``austin_safety_surcharge_note``, ``austin_central_zip_service_upgrade``, and ``empty_scout_nec_2023_fallback``:
+The JSON includes ``inspector_digest_directive`` and may include ``bim_clash_zones``, ``bim_scout_cross_reference``, ``community_scout_inspector_notes``, ``plano_ord_250_50_requirement``, ``plano_electrical_permit_fee_sync_usd``, ``plano_electrical_permit_fee_2026_note``, ``dallas_minimum_trade_permit_usd``, ``dallas_minimum_trade_permit_note``, ``dallas_oncor_disconnect_coordination``, ``austin_design_criteria_requirement``, ``austin_development_services_fees_url``, ``austin_safety_surcharge_note``, ``austin_central_zip_service_upgrade``, and ``empty_scout_nec_2023_fallback``:
 - **consultant_role**, **gotchas_guidance**, **fee_and_code_guidance**, **output_format**, **community_inspector_moat** (when present)
 - Obey **required_checklist_headings** exactly. If ``plano_ord_250_50_requirement`` is present, satisfy it.
 
@@ -221,6 +226,7 @@ def _research_action_plan_fallback_markdown(
     enhanced_query: str,
     *,
     community_gotchas: Optional[List[Dict[str, Any]]] = None,
+    bim_clash_report: Optional[Dict[str, Any]] = None,
 ) -> str:
     """Deterministic Markdown memo when ANTHROPIC_API_KEY is unavailable."""
     zip_str = str(raw.get("zip") or "")
@@ -390,12 +396,49 @@ def _research_action_plan_fallback_markdown(
             "",
         ]
 
+    bim_header: List[str] = []
+    zones_list: Optional[List[Any]] = None
+    if isinstance(bim_clash_report, dict):
+        zraw = bim_clash_report.get("clash_zones")
+        zones_list = zraw if isinstance(zraw, list) else None
+        if zones_list:
+            bim_header.extend(
+                [
+                    "**CLASH ZONES (BIM vs Universal Scout)**",
+                    "",
+                ]
+            )
+            for zone in zones_list:
+                if not isinstance(zone, dict):
+                    continue
+                zid = zone.get("id")
+                cid = zone.get("conduit_element_id")
+                gid = zone.get("gas_element_id")
+                d_mod = zone.get("clearance_modeled_in")
+                d_req = zone.get("clearance_required_in")
+                bim_header.append(
+                    f"- [ ] **{zid}** — Conduit `{cid}` vs gas `{gid}` modeled **{d_mod}** in clearance vs "
+                    f"**{d_req}** in (Austin gas-relief envelope) — **field-verify / reroute**."
+                )
+            bim_header.append("")
+        scr = bim_clash_report.get("scout_cross_reference")
+        if isinstance(scr, dict) and scr.get("archive_hit") and not zones_list:
+            bim_header.extend(
+                [
+                    "**BIM — Universal Scout cross-check**",
+                    "",
+                    "- [ ] Reconcile modeled routes against archived `.gov` Universal Scout anchors from the BIM bridge payload.",
+                    "",
+                ]
+            )
+
     lines.extend(
         [
             "### Technical Punch List",
             "",
         ]
         + community_header
+        + bim_header
         + nec_200a_fallback
         + punch_core
         + [
@@ -618,6 +661,58 @@ def post_community_gotcha(
     return {"ok": True, "zip": z, "note": note}
 
 
+@app.post("/bim/import")
+def bim_import(payload: Dict[str, Any] = Body(...)) -> Dict[str, Any]:
+    """Ingest a Revit-style JSON export, cross-reference archived Universal Scout, and flag Austin gas/conduit clash zones."""
+    try:
+        return run_bim_sync_bridge(payload)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.get("/maintenance/subscriptions")
+def maintenance_list() -> Dict[str, Any]:
+    """Dashboard: list Maintenance Mode sensor-alert subscriptions for completed projects."""
+    return {"subscriptions": list_subscriptions()}
+
+
+@app.post("/maintenance/subscriptions")
+def maintenance_create(
+    project_name: str = Form(...),
+    zip_code: str = Form(...),
+    site_address: str = Form(""),
+    sensor_profile: str = Form("thermal_vibration"),
+    alert_threshold_note: str = Form(""),
+    maintenance_mode_enabled: bool = Form(True),
+) -> Dict[str, Any]:
+    try:
+        return create_subscription(
+            project_name=project_name,
+            zip_code=zip_code,
+            site_address=site_address,
+            sensor_profile=sensor_profile,
+            alert_threshold_note=alert_threshold_note,
+            maintenance_mode_enabled=maintenance_mode_enabled,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+
+
+@app.patch("/maintenance/subscriptions/{subscription_id}")
+def maintenance_patch(
+    subscription_id: str,
+    body: Dict[str, Any] = Body(...),
+) -> Dict[str, Any]:
+    if "maintenance_mode_enabled" not in body:
+        raise HTTPException(status_code=400, detail="maintenance_mode_enabled is required")
+    try:
+        return set_maintenance_mode(subscription_id, bool(body["maintenance_mode_enabled"]))
+    except ValueError as e:
+        msg = str(e)
+        code = 404 if "Unknown" in msg else 400
+        raise HTTPException(status_code=code, detail=msg) from e
+
+
 @app.get("/reverse-geocode-address")
 def reverse_geocode_address(latitude: float, longitude: float) -> Dict[str, str]:
     """
@@ -646,6 +741,10 @@ async def research(
     site_address: str = Form(
         "",
         description="Google Places formatted_address — city/county via geocode.py",
+    ),
+    bim_bridge_json: str = Form(
+        "",
+        description="Optional JSON from POST /bim/import (RegGuard BIM bridge) — merged into digest for clash-zone routing",
     ),
     image: Optional[UploadFile] = File(None),
 ):
@@ -877,6 +976,10 @@ async def research(
 
             raw = final_raw
             source_urls = filter_source_urls(_collect_source_urls(raw))
+            try:
+                save_scout_snapshot(str(raw.get("zip") or zip_for_scout), raw)
+            except (ValueError, OSError) as ex:
+                logger.warning("Universal Scout archive write skipped: %s", ex)
             future_risk_snapshot = future_risk_alerts_from_raw(raw)
             yield _safe_sse_data_frame({"event": "future_risk_alert", "payload": future_risk_snapshot})
 
@@ -965,12 +1068,22 @@ async def research(
                 "scout",
                 "Scout complete — normalizing URLs and building a structured research digest…",
             )
+            bim_digest: Optional[Dict[str, Any]] = None
+            bim_raw_in = (bim_bridge_json or "").strip()
+            if bim_raw_in:
+                try:
+                    parsed_bim = json.loads(bim_raw_in)
+                    if isinstance(parsed_bim, dict):
+                        bim_digest = parsed_bim
+                except json.JSONDecodeError:
+                    logger.warning("bim_bridge_json is not valid JSON — skipping BIM digest merge")
             digest = build_research_digest(
                 raw,
                 source_urls,
                 enhanced_query,
                 future_risk=future_risk_snapshot,
                 community_scout_notes=_community_notes,
+                bim_clash_report=bim_digest,
             )
 
             summary: str
@@ -1010,7 +1123,11 @@ async def research(
                             "Audit — Recovering with structured fallback memo after synthesis error…",
                         )
                         stub = _research_action_plan_fallback_markdown(
-                            raw, source_urls, enhanced_query, community_gotchas=_community_notes
+                            raw,
+                            source_urls,
+                            enhanced_query,
+                            community_gotchas=_community_notes,
+                            bim_clash_report=bim_digest,
                         )
                         logger.warning("Contractor Action Plan Claude error — using fallback: %s", err)
                         for chunk in _iter_summary_word_chunks(stub):
@@ -1026,7 +1143,11 @@ async def research(
                 )
                 _log_research_step("action plan", detail="structured fallback memo — no ANTHROPIC_API_KEY")
                 summary = _research_action_plan_fallback_markdown(
-                    raw, source_urls, enhanced_query, community_gotchas=_community_notes
+                    raw,
+                    source_urls,
+                    enhanced_query,
+                    community_gotchas=_community_notes,
+                    bim_clash_report=bim_digest,
                 )
                 for chunk in _iter_summary_word_chunks(summary):
                     yield _safe_sse_data_frame({"event": "summary_delta", "text": chunk})
