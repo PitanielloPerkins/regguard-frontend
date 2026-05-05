@@ -112,6 +112,39 @@ function parseFutureRiskPayload(v: unknown): FutureRiskAlertPayload | null {
   };
 }
 
+type CommunityInspectorNote = { text: string; created_at?: string };
+
+type CommunityInspectorFeedbackPayload = { zip: string; notes: CommunityInspectorNote[] };
+
+function parseCommunityInspectorNotesPayload(
+  zip: string,
+  notesUnknown: unknown,
+): CommunityInspectorFeedbackPayload | null {
+  const z = zip.trim();
+  if (!z || !Array.isArray(notesUnknown)) {
+    return null;
+  }
+  const notes: CommunityInspectorNote[] = [];
+  for (const n of notesUnknown) {
+    if (n == null || typeof n !== "object") {
+      continue;
+    }
+    const rec = n as Record<string, unknown>;
+    const text = typeof rec.text === "string" ? rec.text.trim() : "";
+    if (!text) {
+      continue;
+    }
+    notes.push({
+      text,
+      created_at: typeof rec.created_at === "string" ? rec.created_at : undefined,
+    });
+  }
+  if (!notes.length) {
+    return null;
+  }
+  return { zip: z, notes };
+}
+
 type NdjsonLine =
   | { event: "open" }
   | { event: "heartbeat"; ts?: number }
@@ -130,6 +163,7 @@ type NdjsonLine =
   | { event: "step"; step?: string; data?: unknown }
   | { event: "reasoning"; phase?: string; text: string }
   | { event: "future_risk_alert"; payload?: unknown }
+  | { event: "community_inspector_feedback"; zip?: string; notes?: unknown }
   | { event: "summary_delta"; text: string }
   | {
       event: "complete";
@@ -143,6 +177,7 @@ type NdjsonLine =
       visual_audit?: unknown;
       ahj_label?: string | null;
       future_risk_alert?: unknown;
+      community_inspector_feedback?: unknown;
     }
   | { event: "visual_audit"; payload: unknown }
   | { event: "error"; message: string };
@@ -313,6 +348,11 @@ export default function App() {
   const [fileInputKey, setFileInputKey] = useState(0);
   const [visualAudit, setVisualAudit] = useState<VisualAuditPayload | null>(null);
   const [futureRiskAlert, setFutureRiskAlert] = useState<FutureRiskAlertPayload | null>(null);
+  const [communityInspectorFeedback, setCommunityInspectorFeedback] =
+    useState<CommunityInspectorFeedbackPayload | null>(null);
+  const [inspectorNoteModalOpen, setInspectorNoteModalOpen] = useState(false);
+  const [inspectorNoteDraft, setInspectorNoteDraft] = useState("");
+  const [inspectorNoteSaving, setInspectorNoteSaving] = useState(false);
   const [resultsTab, setResultsTab] = useState<"plan" | "visual">("plan");
   const [photoObjectUrl, setPhotoObjectUrl] = useState<string | null>(null);
 
@@ -412,6 +452,10 @@ export default function App() {
     setReasoningStep(null);
     setVisualAudit(null);
     setFutureRiskAlert(null);
+    setCommunityInspectorFeedback(null);
+    setInspectorNoteModalOpen(false);
+    setInspectorNoteDraft("");
+    setInspectorNoteSaving(false);
     setResultsTab("plan");
   }, []);
 
@@ -463,6 +507,40 @@ export default function App() {
   const handleRefreshApp = useCallback(() => {
     window.location.reload();
   }, []);
+
+  const handleSubmitInspectorNote = useCallback(async () => {
+    if (!selection?.zip) {
+      toast.error("Select a job site with a ZIP first.");
+      return;
+    }
+    const t = inspectorNoteDraft.trim();
+    if (!t) {
+      toast.error("Enter a short inspector note.");
+      return;
+    }
+    setInspectorNoteSaving(true);
+    try {
+      const form = new FormData();
+      form.append("zip_code", selection.zip);
+      form.append("text", t);
+      const res = await fetch("/api/community-gotchas", { method: "POST", body: form });
+      if (!res.ok) {
+        const detail = await detailFromBadResponse(res);
+        toast.error(detail.length > 220 ? `${detail.slice(0, 220)}…` : detail);
+        return;
+      }
+      toast.success("Inspector note saved for this ZIP. It will appear on the next research run.", {
+        autoClose: 3800,
+        hideProgressBar: true,
+      });
+      setInspectorNoteModalOpen(false);
+      setInspectorNoteDraft("");
+    } catch (e) {
+      toast.error(e instanceof Error ? e.message : "Could not save note.");
+    } finally {
+      setInspectorNoteSaving(false);
+    }
+  }, [inspectorNoteDraft, selection?.zip]);
 
   const runResearch = useCallback(async () => {
     if (!selection) {
@@ -629,6 +707,14 @@ export default function App() {
               setFutureRiskAlert(parsed?.active ? parsed : null);
               break;
             }
+            case "community_inspector_feedback": {
+              const zip = typeof payload.zip === "string" ? payload.zip : "";
+              const parsed = parseCommunityInspectorNotesPayload(zip, payload.notes);
+              if (parsed) {
+                setCommunityInspectorFeedback(parsed);
+              }
+              break;
+            }
             case "step": {
               const name = typeof payload.step === "string" ? payload.step : "step";
               setPhase(`Research: ${name}`);
@@ -696,6 +782,16 @@ export default function App() {
                 if (fr?.active) {
                   setFutureRiskAlert(fr);
                 }
+              }
+              {
+                const zipFin = typeof payload.zip === "string" ? payload.zip : "";
+                const cfb =
+                  "community_inspector_feedback" in payload
+                    ? payload.community_inspector_feedback
+                    : undefined;
+                const parsed =
+                  cfb != null ? parseCommunityInspectorNotesPayload(zipFin, cfb) : null;
+                setCommunityInspectorFeedback(parsed);
               }
               break;
             }
@@ -1587,6 +1683,20 @@ export default function App() {
             </div>
           ) : null}
 
+          {communityInspectorFeedback?.notes?.length ? (
+            <div className="rg-community-scout-alert" role="status" aria-live="polite">
+              <div className="rg-community-scout-alert__title">COMMUNITY ALERT: Recent Inspector Feedback</div>
+              <p className="rg-community-scout-alert__meta">
+                ZIP <strong>{communityInspectorFeedback.zip}</strong> — crowdsourced field notes (verify with your AHJ).
+              </p>
+              <ul className="rg-community-scout-alert__list">
+                {communityInspectorFeedback.notes.map((n, i) => (
+                  <li key={`${n.created_at ?? "note"}-${i}`}>{n.text}</li>
+                ))}
+              </ul>
+            </div>
+          ) : null}
+
           <div className="rg-results-tabs" role="tablist" aria-label="Results views">
             <button
               type="button"
@@ -1645,6 +1755,15 @@ export default function App() {
                   onClick={handleGeneratePermitPackage}
                 >
                   Generate Permit Package
+                </button>
+                <button
+                  type="button"
+                  className="rg-btn rg-btn--ghost rg-btn--compact rg-plan-action-btn"
+                  title="Share a quick inspector gotcha for this job-site ZIP (visible to other contractors on the next scout)"
+                  disabled={!selection?.zip || busy}
+                  onClick={() => setInspectorNoteModalOpen(true)}
+                >
+                  Add Inspector Note
                 </button>
                 <button
                   type="button"
@@ -1804,6 +1923,63 @@ export default function App() {
                 Dismiss
               </button>
             </span>
+          </div>
+        </div>
+      ) : null}
+      {inspectorNoteModalOpen ? (
+        <div
+          className="rg-inspector-note-modal-overlay"
+          role="presentation"
+          onClick={(e) => {
+            if (e.target === e.currentTarget && !inspectorNoteSaving) {
+              setInspectorNoteModalOpen(false);
+            }
+          }}
+        >
+          <div
+            className="rg-inspector-note-modal"
+            role="dialog"
+            aria-modal="true"
+            aria-labelledby="rg-inspector-note-title"
+          >
+            <h3 id="rg-inspector-note-title" className="rg-inspector-note-modal__title">
+              Add inspector note
+            </h3>
+            <p className="rg-inspector-note-modal__hint">
+              Short field tip for ZIP <strong>{selection?.zip ?? "—"}</strong> (e.g. inspector preferences). Saved to the
+              community pool and shown on future research for this ZIP.
+            </p>
+            <textarea
+              className="rg-inspector-note-modal__textarea"
+              rows={4}
+              maxLength={2000}
+              value={inspectorNoteDraft}
+              placeholder='e.g. "Inspector Smith in Austin is strict on torque marks"'
+              onChange={(e) => setInspectorNoteDraft(e.target.value)}
+              disabled={inspectorNoteSaving}
+            />
+            <div className="rg-inspector-note-modal__actions">
+              <button
+                type="button"
+                className="rg-btn rg-btn--ghost rg-btn--compact"
+                disabled={inspectorNoteSaving}
+                onClick={() => {
+                  if (!inspectorNoteSaving) {
+                    setInspectorNoteModalOpen(false);
+                  }
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                type="button"
+                className="rg-btn rg-btn--primary rg-btn--compact"
+                disabled={inspectorNoteSaving || !selection?.zip}
+                onClick={() => void handleSubmitInspectorNote()}
+              >
+                {inspectorNoteSaving ? "Saving…" : "Save note"}
+              </button>
+            </div>
           </div>
         </div>
       ) : null}

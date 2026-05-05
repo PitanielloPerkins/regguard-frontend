@@ -44,6 +44,7 @@ from scraper import (
     normalize_us_zip,
 )
 from calculations import permit_draft_calculation_response
+from community_gotchas import append_note, list_notes_for_zip
 from vision_agent import (
     gemini_configured,
     iter_reality_capture_audit_stream,
@@ -76,6 +77,8 @@ _CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's **field punch list** wri
 
 Scout results favor **.gov** and **Municode** for the input locality. Act as a **Master Electrician for that specific city or county**; output **only** `- [ ]` technical punch list lines under the required headings (no narrative paragraphs).
 
+When the digest JSON includes non-empty ``community_scout_inspector_notes``, you **MUST** follow ``inspector_digest_directive.community_inspector_moat``: under **### Technical Punch List**, lead with **COMMUNITY ALERT: Recent Inspector Feedback** and checkbox lines for each crowdsourced note (tag **verify with AHJ**).
+
 When the digest locality is **Plano, Texas**, you **MUST** include under **Technical Punch List** a **MANDATORY GOTCHA: Plano Ordinance 250.50** block with `- [ ]` tasks for **two 8-foot grounding rods** spaced **20 feet** apart, **connected by a 2/0 AWG conductor** between rods per Plano (**not** the **6-foot** rod-spacing narrative from generic NEC discussion). Cross-check codified wording on official Plano / Municode sources when the digest allows.
 
 When the digest locality is **Plano, Texas**, also prioritize City of Plano amendments vs base NEC, fee schedules (including **2026** when cited), and inspection nuance from **only** Plano-applicable hits.
@@ -86,8 +89,8 @@ When the digest locality is **Dallas, Texas**, under **Permit Costs** include a 
 
 When the digest locality is **Austin, Texas**, under **### Technical Punch List** include **MANDATORY GOTCHA: City of Austin Design Criteria** with `- [ ]` tasks for **36-inch** clearance from **gas relief valves** and, for **service upgrades** (incl. **78704** / **787** Austin), the **225A** interior **panel bus** with **200A** main / **Solar-Ready** pattern where Austin requires it. Under **Permit Costs**, itemize **Safety Surcharges** from **austintexas.gov/development-services/fees**.
 
-The JSON includes ``inspector_digest_directive`` and may include ``plano_ord_250_50_requirement``, ``plano_electrical_permit_fee_sync_usd``, ``plano_electrical_permit_fee_2026_note``, ``dallas_minimum_trade_permit_usd``, ``dallas_minimum_trade_permit_note``, ``dallas_oncor_disconnect_coordination``, ``austin_design_criteria_requirement``, ``austin_development_services_fees_url``, ``austin_safety_surcharge_note``, ``austin_central_zip_service_upgrade``, and ``empty_scout_nec_2023_fallback``:
-- **consultant_role**, **gotchas_guidance**, **fee_and_code_guidance**, **output_format**
+The JSON includes ``inspector_digest_directive`` and may include ``community_scout_inspector_notes``, ``plano_ord_250_50_requirement``, ``plano_electrical_permit_fee_sync_usd``, ``plano_electrical_permit_fee_2026_note``, ``dallas_minimum_trade_permit_usd``, ``dallas_minimum_trade_permit_note``, ``dallas_oncor_disconnect_coordination``, ``austin_design_criteria_requirement``, ``austin_development_services_fees_url``, ``austin_safety_surcharge_note``, ``austin_central_zip_service_upgrade``, and ``empty_scout_nec_2023_fallback``:
+- **consultant_role**, **gotchas_guidance**, **fee_and_code_guidance**, **output_format**, **community_inspector_moat** (when present)
 - Obey **required_checklist_headings** exactly. If ``plano_ord_250_50_requirement`` is present, satisfy it.
 
 Output ONLY Markdown. Title:
@@ -216,6 +219,8 @@ def _research_action_plan_fallback_markdown(
     raw: Dict[str, Any],
     source_urls: List[str],
     enhanced_query: str,
+    *,
+    community_gotchas: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """Deterministic Markdown memo when ANTHROPIC_API_KEY is unavailable."""
     zip_str = str(raw.get("zip") or "")
@@ -368,11 +373,29 @@ def _research_action_plan_fallback_markdown(
             "",
         ]
 
+    community_block: List[str] = []
+    for item in community_gotchas or []:
+        if not isinstance(item, dict):
+            continue
+        t = str(item.get("text") or "").strip()
+        if not t:
+            continue
+        community_block.append(f"- [ ] {t} **(crowdsourced — verify with AHJ)**")
+    community_header: List[str] = []
+    if community_block:
+        community_header = [
+            "**COMMUNITY ALERT: Recent Inspector Feedback**",
+            "",
+            *community_block,
+            "",
+        ]
+
     lines.extend(
         [
             "### Technical Punch List",
             "",
         ]
+        + community_header
         + nec_200a_fallback
         + punch_core
         + [
@@ -581,6 +604,20 @@ def geocode_zip(latitude: float, longitude: float) -> Dict[str, str]:
     return {"zip": z}
 
 
+@app.post("/community-gotchas")
+def post_community_gotcha(
+    zip_code: str = Form(..., description="5-digit U.S. ZIP for this inspector note"),
+    text: str = Form(..., description="Short crowdsourced field tip for contractors in this ZIP"),
+) -> Dict[str, Any]:
+    """Append one crowdsourced inspector note for a ZIP (Community Scout Moat JSON store)."""
+    try:
+        note = append_note(zip_code, text)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=str(e)) from e
+    z = normalize_us_zip(zip_code)
+    return {"ok": True, "zip": z, "note": note}
+
+
 @app.get("/reverse-geocode-address")
 def reverse_geocode_address(latitude: float, longitude: float) -> Dict[str, str]:
     """
@@ -624,10 +661,12 @@ async def research(
     Reality Capture photo audit after scout when an image is included (requires API keys).
     Streams word-sized chunks of the Contractor Action Plan.
 
-    Events include: ``open``, ``heartbeat`` (during slow Firecrawl/vision work), ``vision_delta``,
+    Events include: ``open``, ``heartbeat`` (during slow Firecrawl/vision work), ``reasoning``,
+    ``vision_delta``,
     ``visual_audit`` (Gemini Reality Capture bounding boxes; requires ``GEMINI_API_KEY`` / ``GOOGLE_API_KEY`` when a photo is sent),
     ``context``, ``jurisdiction`` (when geocoded),
     ``step`` (including ``step_ahj_identification`` before Universal Scout), ``step`` (scout),
+    ``future_risk_alert``, ``community_inspector_feedback`` (ZIP-indexed crowdsourced inspector notes when present),
     ``summary_delta``, ``complete``.
     """
     try:
@@ -841,6 +880,16 @@ async def research(
             future_risk_snapshot = future_risk_alerts_from_raw(raw)
             yield _safe_sse_data_frame({"event": "future_risk_alert", "payload": future_risk_snapshot})
 
+            _community_notes = list_notes_for_zip(zip_for_scout)
+            if _community_notes:
+                yield _safe_sse_data_frame(
+                    {
+                        "event": "community_inspector_feedback",
+                        "zip": zip_for_scout,
+                        "notes": _community_notes,
+                    }
+                )
+
             if image_bytes:
                 content_type, filename = image_meta
                 scout_text = scout_summary_for_reality_capture(raw)
@@ -917,7 +966,11 @@ async def research(
                 "Scout complete — normalizing URLs and building a structured research digest…",
             )
             digest = build_research_digest(
-                raw, source_urls, enhanced_query, future_risk=future_risk_snapshot
+                raw,
+                source_urls,
+                enhanced_query,
+                future_risk=future_risk_snapshot,
+                community_scout_notes=_community_notes,
             )
 
             summary: str
@@ -956,7 +1009,9 @@ async def research(
                             "audit",
                             "Audit — Recovering with structured fallback memo after synthesis error…",
                         )
-                        stub = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
+                        stub = _research_action_plan_fallback_markdown(
+                            raw, source_urls, enhanced_query, community_gotchas=_community_notes
+                        )
                         logger.warning("Contractor Action Plan Claude error — using fallback: %s", err)
                         for chunk in _iter_summary_word_chunks(stub):
                             yield _safe_sse_data_frame({"event": "summary_delta", "text": chunk})
@@ -970,7 +1025,9 @@ async def research(
                     "Audit — Building structured fallback action memo (no live synthesis key)…",
                 )
                 _log_research_step("action plan", detail="structured fallback memo — no ANTHROPIC_API_KEY")
-                summary = _research_action_plan_fallback_markdown(raw, source_urls, enhanced_query)
+                summary = _research_action_plan_fallback_markdown(
+                    raw, source_urls, enhanced_query, community_gotchas=_community_notes
+                )
                 for chunk in _iter_summary_word_chunks(summary):
                     yield _safe_sse_data_frame({"event": "summary_delta", "text": chunk})
                     await asyncio.sleep(0)
@@ -997,6 +1054,7 @@ async def research(
                     "photo_analysis": photo_analysis,
                     "visual_audit": visual_audit_payload,
                     "future_risk_alert": future_risk_snapshot,
+                    "community_inspector_feedback": _community_notes,
                 }
             )
         finally:

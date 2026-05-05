@@ -371,6 +371,7 @@ def build_research_digest(
     enhanced_query: str,
     *,
     future_risk: Optional[Dict[str, Any]] = None,
+    community_scout_notes: Optional[List[Dict[str, Any]]] = None,
 ) -> str:
     """Compact research context for the action-plan model (no full page bodies)."""
     ju = raw.get("jurisdiction")
@@ -429,6 +430,31 @@ def build_research_digest(
             "permit fee narrative."
         )
 
+    comm_raw = community_scout_notes if community_scout_notes else []
+    comm: List[Dict[str, Any]] = []
+    for item in comm_raw:
+        if not isinstance(item, dict):
+            continue
+        t = str(item.get("text") or "").strip()
+        if not t:
+            continue
+        comm.append(
+            {
+                "text": t,
+                "created_at": str(item.get("created_at") or ""),
+            }
+        )
+    z_display = str(raw.get("zip") or "").strip()
+    if comm:
+        directive["community_inspector_moat"] = (
+            "HARD REQUIREMENT: Under **### Technical Punch List**, immediately after that heading, on its own line output "
+            "exactly: **COMMUNITY ALERT: Recent Inspector Feedback** then one `- [ ]` line per object in "
+            "`community_scout_inspector_notes`, quoting the **text** and suffixing each line with **(crowdsourced — verify with AHJ)**. "
+            "These are field-reported tips for this ZIP"
+            + (f" (**{z_display}**)" if z_display else "")
+            + ", not codified law—do not imply they are ordinance."
+        )
+
     payload: Dict[str, Any] = {
         "zip": raw.get("zip"),
         "site_address": raw.get("site_address"),
@@ -441,6 +467,7 @@ def build_research_digest(
         "universal_expert_scout_targets": universal_expert_scout_targets,
         "future_code_change_watchdog": fr,
         "inspector_digest_directive": directive,
+        "community_scout_inspector_notes": comm,
     }
     if scout_has_no_trusted_results(raw):
         payload["empty_scout_nec_2023_fallback"] = True
@@ -500,12 +527,13 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                     "role": "user",
                     "content": (
                         "Read `inspector_digest_directive` first (`consultant_role`, `logic_steps`, `fee_and_code_guidance`, "
-                        "`gotchas_guidance`, `output_format`), then `plano_ord_250_50_requirement`, "
+                        "`gotchas_guidance`, `output_format`, and `community_inspector_moat` if present), then `plano_ord_250_50_requirement`, "
                         "`plano_electrical_permit_fee_sync_usd` / `plano_electrical_permit_fee_2026_note`, "
                         "`dallas_minimum_trade_permit_usd` / `dallas_minimum_trade_permit_note`, `dallas_oncor_disconnect_coordination`, "
                         "`austin_design_criteria_requirement`, `austin_development_services_fees_url`, `austin_safety_surcharge_note`, "
                         "`austin_central_zip_service_upgrade`, "
                         "and `empty_scout_nec_2023_fallback` if present, then "
+                        "`community_scout_inspector_notes` (when non-empty you MUST satisfy `community_inspector_moat` under **### Technical Punch List**), "
                         "`tagged_priority_hits` and the rest of the JSON. "
                         "Follow the role and logic steps; obey `output_format` and `gotchas_guidance`. "
                         f"When `plano_ord_250_50_requirement` is set, you MUST satisfy it under **### Technical Punch List** "
