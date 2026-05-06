@@ -34,7 +34,12 @@ from starlette.concurrency import run_in_threadpool
 from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
 from jurisdiction import JurisdictionProfile, geocode_profile_from_address
 from maintenance_mode import create_subscription, list_subscriptions, set_maintenance_mode
-from data_center_intel import inject_bottom_line_permit_conflict
+from data_center_intel import (
+    MORATORIUM_BOTTOM_RED_WARNING_TEXT,
+    inject_bottom_line_moratorium_state_red_alert,
+    inject_bottom_line_permit_conflict,
+    sanitize_visual_audit_for_client,
+)
 from research_memo import (
     build_research_digest,
     compute_data_center_intel_snapshot,
@@ -422,9 +427,10 @@ def _research_action_plan_fallback_markdown(
         sur = dc_intel.get("infrastructure_surcharge_estimate_usd") if isinstance(dc_intel.get("infrastructure_surcharge_estimate_usd"), dict) else {}
         lo = sur.get("estimated_low_usd")
         hi = sur.get("estimated_high_usd")
-        cand = bool(dc_intel.get("fast41_streamlining_scale_candidate"))
+        cand = bool(dc_intel.get("fast41_transparency_project_candidate"))
         conflict = bool(dc_intel.get("data_center_permit_conflict_alert"))
         rationale = str(dc_intel.get("data_center_permit_conflict_rationale") or "").strip()
+        mor_red = bool(dc_intel.get("moratorium_state_bottom_line_red_alert"))
         band_txt = (
             f"${int(lo):,}–${int(hi):,} USD (illustrative band — not a tariff quote)"
             if isinstance(lo, int) and isinstance(hi, int)
@@ -435,16 +441,24 @@ def _research_action_plan_fallback_markdown(
                 "",
                 "### Data center intelligence (federal / grid)",
                 "",
-                "- [ ] **Executive Order 14141 / FAST-41:** Confirm EO **14141** (July 2025) citation on the Federal Register and "
-                "whether **FAST-41** / Permitting Council coordination applies — Reg Guard scale heuristic flags this project as "
-                f"a FAST-41 **scale candidate**: **{cand}** (**>100 MW** or **≥ $500M** capex hints from job text — verify with counsel).",
-                f"- [ ] **Infrastructure surcharge (planning):** Budget an illustrative developer-side grid reinforcement band of **{band_txt}**; "
-                "the utility **LGIA** / interconnection study dictates real deposits and riders.",
-                "- [ ] **State energy / moratorium scout:** Review **`step_dc_state_energy`** and **`step_dc_local_moratorium`** URLs in the digest for "
-                "**ratepayer protection pledges**, PSC riders, and **2026** moratorium or pause ordinances.",
+                "- [ ] **May 5, 2026 posture / FAST-41 Transparency:** Confirm White House / Federal Register materials — **EO 14141 is rescinded** in Reg Guard’s conflict profile; "
+                "do **not** cite EO **14141** clean-energy acceleration. Map diligence to the **FAST-41 Transparency Project** when parsed load hints exceed **100 MW** "
+                f"(digest flags transparency candidate: **{cand}** — verify IT/nameplate assumptions).",
+                "- [ ] **Bill-specific flashpoints:** If **`bill_specific_flags`** cites **Virginia HB 1515**, capture **interconnection-block** risk for counsel review; "
+                "if **Ohio 2026 ballot** narratives appear, track **>25 MW** ban/moratorium petition chatter — verify against Ohio SOS filings.",
+                f"- [ ] **Infrastructure surcharge (planning):** Illustrative band **{band_txt}** — utility **LGIA** controls cash timing.",
+                "- [ ] **Moratorium High Alert states (VA, NY, OK, GA, OH):** Upgrade scrutiny on `step_dc_local_moratorium` / `step_dc_state_energy` hits; assume active session risk.",
+                "- [ ] **State energy / moratorium scout:** Review **`step_dc_state_energy`** and **`step_dc_local_moratorium`** URLs for riders, pledges, and pause ordinances.",
                 "",
             ]
         )
+        if mor_red:
+            lines.extend(
+                [
+                    f"- [ ] **{MORATORIUM_BOTTOM_RED_WARNING_TEXT}** Surface this **WARNING** in **### The Bottom Line** plus counsel escalation.",
+                    "",
+                ]
+            )
         if conflict and rationale:
             lines.extend(
                 [
