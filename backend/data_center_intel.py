@@ -16,10 +16,12 @@ STATE_ENERGY_SCRUTINY: Tuple[str, ...] = ("CA", "OH", "UT", "VA")
 # States tracked for **High Alert** moratorium / session-risk narratives (Conflict Intelligence Engine).
 STATE_MORATORIUM_HIGH_ALERT: Tuple[str, ...] = ("VA", "NY", "OK", "GA", "OH")
 
-MORATORIUM_BOTTOM_RED_WARNING_TEXT = (
-    "WARNING: State Moratorium Bill in session. Federal FAST-41 may conflict with local block. "
+MORATORIUM_BOTTOM_RED_WARNING_BODY = (
+    "State Moratorium Bill in session. Federal FAST-41 may conflict with local block. "
     "Consult counsel before breaking ground."
 )
+
+MORATORIUM_BOTTOM_RED_WARNING_TEXT = f"WARNING: {MORATORIUM_BOTTOM_RED_WARNING_BODY}"
 
 
 def normalize_us_state(st: Optional[str]) -> str:
@@ -325,14 +327,13 @@ def inject_bottom_line_permit_conflict(summary_md: str, *, alert_on: bool, ratio
 
 
 def inject_bottom_line_moratorium_state_red_alert(summary_md: str, *, active: bool, warning_text: str) -> str:
-    """Append fixed red-alert WARNING for Moratorium High Alert states (idempotent)."""
+    """Append fixed WARNING line for Moratorium High Alert states (idempotent)."""
     if not active or not (warning_text or "").strip():
         return summary_md or ""
     text = summary_md or ""
     if "WARNING: State Moratorium Bill in session." in text:
         return text
-    wt = warning_text.strip()
-    extra = f"**RED ALERT — {wt}**"
+    extra = f"**WARNING:** {MORATORIUM_BOTTOM_RED_WARNING_BODY}"
     if not re.search(r"(?im)^#{2,3}\s*the\s+bottom\s+line\b", text):
         return text.rstrip() + "\n\n### The Bottom Line\n\n" + extra + "\n"
     return text.rstrip() + "\n\n" + extra + "\n"
