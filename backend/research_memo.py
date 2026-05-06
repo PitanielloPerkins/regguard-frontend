@@ -15,7 +15,7 @@ from typing import Any, Dict, Iterator, List, Optional, Set
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
-from data_center_intel import build_digest_intel_block
+from data_center_intel import MORATORIUM_BOTTOM_RED_WARNING_TEXT, build_digest_intel_block
 from scraper import SCOUT_SOURCE_STEP_KEYS, future_risk_alerts_from_raw
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -260,10 +260,13 @@ def _build_inspector_digest_directive(
     dc_intel = data_center_intel if isinstance(data_center_intel, dict) else {}
     if vert_sp == "data_center" and dc_intel.get("vertical") == "data_center":
         consultant_role += (
-            " **Data Center Intelligence Module:** Read **`data_center_intelligence`** in this digest: verify **Executive Order 14141** (July 2025 — confirm citation) "
-            "against Federal Register sources; flag **FAST-41** scale candidacy when `fast41_streamlining_scale_candidate` is true (**>100 MW** or **≥ $500M** capex hints). "
-            "Under **### Permit Costs**, add `- [ ]` lines citing the illustrative **`infrastructure_surcharge_estimate_usd`** band (explicitly **not** a tariff quote — utility **LGIA** / studies control). "
-            "Mine **`step_dc_state_energy`** for **ratepayer protection pledges** / PSC riders and **`step_dc_local_moratorium`** for **2026** pause or moratorium language."
+            " **Data Center Intelligence Module — Conflict Engine:** Read **`data_center_intelligence`** and `federal_permitting_may_2026_note`: "
+            "**EO 14141 is rescinded** as of the **May 5, 2026** proclamation posture — do **not** cite EO **14141** “clean energy” acceleration; "
+            "focus federal diligence on the **FAST-41 Transparency Project** when `fast41_transparency_project_candidate` is true (**>100 MW** parsed hints only). "
+            "Honor **`bill_specific_flags`** (**Virginia HB 1515** interconnection block posture; **Ohio 2026 ballot** >25 MW ban narratives). "
+            "When `project_state_moratorium_high_alert` is true (**VA, NY, OK, GA, OH**), treat scout hits as **High Alert** session risk. "
+            "Under **### Permit Costs**, add `- [ ]` lines citing **`infrastructure_surcharge_estimate_usd`** as illustrative only (utility **LGIA** wins). "
+            "Mine **`step_dc_state_energy`** and **`step_dc_local_moratorium`** for riders and pause ordinances."
         )
 
     if city and state:
