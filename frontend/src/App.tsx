@@ -30,6 +30,9 @@ import {
   type FollowUpChip,
 } from "./FollowUpActions";
 
+/** Flat fee model — matches backend ``base_search_value`` for dashboard display. */
+const BASE_SEARCH_VALUE_USD = 5;
+
 /** Gemini Reality Capture Audit payload (SSE ``visual_audit`` / ``complete``). */
 export type VisualDetection = {
   label: string;
@@ -44,7 +47,6 @@ export type VisualAuditPayload = {
   model_id?: string;
   /** Plain-English two-sentence summary from Reality Capture (Gemini). */
   bottom_line?: string | null;
-  /** Estimated USD: (input_tokens × 75e-9) + (output_tokens × 3e-7). */
   cost_usd?: number | null;
   input_tokens?: number | null;
   output_tokens?: number | null;
@@ -342,6 +344,10 @@ export default function App() {
   const actionPlanPanelRef = useRef<HTMLDivElement | null>(null);
   const [fileInputKey, setFileInputKey] = useState(0);
   const [visualAudit, setVisualAudit] = useState<VisualAuditPayload | null>(null);
+  const [projectValueMetrics, setProjectValueMetrics] = useState<{
+    researchValueUsd: number;
+    estimatedLiabilityAvoidedUsd: number;
+  } | null>(null);
   const [futureRiskAlert, setFutureRiskAlert] = useState<FutureRiskAlertPayload | null>(null);
   const [communityInspectorFeedback, setCommunityInspectorFeedback] =
     useState<CommunityInspectorFeedbackPayload | null>(null);
@@ -508,6 +514,7 @@ export default function App() {
     setSseConnectionLive(false);
     setReasoningStep(null);
     setVisualAudit(null);
+    setProjectValueMetrics(null);
     setFutureRiskAlert(null);
     setCommunityInspectorFeedback(null);
     setInspectorNoteModalOpen(false);
@@ -1034,6 +1041,31 @@ export default function App() {
                 const parsed =
                   cfb != null ? parseCommunityInspectorNotesPayload(zipFin, cfb) : null;
                 setCommunityInspectorFeedback(parsed);
+              }
+              {
+                const vmRaw: unknown =
+                  "value_metrics" in payload ? (payload as { value_metrics?: unknown }).value_metrics : undefined;
+                if (vmRaw != null && typeof vmRaw === "object") {
+                  const vm = vmRaw as Record<string, unknown>;
+                  const rv =
+                    typeof vm.research_value_usd === "number" && !Number.isNaN(vm.research_value_usd)
+                      ? vm.research_value_usd
+                      : BASE_SEARCH_VALUE_USD;
+                  const li =
+                    typeof vm.estimated_liability_avoided_usd === "number" &&
+                    !Number.isNaN(vm.estimated_liability_avoided_usd)
+                      ? vm.estimated_liability_avoided_usd
+                      : 0;
+                  setProjectValueMetrics({
+                    researchValueUsd: rv,
+                    estimatedLiabilityAvoidedUsd: li,
+                  });
+                } else {
+                  setProjectValueMetrics({
+                    researchValueUsd: BASE_SEARCH_VALUE_USD,
+                    estimatedLiabilityAvoidedUsd: 0,
+                  });
+                }
               }
               break;
             }
@@ -2046,23 +2078,39 @@ export default function App() {
         <section className="rg-panel rg-results-panel">
           <header className="rg-results-panel__header">
             <h2 id="rg-results-heading">Results</h2>
-            {visualAudit != null &&
-            typeof visualAudit.cost_usd === "number" &&
-            !Number.isNaN(visualAudit.cost_usd) ? (
-              <span
-                className="rg-search-cost-badge"
-                title="Estimated Gemini Reality Capture token cost for this compliance run."
-              >
-                Search cost{" "}
-                {visualAudit.cost_usd.toLocaleString(undefined, {
-                  style: "currency",
-                  currency: "USD",
-                  minimumFractionDigits: 2,
-                  maximumFractionDigits: 6,
-                })}
-              </span>
-            ) : null}
           </header>
+
+          {phase === "Complete" && projectValueMetrics ? (
+            <div className="rg-project-value-card" aria-labelledby="rg-project-value-heading">
+              <div id="rg-project-value-heading" className="rg-project-value-card__title">
+                Project Value Protected
+              </div>
+              <dl className="rg-project-value-card__stats">
+                <div className="rg-project-value-card__stat">
+                  <dt>Research Value</dt>
+                  <dd>
+                    {projectValueMetrics.researchValueUsd.toLocaleString(undefined, {
+                      style: "currency",
+                      currency: "USD",
+                      minimumFractionDigits: 2,
+                      maximumFractionDigits: 2,
+                    })}
+                  </dd>
+                </div>
+                <div className="rg-project-value-card__stat">
+                  <dt>Estimated Liability Avoided</dt>
+                  <dd>
+                    {projectValueMetrics.estimatedLiabilityAvoidedUsd.toLocaleString(undefined, {
+                      style: "currency",
+                      currency: "USD",
+                      minimumFractionDigits: 0,
+                      maximumFractionDigits: 0,
+                    })}
+                  </dd>
+                </div>
+              </dl>
+            </div>
+          ) : null}
 
           {visualAudit != null &&
           typeof visualAudit.bottom_line === "string" &&

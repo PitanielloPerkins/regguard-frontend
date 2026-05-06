@@ -642,17 +642,50 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   flex: 1 1 auto;
 }
 
-.rg-search-cost-badge {
-  flex-shrink: 0;
-  font-size: 0.7rem;
+.rg-project-value-card {
+  margin: 0 0 0.85rem;
+  padding: 0.72rem 0.95rem;
+  border-radius: 10px;
+  border: 1px solid rgba(56, 189, 248, 0.38);
+  background: linear-gradient(
+    145deg,
+    rgba(14, 165, 233, 0.14),
+    rgba(15, 23, 42, 0.55)
+  );
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.06),
+    0 1px 3px rgba(0, 0, 0, 0.22);
+}
+
+.rg-project-value-card__title {
+  font-size: 0.72rem;
   font-weight: 800;
-  letter-spacing: 0.04em;
+  letter-spacing: 0.08em;
   text-transform: uppercase;
-  padding: 0.22rem 0.62rem;
-  border-radius: 999px;
-  color: #e8e1cf;
-  background: rgba(15, 23, 42, 0.88);
-  border: 1px solid rgba(251, 191, 36, 0.45);
+  color: #7dd3fc;
+  margin-bottom: 0.55rem;
+}
+
+.rg-project-value-card__stats {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(11rem, 1fr));
+  gap: 0.65rem 1.25rem;
+  margin: 0;
+}
+
+.rg-project-value-card__stat dt {
+  margin: 0 0 0.12rem;
+  font-size: 0.76rem;
+  font-weight: 600;
+  color: var(--rg-muted);
+}
+
+.rg-project-value-card__stat dd {
+  margin: 0;
+  font-size: 1.05rem;
+  font-weight: 700;
+  letter-spacing: -0.02em;
+  color: #f0f9ff;
 }
 
 .rg-bottom-line-box {

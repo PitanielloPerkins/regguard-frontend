@@ -310,6 +310,10 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
                 "Step 3 — Output: Under **Permit Costs**, **Technical Punch List** (apply `gotchas_guidance` here), and "
                 "**Inspection Must-Haves**, use **only** `- [ ] ` lines. No narrative paragraphs."
             ),
+            (
+                "Step 4 — Closeout: After **### Reference Links**, add **### The Bottom Line** with exactly **two sentences** "
+                "of plain-English contractor to-do guidance (no `- [ ]` lines)."
+            ),
         ]
         if empty_scout
         else [
@@ -324,6 +328,10 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             (
                 "Step 3 — Output: Under **Permit Costs**, **Technical Punch List** (apply `gotchas_guidance` here), and "
                 "**Inspection Must-Haves**, use **only** `- [ ] ` lines. No narrative paragraphs."
+            ),
+            (
+                "Step 4 — Closeout: After **### Reference Links**, add **### The Bottom Line** with exactly **two sentences** "
+                "of plain-English contractor to-do guidance (no `- [ ]` lines)."
             ),
         ]
     )
@@ -377,7 +385,8 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
         "output_format": (
             "Technical punch list only: every actionable line is `- [ ] ` (Markdown checkbox + space) under the headings in "
             "`required_checklist_headings`, in order. Optional single-line **MANDATORY GOTCHA:** immediately before related "
-            "checkboxes. Then **### Reference Links** for `unique_source_urls`."
+            "checkboxes. Then **### Reference Links** for `unique_source_urls`. Finally **### The Bottom Line**: "
+            "exactly **two sentences** in plain English—contractor **to-do** recap—no `- [ ]` lines."
         ),
         "gotchas_guidance": gotchas_guidance,
         "fee_and_code_guidance": (
@@ -599,6 +608,7 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                         "and apply `austin_safety_surcharge_note` / `austin_development_services_fees_url` in **Permit Costs**. "
                         "Use ONLY checklist lines (`- [ ] `) under the headings in `required_checklist_headings`, "
                         "then add **### Reference Links** listing `unique_source_urls`. "
+                        "End with **### The Bottom Line** — exactly **two sentences** of plain-English contractor to-do recap (no checkboxes). "
                         "Apply `fee_and_code_guidance` in **Permit Costs**.\n\n"
                         f"{user_digest}"
                     ),

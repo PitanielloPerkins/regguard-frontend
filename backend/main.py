@@ -65,6 +65,43 @@ from vision_agent import (
 # ROI calculator defaults — unit economics for admin / dashboard.
 _ROI_MANUAL_HOUR_USD = 75.0
 _ROI_FAILED_INSPECTION_USD = 1200.0
+# Flat fee model — customer-facing “research value” per compliance search (dashboard).
+base_search_value = 5.0
+
+
+def _count_action_plan_checkboxes(markdown: str) -> int:
+    return len(re.findall(r"^\s*-\s*\[\s*\]\s+", markdown or "", re.MULTILINE))
+
+
+def _estimated_liability_avoided_usd(summary_md: str) -> float:
+    """
+    Rough avoided rework / failed-inspection exposure from punch-list density.
+
+    Uses the same unit economics as ``/roi-stats``: manual hour savings plus failed-inspection episodes avoided.
+    """
+    n = _count_action_plan_checkboxes(summary_md)
+    if n <= 0:
+        return 0.0
+    manual_hours = min(max(n * 0.2, 0.5), 6.0)
+    failed_avoided = min(max((n + 3) // 8, 1), 4)
+    labor = manual_hours * _ROI_MANUAL_HOUR_USD
+    inspection = float(failed_avoided) * _ROI_FAILED_INSPECTION_USD
+    return round(labor + inspection, 2)
+
+
+def _ensure_bottom_line_section(summary_md: str, *, ahj_hint: str = "") -> str:
+    """Append a plain-English **### The Bottom Line** if the memo does not already include one."""
+    text = (summary_md or "").rstrip()
+    if not text.strip():
+        return text
+    if re.search(r"(?im)^#{2,3}\s*the\s+bottom\s+line\b", text):
+        return text
+    loc = (ahj_hint or "").strip() or "your AHJ"
+    sentences = (
+        f"Work through the checklist above in order and confirm fees, amendments, and utility rules with **{loc}** before you rough-in or energize. "
+        "Keep permits, torque marks, and inspection-ready documentation lined up so you clear inspection without fines or a rework cycle."
+    )
+    return f"{text}\n\n### The Bottom Line\n\n{sentences}\n"
 
 # Sync reference: Dallas Building Inspection — minimum trade permit (incl. admin) used in digest/fallback prompts.
 _DALLAS_TX_MIN_TRADE_PERMIT_USD = 167.00
@@ -89,7 +126,7 @@ logger = logging.getLogger("reg_guard")
 # Digest: ``research_memo.build_research_digest``. Scout query construction + data fence: ``scraper.py``.
 _CONTRACTOR_ACTION_PLAN_SYSTEM = """You are Reg Guard's **field punch list** writer for licensed electrical contractors.
 
-Scout results favor **.gov** and **Municode** for the input locality. Act as a **Master Electrician for that specific city or county**; output **only** `- [ ]` technical punch list lines under the required headings (no narrative paragraphs).
+Scout results favor **.gov** and **Municode** for the input locality. Act as a **Master Electrician for that specific city or county**; output **only** `- [ ]` technical punch list lines under the required headings (no narrative paragraphs except the closing **### The Bottom Line** section).
 
 When non-empty ``bim_clash_zones`` is present, you **MUST** follow ``inspector_digest_directive.bim_clash_zone_moat`` under **### Technical Punch List** (Austin **36-inch** gas-relief / meter clearance vs modeled conduit). When ``bim_integration_crossref`` is present, satisfy that cross-reference line item against archived scout URLs.
 
@@ -122,6 +159,9 @@ Place **MANDATORY GOTCHA:** lines (with supporting `- [ ]` items) for local amen
 ### Inspection Must-Haves
 ### Reference Links
 Each URL in ``unique_source_urls`` once (markdown link when title known, else bare URL).
+
+### The Bottom Line
+Exactly **two sentences** in plain English — a contractor **to-do** recap (what to verify or finish first, and what to have ready before inspection). **No** `- [ ]` lines in this section.
 
 Rules:
 - Imperative checklist tone; **no long prose**.
@@ -488,6 +528,12 @@ def _research_action_plan_fallback_markdown(
     else:
         lines.append("- *(No URLs returned in this run.)*")
 
+    bottom_two = (
+        f"Pull permits and verify fees and local amendments for **{loc_short}** before rough-in or energizing equipment. "
+        "Complete utility coordination and the checklist items above so the job passes inspection without fines or costly rework."
+    )
+    lines.extend(["", "### The Bottom Line", "", bottom_two])
+
     if has_ctx and len(enhanced_query) < 2000:
         short = re.sub(r"\s+", " ", enhanced_query)[:500]
         if len(enhanced_query) > 500:
@@ -700,6 +746,7 @@ def roi_stats(
         "labor_savings_usd": round(labor, 2),
         "inspection_risk_savings_usd": round(inspection, 2),
         "total_savings_usd": round(total, 2),
+        "base_search_value_usd": round(float(base_search_value), 2),
     }
 
 
@@ -1297,8 +1344,17 @@ async def research(
             if fr_md:
                 summary = fr_md + "\n\n" + summary
 
-            _log_research_step("complete", detail="streaming final payload to client")
             ju_complete = scout_jurisdiction or {}
+            ahj_bl = str(ju_complete.get("label") or ju_complete.get("city") or "").strip()
+            summary = _ensure_bottom_line_section(summary, ahj_hint=ahj_bl)
+
+            liability_est = _estimated_liability_avoided_usd(summary)
+            value_metrics = {
+                "research_value_usd": round(float(base_search_value), 2),
+                "estimated_liability_avoided_usd": liability_est,
+            }
+
+            _log_research_step("complete", detail="streaming final payload to client")
             yield _safe_sse_data_frame(
                 {
                     "event": "complete",
@@ -1316,6 +1372,7 @@ async def research(
                     "visual_audit": visual_audit_payload,
                     "future_risk_alert": future_risk_snapshot,
                     "community_inspector_feedback": _community_notes,
+                    "value_metrics": value_metrics,
                 }
             )
         finally:
