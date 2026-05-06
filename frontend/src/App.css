@@ -688,6 +688,35 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   color: #f0f9ff;
 }
 
+/** Moratorium jurisdiction RED ALERT — mirrors Bottom Line WARNING from Conflict Intelligence Engine. */
+.rg-bottom-line-moratorium-alert {
+  margin: 0 0 0.9rem;
+  padding: 0.75rem 1rem;
+  border-radius: 10px;
+  border: 2px solid #c62828;
+  background: linear-gradient(145deg, rgba(198, 40, 40, 0.28), rgba(60, 12, 12, 0.42));
+  box-shadow:
+    0 0 0 1px rgba(255, 82, 82, 0.35),
+    0 4px 14px rgba(198, 40, 40, 0.28);
+}
+
+.rg-bottom-line-moratorium-alert__title {
+  font-size: 0.72rem;
+  font-weight: 800;
+  letter-spacing: 0.08em;
+  text-transform: uppercase;
+  color: #ffcdd2;
+  margin-bottom: 0.45rem;
+}
+
+.rg-bottom-line-moratorium-alert__text {
+  margin: 0;
+  font-size: 0.95rem;
+  font-weight: 600;
+  line-height: 1.55;
+  color: #ffebee;
+}
+
 .rg-bottom-line-box {
   margin: 0 0 0.9rem;
   padding: 0.7rem 0.92rem;
