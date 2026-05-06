@@ -35,6 +35,7 @@ from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
 from jurisdiction import JurisdictionProfile, geocode_profile_from_address
 from maintenance_mode import create_subscription, list_subscriptions, set_maintenance_mode
 from data_center_intel import (
+    MORATORIUM_BOTTOM_RED_WARNING_BODY,
     MORATORIUM_BOTTOM_RED_WARNING_TEXT,
     inject_bottom_line_moratorium_state_red_alert,
     inject_bottom_line_permit_conflict,
@@ -596,11 +597,17 @@ def _research_action_plan_fallback_markdown(
             lines.extend(
                 [
                     "",
-                    f"**PERMIT CONFLICT ALERT:** {rationale_bl} Treat federal streamlining and local/state grid rules as **parallel tracks** "
+                    f"**PERMIT CONFLICT ALERT:** {rationale_bl} Treat federal FAST-41 transparency posture and local/state grid rules as **parallel tracks** "
                     "until counsel and the utility sign off.",
                 ]
             )
-
+        if mor_red:
+            lines.extend(
+                [
+                    "",
+                    f"**WARNING:** {MORATORIUM_BOTTOM_RED_WARNING_BODY}",
+                ]
+            )
     if has_ctx and len(enhanced_query) < 2000:
         short = re.sub(r"\s+", " ", enhanced_query)[:500]
         if len(enhanced_query) > 500:
@@ -967,7 +974,7 @@ async def research(
     ``step`` (including ``step_ahj_identification`` before Universal Scout), ``step`` (scout:
     ``step_jurisdiction``, ``step_building_permits``, ``step_building_codes``; **building** vertical adds
     ``step_residential_zoning`` (Municode / .gov / OpenGov setbacks); **infrastructure** or **data_center** adds
-    ``step_federal_fast41`` (data_center augments with **Executive Order 14141** keywords) and ``step_data_center_water``;
+    ``step_federal_fast41`` (data-center augments with **May 2026 rescission / FAST-41 Transparency Project** keywords) and ``step_data_center_water``;
     **data_center** alone adds ``step_dc_state_energy`` (ratepayer pledges / state riders / interconnect surcharge cues)
     and ``step_dc_local_moratorium`` (**2026** township pause scout)),
     ``future_risk_alert``, ``community_inspector_feedback`` (ZIP-indexed crowdsourced inspector notes when present),
@@ -1319,7 +1326,9 @@ async def research(
                 photo_analysis = normalize_vision_text("".join(raw_vis_parts))
                 visual_audit_payload = visual_holder[0] if visual_holder else None
                 _log_research_step("vision", detail="Gemini Reality Capture Audit — done")
-                yield _safe_sse_data_frame({"event": "visual_audit", "payload": visual_audit_payload})
+                yield _safe_sse_data_frame(
+                    {"event": "visual_audit", "payload": sanitize_visual_audit_for_client(visual_audit_payload)}
+                )
                 enhanced_query = _build_enhanced_query(job_description, photo_analysis)
                 yield _safe_sse_data_frame(
                     {
@@ -1443,11 +1452,20 @@ async def research(
                 alert_on=bool(_dc_intel_run.get("data_center_permit_conflict_alert")),
                 rationale=str(_dc_intel_run.get("data_center_permit_conflict_rationale") or ""),
             )
+            summary = inject_bottom_line_moratorium_state_red_alert(
+                summary,
+                active=bool(_dc_intel_run.get("moratorium_state_bottom_line_red_alert")),
+            )
 
             liability_est = _estimated_liability_avoided_usd(summary)
             value_metrics = {
                 "research_value_usd": round(float(base_search_value), 2),
                 "estimated_liability_avoided_usd": liability_est,
+            }
+
+            _moratorium_sse_alert = {
+                "active": bool(_dc_intel_run.get("moratorium_state_bottom_line_red_alert")),
+                "text": MORATORIUM_BOTTOM_RED_WARNING_TEXT,
             }
 
             _log_research_step("complete", detail="streaming final payload to client")
@@ -1465,10 +1483,11 @@ async def research(
                     "enhanced_query": enhanced_query,
                     "job_description": jd,
                     "photo_analysis": photo_analysis,
-                    "visual_audit": visual_audit_payload,
+                    "visual_audit": sanitize_visual_audit_for_client(visual_audit_payload),
                     "future_risk_alert": future_risk_snapshot,
                     "community_inspector_feedback": _community_notes,
                     "value_metrics": value_metrics,
+                    "moratorium_state_alert": _moratorium_sse_alert,
                 }
             )
         finally:
