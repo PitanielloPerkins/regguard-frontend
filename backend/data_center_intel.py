@@ -1,15 +1,25 @@
 """
-Data Center Intelligence Module — Federal/state permitting heuristics and illustrative grid-cost modeling.
+Data Center Intelligence Module — Conflict Intelligence Engine (federal/state permitting heuristics).
 
 Figures are **planning estimates only**; interconnect deposits and rider tariffs vary by utility tariff filing.
+
+Federal framing reflects **May 5, 2026**: EO **14141** rescinded — **FAST-41 Transparency Project** gates apply at **>100 MW**.
 """
 from __future__ import annotations
 
 import re
 from typing import Any, Dict, List, Optional, Tuple
 
-# States emphasized for ratepayer-protection / state-energy-policy overlays vs FAST-41 federal streamlining narrative.
+# Legacy scrutiny states for grid-cost / rider overlays (supplemented by moratorium high-alert list).
 STATE_ENERGY_SCRUTINY: Tuple[str, ...] = ("CA", "OH", "UT", "VA")
+
+# States tracked for **High Alert** moratorium / session-risk narratives (Conflict Intelligence Engine).
+STATE_MORATORIUM_HIGH_ALERT: Tuple[str, ...] = ("VA", "NY", "OK", "GA", "OH")
+
+MORATORIUM_BOTTOM_RED_WARNING_TEXT = (
+    "WARNING: State Moratorium Bill in session. Federal FAST-41 may conflict with local block. "
+    "Consult counsel before breaking ground."
+)
 
 
 def normalize_us_state(st: Optional[str]) -> str:
@@ -55,7 +65,6 @@ def parse_dc_scale_from_text(*blobs: str) -> Tuple[Optional[float], Optional[flo
             return n
         return None
 
-    # $500M, $500 million, USD 500M
     for pat in (
         r"\$\s*(\d+(?:\.\d+)?)\s*([BbMm])\b",
         r"\b(\d+(?:\.\d+)?)\s*(million|billion)\s+(?:USD|usd|dollars?)?",
@@ -69,20 +78,17 @@ def parse_dc_scale_from_text(*blobs: str) -> Tuple[Optional[float], Optional[flo
     return mw_val, capex
 
 
-def fast41_streamlining_candidate(mw: Optional[float], capex_usd: Optional[float]) -> bool:
-    """FAST-41 / Title 41 scale heuristic: >100 MW IT load **or** ≥ $500M capex."""
-    if mw is not None and mw > 100:
-        return True
-    if capex_usd is not None and capex_usd >= 500_000_000:
-        return True
-    return False
+def fast41_transparency_project_candidate(mw: Optional[float]) -> bool:
+    """FAST-41 **Transparency Project** product gate: strictly **>100 MW** nameplate / IT-load hints."""
+    return mw is not None and mw > 100
 
 
-def executive_order_14141_summary() -> str:
-    """Short product-facing compliance cue (verify against current Federal Register text)."""
+def federal_permitting_post_proclamation_note() -> str:
+    """May 5, 2026 posture — verify against official White House / Federal Register releases."""
     return (
-        "**Executive Order 14141** (July 2025 — verify date/citation on Federal Register): federal acceleration priority "
-        "for qualifying **AI/data-center infrastructure**; pair with **FAST-41** Permitting Council coordination where applicable."
+        "**Presidential action (May 5, 2026 — verify official text):** prior **Executive Order 14141** is **rescinded**. "
+        "There is **no** EO **14141** “clean energy” acceleration mandate to cite for new filings — steer diligence to the "
+        "**FAST-41 Transparency Project** track for qualifying **>100 MW** scale projects and Permitting Council transparency dashboards."
     )
 
 
@@ -96,6 +102,7 @@ def state_energy_law_cues(state: str) -> List[str]:
             "CEC electricity demand forecasts grid upgrade cost sharing hyperscale",
         ],
         "OH": [
+            "Ohio 2026 ballot initiative data center moratorium greater than 25 MW ban petition",
             "Ohio utility commission rider data center economic development transmission charge",
             "Ohio ratepayer protection pledge industrial electric load data center",
         ],
@@ -104,11 +111,50 @@ def state_energy_law_cues(state: str) -> List[str]:
             "Rocky Mountain Power rate case data center infrastructure surcharge",
         ],
         "VA": [
+            "Virginia HB 1515 data center interconnection moratorium block utility study",
             "Virginia SCC rider large electric customer data center route policy act",
             "Virginia ratepayer protection data center grid upgrade cost allocation",
         ],
+        "NY": [
+            "New York PSC large load data center moratorium 2026 bill session interconnect queue",
+            "New York ratepayer protection pledge hyperscale electric facility moratorium",
+        ],
+        "OK": [
+            "Oklahoma legislature data center moratorium 2026 rural electric cooperative large load",
+            "Oklahoma corporation commission transmission cost allocation data center",
+        ],
+        "GA": [
+            "Georgia legislature data center moratorium 2026 PSC certificate necessity large load",
+            "Georgia electric membership corporation large load data center surcharge",
+        ],
     }
     return library.get(st, [])
+
+
+def moratorium_high_alert_for_state(state: str) -> bool:
+    return normalize_us_state(state) in STATE_MORATORIUM_HIGH_ALERT
+
+
+def moratorium_state_bottom_line_alert_active(state: str, vertical: str) -> bool:
+    """Red Bottom-Line banner when project sits in a tracked moratorium-jurisdiction state (data-center vertical)."""
+    return (vertical or "").strip().lower() == "data_center" and moratorium_high_alert_for_state(state)
+
+
+def bill_specific_conflict_notes(state: str) -> Dict[str, str]:
+    """Static product flags — always verify bill status with counsel."""
+    st = normalize_us_state(state)
+    out: Dict[str, str] = {}
+    if st == "VA":
+        out["virginia_hb_1515_interconnection_block"] = (
+            "**Virginia HB 1515** — monitor **interconnection / queue blocking** provisions affecting hyperscale data centers "
+            "(session status and enrolled language — verify live)."
+        )
+    if st == "OH":
+        out["ohio_2026_ballot_over_25mw_ban"] = (
+            "**Ohio 2026 ballot initiative** — rumor-track / petition-phase narratives referencing **>25 MW** facility bans "
+            "or moratoria — verify Ohio Secretary of State / AG summaries before reliance."
+        )
+    return out
 
 
 def estimate_infrastructure_surcharge_band_usd(
@@ -126,10 +172,12 @@ def estimate_infrastructure_surcharge_band_usd(
     mw_eff = mw if mw is not None else 35.0
     mw_eff = max(mw_eff, 5.0)
 
-    # Planning $/kW of hypothetical reinforcement allocation (order-of-magnitude for executive dashboards).
     base_per_kw: Dict[str, float] = {
         "CA": 92.0,
         "OH": 58.0,
+        "OK": 54.0,
+        "NY": 88.0,
+        "GA": 56.0,
         "UT": 48.0,
         "VA": 62.0,
     }
@@ -138,7 +186,7 @@ def estimate_infrastructure_surcharge_band_usd(
     kw = mw_eff * 1000.0
     core = kw * rate
 
-    scrutiny_mult = 1.28 if st in STATE_ENERGY_SCRUTINY else 1.0
+    scrutiny_mult = 1.28 if st in STATE_ENERGY_SCRUTINY or moratorium_high_alert_for_state(st) else 1.0
     if capex_usd is not None and capex_usd >= 250_000_000:
         scrutiny_mult *= 1.08
 
@@ -150,7 +198,7 @@ def estimate_infrastructure_surcharge_band_usd(
         "estimated_high_usd": int(high),
         "methodology": (
             f"Illustrative band using ~${rate:.0f}/kW reinforcement allocation proxy × **{mw_eff:.1f} MW** equivalent load "
-            f"({'scrutiny-state uplift applied' if st in STATE_ENERGY_SCRUTINY else 'baseline'}). "
+            f"({'scrutiny / moratorium-alert uplift applied' if scrutiny_mult > 1.0 else 'baseline'}). "
             "Confirm with the serving utility **LGIA** / **interconnection study** and filed tariff riders."
         ),
         "mw_used_for_model": mw_eff,
@@ -161,12 +209,12 @@ def estimate_infrastructure_surcharge_band_usd(
 def permit_conflict_alert(
     *,
     vertical: str,
-    fast41_candidate: bool,
+    transparency_candidate: bool,
     state: str,
     moratorium_hit_count: int,
 ) -> Tuple[bool, str]:
     """
-    **Permit Conflict Alert** — federal streamlining narrative vs state/local friction signals.
+    **Permit Conflict Alert** — FAST-41 Transparency posture vs state/local friction signals.
 
     Returns (active, one-line rationale for memo injection).
     """
@@ -177,16 +225,22 @@ def permit_conflict_alert(
     conflict = False
     reasons: List[str] = []
 
-    if fast41_candidate and st in STATE_ENERGY_SCRUTINY:
+    if transparency_candidate and moratorium_high_alert_for_state(st):
         conflict = True
         reasons.append(
-            f"{st} grid-cost / ratepayer-protection politics can **slow or condition** upgrades despite FAST-41 federal coordination — reconcile early with counsel and the utility."
+            f"{st} is on the **moratorium High Alert** list — session bills / ballot narratives may **override** federal FAST-41 assumptions."
+        )
+
+    if transparency_candidate and st in STATE_ENERGY_SCRUTINY and not moratorium_high_alert_for_state(st):
+        conflict = True
+        reasons.append(
+            f"{st} grid-cost / ratepayer-protection proceedings can **slow or condition** upgrades despite FAST-41 transparency tracks — reconcile with counsel and the utility."
         )
 
     if moratorium_hit_count > 0:
         conflict = True
         reasons.append(
-            "Local **2026 moratorium / pause** signals appeared in scout hits — federal acceleration does **not** waive township zoning moratoria or water permits."
+            "Local **2026 moratorium / pause** signals appeared in scout hits — federal FAST-41 transparency does **not** waive township zoning moratoria or water permits."
         )
 
     if not conflict:
@@ -210,31 +264,38 @@ def build_digest_intel_block(
         return out
 
     mw, capex = parse_dc_scale_from_text(job_description, enhanced_query)
-    cand = fast41_streamlining_candidate(mw, capex)
+    transparency = fast41_transparency_project_candidate(mw)
     sur = estimate_infrastructure_surcharge_band_usd(state, mw=mw, capex_usd=capex)
     alert_on, alert_rationale = permit_conflict_alert(
         vertical=vert,
-        fast41_candidate=cand,
+        transparency_candidate=transparency,
         state=state,
         moratorium_hit_count=moratorium_hit_count,
     )
+    moratorium_red = moratorium_state_bottom_line_alert_active(state, vert)
 
     out.update(
         {
-            "executive_order_14141_product_note": executive_order_14141_summary(),
+            "federal_permitting_may_2026_note": federal_permitting_post_proclamation_note(),
             "parsed_it_load_mw": mw,
             "parsed_capex_usd": capex,
-            "fast41_streamlining_scale_candidate": cand,
+            "fast41_transparency_project_candidate": transparency,
             "fast41_threshold_notes": (
-                "FAST-41 / Permitting Council **cover project** scale heuristic used here: **>100 MW** IT/load-equivalent **or** "
-                "**≥ $500M** capex — confirm eligibility with federal counsel and the project dashboard."
+                "**FAST-41 Transparency Project** product gate: parsed job context **>100 MW** hints — "
+                "confirm classification with federal counsel and the Permitting Council transparency artifacts."
             ),
+            "state_moratorium_high_alert_states": list(STATE_MORATORIUM_HIGH_ALERT),
+            "project_state_moratorium_high_alert": moratorium_high_alert_for_state(state),
+            "bill_specific_flags": bill_specific_conflict_notes(state),
+            "moratorium_state_bottom_line_red_alert": moratorium_red,
+            "moratorium_state_bottom_line_warning_text": MORATORIUM_BOTTOM_RED_WARNING_TEXT,
             "ratepayer_protection_and_state_energy_laws": {
-                "emphasis_states": list(STATE_ENERGY_SCRUTINY),
+                "emphasis_states": list(dict.fromkeys([*STATE_ENERGY_SCRUTINY, *STATE_MORATORIUM_HIGH_ALERT])),
                 "project_state": normalize_us_state(state) or None,
                 "scout_instruction": (
                     "Cross-check `step_dc_state_energy` hits for **ratepayer protection pledges**, "
-                    "**transmission rider** proceedings, and PSC/PUC **cost-allocation** dockets."
+                    "**transmission rider** proceedings, PSC/PUC **cost-allocation** dockets, **Virginia HB 1515**, and "
+                    "**Ohio 2026 ballot** (>25 MW ban) chatter."
                 ),
             },
             "infrastructure_surcharge_estimate_usd": sur,
@@ -255,9 +316,31 @@ def inject_bottom_line_permit_conflict(summary_md: str, *, alert_on: bool, ratio
         return text
     rationale_clean = " ".join(rationale.split())
     extra = (
-        f"**PERMIT CONFLICT ALERT:** {rationale_clean} Treat federal streamlining and local/state grid rules as **parallel tracks** "
+        f"**PERMIT CONFLICT ALERT:** {rationale_clean} Treat federal FAST-41 transparency posture and local/state grid rules as **parallel tracks** "
         "until counsel and the utility sign off."
     )
     if not re.search(r"(?im)^#{2,3}\s*the\s+bottom\s+line\b", text):
         return text.rstrip() + "\n\n### The Bottom Line\n\n" + extra + "\n"
     return text.rstrip() + "\n\n" + extra + "\n"
+
+
+def inject_bottom_line_moratorium_state_red_alert(summary_md: str, *, active: bool, warning_text: str) -> str:
+    """Append fixed red-alert WARNING for Moratorium High Alert states (idempotent)."""
+    if not active or not (warning_text or "").strip():
+        return summary_md or ""
+    text = summary_md or ""
+    if "WARNING: State Moratorium Bill in session." in text:
+        return text
+    wt = warning_text.strip()
+    extra = f"**RED ALERT — {wt}**"
+    if not re.search(r"(?im)^#{2,3}\s*the\s+bottom\s+line\b", text):
+        return text.rstrip() + "\n\n### The Bottom Line\n\n" + extra + "\n"
+    return text.rstrip() + "\n\n" + extra + "\n"
+
+
+def sanitize_visual_audit_for_client(audit: Optional[Dict[str, Any]]) -> Optional[Dict[str, Any]]:
+    """Strip internal FinOps fields (e.g. sub-cent Gemini estimates) before SSE/API clients."""
+    if audit is None or not isinstance(audit, dict):
+        return audit
+    cleaned = {k: v for k, v in audit.items() if k not in ("cost_usd", "input_tokens", "output_tokens")}
+    return cleaned
