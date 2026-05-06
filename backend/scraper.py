@@ -280,8 +280,9 @@ def _fast41_query_line(
     )
     if vertical == "data_center":
         core += (
-            " Executive Order 14141 July 2025 AI data center infrastructure permitting acceleration "
-            "federal priority FAST-41 eligibility greater than 100 MW 500 million dollars capex threshold"
+            " May 5 2026 presidential action rescinds EO 14141 FAST-41 Transparency Project "
+            "Permitting Council transparency dashboard greater than 100 MW facility gate "
+            "Virginia HB 1515 interconnection Ohio 2026 ballot initiative greater than 25 MW ban data center"
         )
     return core
 
@@ -385,9 +386,23 @@ def _dc_local_moratorium_query_line(
         mode=mode,
         site_address=site_address,
     )
+    stx = (st or "").strip().upper()
+    bill_tail = ""
+    if stx == "VA":
+        bill_tail = " Virginia HB 1515 interconnection moratorium block "
+    elif stx == "OH":
+        bill_tail = " Ohio 2026 ballot initiative greater than 25 MW data center ban moratorium "
+    elif stx == "NY":
+        bill_tail = " New York state legislature data center moratorium bill session 2026 "
+    elif stx == "OK":
+        bill_tail = " Oklahoma legislature large electric load data center moratorium 2026 "
+    elif stx == "GA":
+        bill_tail = " Georgia PSC certificate necessity data center moratorium bill 2026 "
+    prefix = f"{loc} {bill_tail}".strip()
     return (
-        f"{loc} township county zoning moratorium 2026 data center pause ordinance interim ban "
-        f"cooling tower moratorium AI infrastructure halt emergency ordinance — {zip_tag}"
+        f"{prefix} "
+        f"township county zoning moratorium 2026 data center pause ordinance interim ban "
+        f"cooling tower moratorium AI infrastructure halt emergency ordinance High Alert — {zip_tag}"
     )
 
 
@@ -1036,7 +1051,11 @@ def _final_scout_response(
         wf.append(
             "**Intelligence tier — Infrastructure / data center:** **FAST-41** / Title 41 **Permitting Council** "
             "federal permitting status cues"
-            + (" (data-center pass includes **Executive Order 14141** acceleration keywords)." if prof_snap["vertical"] == "data_center" else ".")
+            + (
+                " (data-center pass includes **May 2026 rescission / FAST-41 Transparency Project** + moratorium-bill keywords)."
+                if prof_snap["vertical"] == "data_center"
+                else "."
+            )
         )
     if water_meta is not None:
         wf.append(
