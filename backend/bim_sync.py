@@ -8,7 +8,7 @@ import math
 import re
 from typing import Any, Dict, List, Optional, Set, Tuple
 
-from scraper import normalize_us_zip, url_matches_trust_policy
+from scraper import SCOUT_SOURCE_STEP_KEYS, normalize_us_zip, url_matches_trust_policy
 from universal_scout_archive import load_scout_snapshot
 
 # City of Austin Design Criteria — gas relief / meter clearance (Reg Guard product sync with digest).
@@ -188,7 +188,9 @@ def cross_reference_universal_scout(
         }
 
     trusted: List[Dict[str, Any]] = []
-    for step_key in ("step_jurisdiction", "step_building_permits", "step_building_codes", "step_federal_fast41"):
+    for step_key in SCOUT_SOURCE_STEP_KEYS:
+        if step_key not in scout_raw:
+            continue
         block = scout_raw.get(step_key)
         if not isinstance(block, dict):
             continue

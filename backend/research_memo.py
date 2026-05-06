@@ -15,7 +15,7 @@ from typing import Any, Dict, Iterator, List, Optional, Set
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
-from scraper import future_risk_alerts_from_raw
+from scraper import SCOUT_SOURCE_STEP_KEYS, future_risk_alerts_from_raw
 
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
@@ -143,8 +143,10 @@ def _merge_tagged_hits(
 
 
 def scout_has_no_trusted_results(raw: Dict[str, Any]) -> bool:
-    """True when all three Universal Scout steps have zero ``results`` rows (no SERP hits in batch)."""
-    for key in ("step_jurisdiction", "step_building_permits", "step_building_codes", "step_federal_fast41"):
+    """True when every scout step present on ``raw`` has zero trusted ``results`` rows."""
+    for key in SCOUT_SOURCE_STEP_KEYS:
+        if key not in raw:
+            continue
         block = raw.get(key)
         if isinstance(block, dict) and (block.get("results") or []):
             return False
@@ -224,7 +226,9 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
     if vert_sp in ("data_center", "infrastructure"):
         consultant_role += (
             " **Project vertical (data center / infrastructure):** if `step_federal_fast41` hits reference **FAST-41** or **Title 41 Permitting Council**, "
-            "include federal permitting coordination `- [ ]` tasks; otherwise note counsel / program verification."
+            "include federal permitting coordination `- [ ]` tasks; otherwise note counsel / program verification. "
+            "If `step_data_center_water` hits reference **NPDES**, **water withdrawal**, or state **environmental quality** / **utility commission** proceedings, "
+            "add checklist lines for cooling-water compliance and permit coupling — verify against live agency dockets."
         )
 
     if city and state:
@@ -419,8 +423,8 @@ def build_research_digest(
         universal_expert_scout_targets["nec_2023_amendments"] = f"{cdn}, {state_guess} NEC 2023 amendments"
 
     steps_digest: List[Dict[str, Any]] = []
-    for key in ("step_jurisdiction", "step_building_permits", "step_building_codes", "step_federal_fast41"):
-        if key == "step_federal_fast41" and key not in raw:
+    for key in SCOUT_SOURCE_STEP_KEYS:
+        if key not in raw:
             continue
         block = raw.get(key) or {}
         if not isinstance(block, dict):

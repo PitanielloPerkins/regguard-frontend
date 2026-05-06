@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "description": "Local gotcha DB — seeded quirks for Reality Capture and memos; verify every line with the AHJ.",
+  "rules": [
+    {
+      "id": "plano-tx-thermal-break-mep",
+      "city": "Plano",
+      "state": "TX",
+      "zip_prefixes": ["750"],
+      "summary": "Plano plan review has been known to insist on a specific thermal-break / insulation detail at MEP roof or wall penetrations—confirm the current amendment sheet against your sleeve detail before rough-in."
+    },
+    {
+      "id": "austin-tx-dc-underfloor",
+      "city": "Austin",
+      "state": "TX",
+      "summary": "Light commercial rows near the Domain: some AHJs reference **Design Criteria** plus stricter **above-ceiling / underfloor** access for data / IDF rooms—coordinate ceiling tiles and tray cover sheets early."
+    },
+    {
+      "id": "frisco-tx-hoa-electric-vehicle",
+      "city": "Frisco",
+      "state": "TX",
+      "zip_prefixes": ["75033", "75034", "75035", "75036"],
+      "summary": "Many master-planned parcels require **HOA architectural review** even for **EVSE** surface mounts; leave lead time for ARC submission alongside city electrical permit."
+    }
+  ]
+}

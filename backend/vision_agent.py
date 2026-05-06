@@ -20,8 +20,58 @@ from dotenv import load_dotenv
 from PIL import Image
 from router import model_for_reality_capture
 
+from scraper import SCOUT_SOURCE_STEP_KEYS
+
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
+
+
+def _load_township_rules() -> List[Dict[str, Any]]:
+    """Local gotcha DB: ``township_rules.json`` (product-seeded quirks; safe to extend)."""
+    path = Path(__file__).resolve().parent / "township_rules.json"
+    try:
+        raw = json.loads(path.read_text(encoding="utf-8"))
+    except (OSError, json.JSONDecodeError):
+        return []
+    rules = raw.get("rules")
+    return [r for r in rules if isinstance(r, dict)] if isinstance(rules, list) else []
+
+
+def _township_gotcha_block(city: str, state: str, zip5: str) -> str:
+    """Lines folded into Reality Capture scout text when locality matches seeded rules."""
+    city_n = (city or "").strip().lower()
+    state_n = (state or "").strip().upper()
+    zip_clean = (zip5 or "").strip()
+    lines: List[str] = []
+    for rule in _load_township_rules():
+        rc = str(rule.get("city") or "").strip().lower()
+        rs = str(rule.get("state") or "").strip().upper()
+        if rc and rc != city_n:
+            continue
+        if rs and rs != state_n:
+            continue
+        prefixes = rule.get("zip_prefixes")
+        if isinstance(prefixes, list) and prefixes and zip_clean:
+            if not any(zip_clean.startswith(str(p).strip()) for p in prefixes if str(p).strip()):
+                continue
+        summary = str(rule.get("summary") or "").strip()
+        if not summary:
+            continue
+        rid = str(rule.get("id") or "local").strip()
+        lines.append(f"[local_gotcha:{rid}] {summary}")
+    if not lines:
+        return ""
+    return "**Local gotcha DB (seeded quirks — verify with AHJ):**\n" + "\n".join(f"• {x}" for x in lines)
+
+
+_SCOUT_STEP_HEADINGS: Dict[str, str] = {
+    "step_jurisdiction": "Tier 1 — Jurisdiction / AHJ anchor",
+    "step_building_permits": "Tier 2 — Permits & plan check",
+    "step_building_codes": "Tier 3 — Adopted codes & amendments",
+    "step_residential_zoning": "Tier 4a — Residential: setbacks / zoning (Municode · .gov · OpenGov)",
+    "step_federal_fast41": "Tier 4b — FAST-41 / Permitting Council (infra · data center)",
+    "step_data_center_water": "Tier 5 — Utility-scale water: NPDES / withdrawal / state EQ (infra · data center)",
+}
 
 
 def normalize_vision_text(raw: str) -> str:
@@ -70,13 +120,25 @@ def _normalize_media_type(content_type: Optional[str], filename: Optional[str]) 
 
 
 def scout_summary_for_reality_capture(raw: Dict[str, Any], *, limit_hits: int = 36) -> str:
-    """Flatten Universal Scout hits into a short text block for the multimodal prompt."""
-    lines: List[str] = []
+    """Flatten **multi-tier** Universal Scout hits + local gotcha DB into a Reality Capture prompt block."""
+    ju = raw.get("jurisdiction") if isinstance(raw.get("jurisdiction"), dict) else {}
+    city_g = str(ju.get("city") or "").strip()
+    state_g = str(ju.get("state") or ju.get("state_short") or "").strip()
+    zip_g = str(raw.get("zip") or "").strip()
+    lines: List[str] = [
+        "**Universal Regulatory Guardrail — multi-tier scout context (trusted SERP only):**",
+        "Use residential zoning hits for lot-line / setback narratives when the project vertical is building; "
+        "use FAST-41 + utility-water hits for federal/state environmental coupling when vertical is infrastructure or data center.",
+    ]
     n = 0
-    for step in ("step_jurisdiction", "step_building_permits", "step_building_codes", "step_federal_fast41"):
+    for step in SCOUT_SOURCE_STEP_KEYS:
+        if step not in raw:
+            continue
         block = raw.get(step) or {}
         if not isinstance(block, dict):
             continue
+        tier = _SCOUT_STEP_HEADINGS.get(step, step)
+        lines.append(f"### {tier}")
         q = block.get("query")
         if isinstance(q, str) and q.strip():
             lines.append(f"[{step}] query: {q.strip()}")
@@ -94,7 +156,13 @@ def scout_summary_for_reality_capture(raw: Dict[str, Any], *, limit_hits: int = 
             n += 1
         if n >= limit_hits:
             break
-    return "\n".join(lines) if lines else "(No scout hits yet.)"
+    if n == 0:
+        lines.append("(No trusted scout hits yet — verify API keys and locality.)")
+    body = "\n".join(lines)
+    got = _township_gotcha_block(city_g, state_g, zip_g)
+    if got:
+        return f"{body}\n\n{got}"
+    return body
 
 
 def _box_to_pixels(box_2d: List[float], width: int, height: int) -> Tuple[float, float, float, float]:
@@ -344,7 +412,11 @@ def _run_gemini_audit_sync(
         "You are assisting a U.S. electrical contractor compliance tool.\n"
         f"Job site locality (geocoded): **{locality}**.\n"
         f"{austin_note}\n\n"
-        "Universal Scout results (titles + URLs — codes & permits for this jurisdiction):\n"
+        "**Universal Regulatory Guardrail** — the block below is **multi-tier**: "
+        "jurisdiction → permits → codes, then either **residential zoning/setbacks** (Municode · government · OpenGov) "
+        "or **FAST-41** plus **utility-scale water / NPDES** signals depending on project vertical. "
+        "Reference only what the tiers support; flag when field measurements (e.g. setbacks) cannot be confirmed from a photo.\n"
+        "Scout results (titles + URLs):\n"
         f"{scout_summary}\n\n"
         "Analyze the attached photo against this scout context: equipment, grounding, gas proximity to electrical, "
         "and permit/code relevance. No legal advice.\n"

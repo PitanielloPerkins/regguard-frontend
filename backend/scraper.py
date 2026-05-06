@@ -14,7 +14,7 @@ from __future__ import annotations
 import os
 import re
 from pathlib import Path
-from typing import Any, Dict, List, Mapping, Optional
+from typing import Any, Dict, List, Mapping, Optional, Tuple
 from urllib.parse import urlparse
 
 from dotenv import load_dotenv
@@ -33,6 +33,19 @@ load_dotenv(_ROOT / ".env")
 
 # Firecrawl / web search: restrict SERP to U.S. government and Municode (reduces unrelated-state noise).
 SEARCH_DOMAIN_SCOPE = "(site:gov OR site:municode.com)"
+
+# Residential zoning / setbacks: include **OpenGov**-style municipal transparency hosts (contractor-facing “OpenPublic” portals).
+SEARCH_DOMAIN_SCOPE_ZONING = "(site:gov OR site:municode.com OR site:opengov.com)"
+
+# Ordered keys on scout payloads that carry Firecrawl ``results`` (source URL harvesting, digests, Reality Capture).
+SCOUT_SOURCE_STEP_KEYS: Tuple[str, ...] = (
+    "step_jurisdiction",
+    "step_building_permits",
+    "step_building_codes",
+    "step_residential_zoning",
+    "step_federal_fast41",
+    "step_data_center_water",
+)
 
 # City of Plano — product-targeted scout supplements (documented in ``main`` module docstring).
 PLANO_SCOUT_AMENDMENTS_NEC = "Plano TX electrical amendments 2023 NEC"
@@ -261,6 +274,87 @@ def _fast41_query_line(
     return (
         f"FAST-41 federal permitting Title 41 Permitting Council covered project status "
         f"{vlabel} environmental review milestone dashboard {loc} — {zip_tag}"
+    )
+
+
+def _scout_geo_phrase(
+    *,
+    zip_tag: str,
+    city: str,
+    county: str,
+    st: str,
+    mode: str,
+    site_address: Optional[str],
+) -> str:
+    """Compact locality phrase for tiered scout lines (City/County, ST + optional street context)."""
+    site = (site_address or "").strip()
+    loc_bits: List[str] = []
+    if site:
+        loc_bits.append(site)
+    city = (city or "").strip()
+    county = (county or "").strip()
+    st = (st or "").strip()
+    mode_l = (mode or "").strip().lower()
+    if mode_l == "county" or (not city and county):
+        county_disp = f"{county} County" if county and not county.lower().endswith("county") else county
+        if county_disp and st:
+            loc_bits.append(f"{county_disp}, {st}")
+    elif city and st:
+        loc_bits.append(f"{city}, {st}")
+    loc = " ".join(loc_bits).strip()
+    return loc if loc else f"US {zip_tag}"
+
+
+def _residential_zoning_setback_query_line(
+    *,
+    zip_tag: str,
+    city: str,
+    county: str,
+    st: str,
+    mode: str,
+    site_address: Optional[str],
+) -> str:
+    """Municode / .gov / OpenGov discovery for residential lot line and yard setbacks (tier: building vertical)."""
+    loc = _scout_geo_phrase(
+        zip_tag=zip_tag,
+        city=city,
+        county=county,
+        st=st,
+        mode=mode,
+        site_address=site_address,
+    )
+    return (
+        f"{loc} zoning ordinance setback front yard side yard rear yard lot line "
+        f"residential single-family R-1 Chapter 150 Municode codified GIS open data portal — {zip_tag}"
+    )
+
+
+def _data_center_utility_water_query_line(
+    *,
+    zip_tag: str,
+    city: str,
+    county: str,
+    st: str,
+    mode: str,
+    site_address: Optional[str],
+    vertical: str,
+) -> str:
+    """
+    Utility-scale / hyperscale cooling water: NPDES, Clean Water Act tie-ins, state utility commission cues
+    (tier: data center / infrastructure vertical; complements FAST-41).
+    """
+    loc = _scout_geo_phrase(
+        zip_tag=zip_tag,
+        city=city,
+        county=county,
+        st=st,
+        mode=mode,
+        site_address=site_address,
+    )
+    vlabel = "data center" if vertical == "data_center" else "infrastructure"
+    return (
+        f"{loc} {vlabel} cooling water withdrawal consumptive use NPDES discharge permit "
+        f"utility scale EPA state environmental quality commission drought management — {zip_tag}"
     )
 
 
@@ -556,7 +650,8 @@ def _host_conflicts_project_state(host: str, state_short: Optional[str]) -> bool
 
 def hostname_matches_trust_policy(host: str) -> bool:
     """
-    Restrict to **.gov** (official government) and **municode.com** per product policy.
+    Restrict to **.gov** (official government), **municode.com**, and **OpenGov** transparency hosts
+    per product policy.
 
     Post-filter is defense-in-depth alongside ``SEARCH_DOMAIN_SCOPE`` in the query string.
     """
@@ -567,6 +662,8 @@ def hostname_matches_trust_policy(host: str) -> bool:
         return True
     if host.endswith(".gov"):
         return True
+    if host.endswith(".opengov.com") or host == "opengov.com":
+        return True
     return False
 
 
@@ -576,11 +673,12 @@ def url_matches_trust_policy(url: Optional[str]) -> bool:
     return hostname_matches_trust_policy(_hostname(str(url)))
 
 
-def _append_scope(base: str) -> str:
+def _append_scope(base: str, *, domain_scope: Optional[str] = None) -> str:
+    scope = (domain_scope or SEARCH_DOMAIN_SCOPE).strip()
     b = (base or "").strip()
     if not b:
-        return SEARCH_DOMAIN_SCOPE
-    return f"{b} {SEARCH_DOMAIN_SCOPE}"
+        return scope
+    return f"{b} {scope}"
 
 
 def _entry_to_dict(item: Any) -> Dict[str, Optional[str]]:
@@ -719,6 +817,7 @@ def _scout_search(
     *,
     user_limit: int,
     project_state: Optional[str] = None,
+    domain_scope: Optional[str] = None,
 ) -> tuple[List[Dict[str, Optional[str]]], Dict[str, Any]]:
     """
     Universal Scout: **/v2/search** with ``sources=['web']`` and **no** bundled scrape.
@@ -730,7 +829,8 @@ def _scout_search(
     repeat Firecrawl search cost within TTL.
     """
     api_limit = _effective_search_limit(user_limit)
-    primary_q = _append_scope(query)
+    scope = domain_scope or SEARCH_DOMAIN_SCOPE
+    primary_q = _append_scope(query, domain_scope=scope)
     meta: Dict[str, Any] = {
         "primary_query": primary_q,
         "fallback_used": False,
@@ -763,7 +863,7 @@ def _scout_search(
         return trusted, meta
     # Do not cache empty primary results — the fallback query may still yield trusted URLs.
     fb_core = _fallback_official_query(query)
-    fb = _append_scope(fb_core)
+    fb = _append_scope(fb_core, domain_scope=scope)
     meta["fallback_used"] = True
     meta["fallback_query"] = fb
 
@@ -821,6 +921,10 @@ def _final_scout_response(
     scout_profile: Optional[Mapping[str, Any]] = None,
     fast41_hits: Optional[List[Dict[str, Optional[str]]]] = None,
     fast41_meta: Optional[Dict[str, Any]] = None,
+    zoning_hits: Optional[List[Dict[str, Optional[str]]]] = None,
+    zoning_meta: Optional[Dict[str, Any]] = None,
+    water_hits: Optional[List[Dict[str, Optional[str]]]] = None,
+    water_meta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     addr = (site_address or "").strip()
     ju = dict(jurisdiction) if jurisdiction else None
@@ -841,8 +945,9 @@ def _final_scout_response(
         )
     wf.extend(
         [
-            "Fallback — If a scoped step returns no trusted URLs: follow-up search **retains** "
-            "(site:gov OR site:municode.com) and adds *official* / *city government landing page*.",
+            "Fallback — If a scoped step returns no trusted URLs: follow-up search **retains** the step’s "
+            "**site:** scope (see ``scout.search_domain_scope`` / zoning ``OPENGOV`` extension) and adds "
+            "*official* / *city government landing page*.",
             "Universal Scout 1 — Jurisdiction: city/county AHJ hints (trusted hosts).",
             "Universal Scout 2 — Permits: **city** or **county** building department (steered from address).",
             "Universal Scout 3 — Building codes: **city-specific** (incorporated) or **county-specific** "
@@ -856,10 +961,20 @@ def _final_scout_response(
         f"Scout profile — **Trades**: {trades_nice}; **vertical**: {prof_snap['vertical']}; "
         f"**mission-critical DC scout**: {'on' if prof_snap['mission_critical_dc'] else 'off'}."
     )
-    if meta4 is not None:
+    if zoning_meta is not None:
         wf.append(
-            "Universal Scout 4 — **FAST-41** federal permitting / Title 41 Permitting Council status cues "
-            "(Infrastructure or Data Center vertical)."
+            "**Intelligence tier — Residential / building vertical:** Municode / `.gov` / **OpenGov** portal discovery "
+            "for **setbacks**, yard lines, and codified zoning chapters."
+        )
+    if fast41_meta is not None:
+        wf.append(
+            "**Intelligence tier — Infrastructure / data center:** **FAST-41** / Title 41 **Permitting Council** "
+            "federal permitting status cues."
+        )
+    if water_meta is not None:
+        wf.append(
+            "**Intelligence tier — Utility-scale water:** cooling-water **withdrawal**, **NPDES** / discharge, "
+            "and state **environmental quality** or **utility commission** signals (cross-reference with FAST-41 context)."
         )
     out: Dict[str, Any] = {
         "zip": z,
@@ -869,7 +984,11 @@ def _final_scout_response(
         "scout": {
             "mode": "search_web",
             "search_domain_scope": SEARCH_DOMAIN_SCOPE,
-            "trust_policy": "hostname ends with .gov or hostname contains municode (SERP scoped with site:gov OR site:municode.com)",
+            "search_domain_scope_zoning_residential": SEARCH_DOMAIN_SCOPE_ZONING,
+            "trust_policy": (
+                "hostname ends with .gov, hostname contains municode, or hostname under .opengov.com "
+                "(SERP scoped per step)"
+            ),
             "sources": ["web"],
             "scrape_options": None,
             "max_depth_note": (
@@ -899,6 +1018,10 @@ def _final_scout_response(
     }
     if fast41_meta is not None:
         out["step_federal_fast41"] = _step_result_dict(fast41_hits or [], fast41_meta)
+    if zoning_meta is not None:
+        out["step_residential_zoning"] = _step_result_dict(zoning_hits or [], zoning_meta)
+    if water_meta is not None:
+        out["step_data_center_water"] = _step_result_dict(water_hits or [], water_meta)
     if ahj:
         out["step_ahj_identification"] = ahj
     return out
@@ -1092,18 +1215,42 @@ def iter_universal_scout(
     hits3, meta3 = _scout_search(fc, q3, user_limit=search_limit, project_state=st_for_filter)
     yield {"event": "step", "step": "step_building_codes", "data": _step_result_dict(hits3, meta3)}
 
+    zip_tag = f"ZIP {z}"
+    city_j = str(ju.get("city") or "") if ju else ""
+    county_j = str(ju.get("county") or "") if ju else ""
+    st_j = str(ju.get("state") or ju.get("state_short") or "") if ju else ""
+    mode_j = str(ju.get("mode") or "") if ju else ""
+
+    zoning_hits: Optional[List[Dict[str, Optional[str]]]] = None
+    zoning_meta: Optional[Dict[str, Any]] = None
+    if prof["vertical"] == "building":
+        qz_core = _residential_zoning_setback_query_line(
+            zip_tag=zip_tag,
+            city=city_j,
+            county=county_j,
+            st=st_j,
+            mode=mode_j,
+            site_address=addr,
+        )
+        qz = _with_context(qz_core, ctx)
+        zoning_hits, zoning_meta = _scout_search(
+            fc,
+            qz,
+            user_limit=search_limit,
+            project_state=st_for_filter,
+            domain_scope=SEARCH_DOMAIN_SCOPE_ZONING,
+        )
+        yield {"event": "step", "step": "step_residential_zoning", "data": _step_result_dict(zoning_hits, zoning_meta)}
+
     fast41_hits: Optional[List[Dict[str, Optional[str]]]] = None
     fast41_meta: Optional[Dict[str, Any]] = None
+    water_hits: Optional[List[Dict[str, Optional[str]]]] = None
+    water_meta: Optional[Dict[str, Any]] = None
     if prof["vertical"] in ("infrastructure", "data_center"):
-        zip_tag = f"ZIP {z}"
-        city = str(ju.get("city") or "") if ju else ""
-        county = str(ju.get("county") or "") if ju else ""
-        st_j = str(ju.get("state") or ju.get("state_short") or "") if ju else ""
-        mode_j = str(ju.get("mode") or "") if ju else ""
         q4_core = _fast41_query_line(
             zip_tag=zip_tag,
-            city=city,
-            county=county,
+            city=city_j,
+            county=county_j,
             st=st_j,
             mode=mode_j,
             site_address=addr,
@@ -1114,6 +1261,21 @@ def iter_universal_scout(
             fc, q4, user_limit=search_limit, project_state=st_for_filter
         )
         yield {"event": "step", "step": "step_federal_fast41", "data": _step_result_dict(fast41_hits, fast41_meta)}
+
+        qw_core = _data_center_utility_water_query_line(
+            zip_tag=zip_tag,
+            city=city_j,
+            county=county_j,
+            st=st_j,
+            mode=mode_j,
+            site_address=addr,
+            vertical=prof["vertical"],
+        )
+        qw = _with_context(qw_core, ctx)
+        water_hits, water_meta = _scout_search(
+            fc, qw, user_limit=search_limit, project_state=st_for_filter
+        )
+        yield {"event": "step", "step": "step_data_center_water", "data": _step_result_dict(water_hits, water_meta)}
 
     full = _final_scout_response(
         z,
@@ -1130,6 +1292,10 @@ def iter_universal_scout(
         scout_profile=prof,
         fast41_hits=fast41_hits,
         fast41_meta=fast41_meta,
+        zoning_hits=zoning_hits,
+        zoning_meta=zoning_meta,
+        water_hits=water_hits,
+        water_meta=water_meta,
     )
     yield {"event": "complete", "raw": full}
 

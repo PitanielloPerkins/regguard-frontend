@@ -7,6 +7,8 @@ export type TradeBoost = {
   hvac?: boolean;
 };
 
+export type FollowUpCategory = "technical_compliance" | "administrative_paperwork";
+
 export type FollowUpChip = {
   id: string;
   label: string;
@@ -15,10 +17,16 @@ export type FollowUpChip = {
   tradeBoost?: TradeBoost;
   vertical?: "building" | "infrastructure" | "data_center";
   missionCritical?: boolean;
+  /** Building codes / inspections vs HOA & clerk forms */
+  category?: FollowUpCategory;
 };
 
 function norm(s: string): string {
   return s.toLowerCase();
+}
+
+function isAdminChip(c: FollowUpChip): boolean {
+  return c.category === "administrative_paperwork";
 }
 
 /**
@@ -35,7 +43,11 @@ export function deriveProactiveFollowUps(aiText: string, jobDescription: string)
       return;
     }
     seen.add(c.id);
-    out.push(c);
+    const withCat: FollowUpChip = {
+      ...c,
+      category: c.category ?? "technical_compliance",
+    };
+    out.push(withCat);
   };
 
   if (/(nec|electrical|service\s+upgrade|panel|breaker|grounding|meter|disconnect|evse|\b200a\b)/.test(t)) {
@@ -47,6 +59,7 @@ export function deriveProactiveFollowUps(aiText: string, jobDescription: string)
         "and explicit fee line items for this AHJ. Produce a clerk-ready submittal checklist.",
       minutesSaved: 45,
       tradeBoost: { electrician: true },
+      category: "administrative_paperwork",
     });
   }
 
@@ -59,6 +72,7 @@ export function deriveProactiveFollowUps(aiText: string, jobDescription: string)
         "and any local forms for residential or light commercial HVAC at this address.",
       minutesSaved: 50,
       tradeBoost: { hvac: true },
+      category: "technical_compliance",
     });
   }
 
@@ -71,6 +85,7 @@ export function deriveProactiveFollowUps(aiText: string, jobDescription: string)
         "and tie-ins to adopted energy code for this scope.",
       minutesSaved: 40,
       tradeBoost: { hvac: true },
+      category: "technical_compliance",
     });
   }
 
@@ -83,6 +98,7 @@ export function deriveProactiveFollowUps(aiText: string, jobDescription: string)
         "venting, and domestic water at this site.",
       minutesSaved: 42,
       tradeBoost: { plumber: true },
+      category: "technical_compliance",
     });
   }
 
@@ -96,6 +112,19 @@ export function deriveProactiveFollowUps(aiText: string, jobDescription: string)
       minutesSaved: 55,
       vertical: /data\s*center|colocation|tier/.test(t) ? "data_center" : "infrastructure",
       missionCritical: /tier|mission\s*critical|liquid|containment/.test(t),
+      category: "technical_compliance",
+    });
+  }
+
+  if (/(hoa|homeowner|covenant|architectural\s+review|\barc\b|design\s+review|association)/.test(t)) {
+    push({
+      id: "hoa-arc-pack",
+      label: "HOA / ARC paperwork pack",
+      scoutPrompt:
+        "Deep scout: HOA or design-review submission requirements for this parcel — paint, fence, EVSE, generator, " +
+        "or equipment pads; notarization, neighbor notices, and parallel timelines vs city permit.",
+      minutesSaved: 40,
+      category: "administrative_paperwork",
     });
   }
 
@@ -107,6 +136,7 @@ export function deriveProactiveFollowUps(aiText: string, jobDescription: string)
         "Contractor-focused inspection checklist grounded in this digest: common fail items, required labels/tests, " +
         "and final inspection call-outs for this jurisdiction.",
       minutesSaved: 35,
+      category: "technical_compliance",
     });
   }
   if (out.length < 2) {
@@ -116,6 +146,7 @@ export function deriveProactiveFollowUps(aiText: string, jobDescription: string)
       scoutPrompt:
         "Deep scout: current permit fee schedule links, expeditor norms, turnaround times, and weekend inspection rules for this jurisdiction.",
       minutesSaved: 38,
+      category: "administrative_paperwork",
     });
   }
 
@@ -133,25 +164,53 @@ export function FollowUpActions({ suggestions, disabled, onSelect }: FollowUpAct
     return null;
   }
 
+  const technical = suggestions.filter((c) => !isAdminChip(c));
+  const admin = suggestions.filter(isAdminChip);
+
   return (
     <div className="rg-proactive-guide" aria-label="Proactive guide follow-ups">
       <div className="rg-proactive-guide__head">
         <strong className="rg-proactive-guide__title">Proactive Guide</strong>
         <span className="rg-proactive-guide__sub">Smart suggestions from your action plan — tap to run a focused scout</span>
       </div>
-      <div className="rg-action-chips" role="group">
-        {suggestions.map((chip) => (
-          <button
-            key={chip.id}
-            type="button"
-            className="rg-action-chip"
-            disabled={disabled}
-            onClick={() => onSelect(chip)}
-          >
-            {chip.label}
-          </button>
-        ))}
-      </div>
+
+      {technical.length > 0 ? (
+        <div className="rg-followup-section" role="group" aria-label="Technical compliance">
+          <div className="rg-followup-section__label">Technical compliance</div>
+          <div className="rg-action-chips">
+            {technical.map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                className="rg-action-chip rg-action-chip--technical"
+                disabled={disabled}
+                onClick={() => onSelect(chip)}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
+
+      {admin.length > 0 ? (
+        <div className="rg-followup-section rg-followup-section--admin" role="group" aria-label="Administrative paperwork">
+          <div className="rg-followup-section__label">Administrative paperwork</div>
+          <div className="rg-action-chips">
+            {admin.map((chip) => (
+              <button
+                key={chip.id}
+                type="button"
+                className="rg-action-chip rg-action-chip--admin"
+                disabled={disabled}
+                onClick={() => onSelect(chip)}
+              >
+                {chip.label}
+              </button>
+            ))}
+          </div>
+        </div>
+      ) : null}
     </div>
   );
 }

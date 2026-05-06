@@ -43,6 +43,7 @@ from research_memo import (
 from universal_scout_archive import save_scout_snapshot
 # Firecrawl Universal Scout (/v2/search, tight caps) — see ``scraper.py``.
 from scraper import (
+    SCOUT_SOURCE_STEP_KEYS,
     clear_scout_run_caches,
     format_future_risk_markdown,
     future_risk_alerts_from_raw,
@@ -225,15 +226,19 @@ def _parse_search_limit(v: int) -> int:
     return v
 
 
+def _scout_firecrawl_step_sequence(vertical: str) -> List[str]:
+    """Ordered Universal Scout step keys matching ``iter_universal_scout`` (multi-tier intelligence)."""
+    x = (vertical or "").strip().lower().replace(" ", "_").replace("-", "_")
+    keys = ["step_jurisdiction", "step_building_permits", "step_building_codes"]
+    if x in ("infrastructure", "infra", "critical_infrastructure", "data_center", "datacenter", "dc"):
+        return keys + ["step_federal_fast41", "step_data_center_water"]
+    return keys + ["step_residential_zoning"]
+
+
 def _collect_source_urls(raw: Dict[str, Any]) -> List[str]:
     seen: set[str] = set()
     ordered: List[str] = []
-    for step in (
-        "step_jurisdiction",
-        "step_building_permits",
-        "step_building_codes",
-        "step_federal_fast41",
-    ):
+    for step in SCOUT_SOURCE_STEP_KEYS:
         block = raw.get(step) or {}
         for item in block.get("results") or []:
             u = item.get("url")
@@ -241,11 +246,6 @@ def _collect_source_urls(raw: Dict[str, Any]) -> List[str]:
                 seen.add(u)
                 ordered.append(u)
     return ordered
-
-
-def _form_wants_fast41_scout(vertical: str) -> bool:
-    x = (vertical or "").strip().lower().replace(" ", "_").replace("-", "_")
-    return x in ("infrastructure", "infra", "critical_infrastructure", "data_center", "datacenter", "dc")
 
 
 def _research_action_plan_fallback_markdown(
@@ -851,8 +851,9 @@ async def research(
     ``visual_audit`` (Gemini Reality Capture bounding boxes; requires ``GEMINI_API_KEY`` / ``GOOGLE_API_KEY`` when a photo is sent),
     ``context``, ``jurisdiction`` (when geocoded),
     ``step`` (including ``step_ahj_identification`` before Universal Scout), ``step`` (scout:
-    ``step_jurisdiction``, ``step_building_permits``, ``step_building_codes``, and when vertical is
-    **infrastructure** or **data_center**, ``step_federal_fast41``),
+    ``step_jurisdiction``, ``step_building_permits``, ``step_building_codes``; **building** vertical adds
+    ``step_residential_zoning`` (Municode / .gov / OpenGov setbacks); **infrastructure** or **data_center** adds
+    ``step_federal_fast41`` and ``step_data_center_water``),
     ``future_risk_alert``, ``community_inspector_feedback`` (ZIP-indexed crowdsourced inspector notes when present),
     ``summary_delta``, ``complete``.
 
@@ -1009,23 +1010,44 @@ async def research(
                         scout_profile=scout_profile_payload,
                     )
                 )
-                _pass_total = 4 if _form_wants_fast41_scout(scout_vertical) else 3
-                _scout_labels = {
-                    "step_jurisdiction": f"pass 1/{_pass_total} — jurisdiction & AHJ hints (Firecrawl)",
-                    "step_building_permits": f"pass 2/{_pass_total} — building permits (Firecrawl)",
-                    "step_building_codes": f"pass 3/{_pass_total} — adopted codes (Firecrawl)",
-                    "step_federal_fast41": f"pass {_pass_total}/{_pass_total} — FAST-41 federal permitting (Firecrawl)",
-                }
+                _seq = _scout_firecrawl_step_sequence(scout_vertical)
+                _pass_total = len(_seq)
+                _scout_labels: Dict[str, str] = {}
+                for _i, _key in enumerate(_seq, start=1):
+                    if _key == "step_jurisdiction":
+                        _scout_labels[_key] = f"pass {_i}/{_pass_total} — jurisdiction & AHJ hints (Firecrawl)"
+                    elif _key == "step_building_permits":
+                        _scout_labels[_key] = f"pass {_i}/{_pass_total} — building permits (Firecrawl)"
+                    elif _key == "step_building_codes":
+                        _scout_labels[_key] = f"pass {_i}/{_pass_total} — adopted codes (Firecrawl)"
+                    elif _key == "step_residential_zoning":
+                        _scout_labels[_key] = (
+                            f"pass {_i}/{_pass_total} — residential zoning & setbacks — Municode / .gov / OpenGov (Firecrawl)"
+                        )
+                    elif _key == "step_federal_fast41":
+                        _scout_labels[_key] = f"pass {_i}/{_pass_total} — FAST-41 federal permitting (Firecrawl)"
+                    elif _key == "step_data_center_water":
+                        _scout_labels[_key] = (
+                            f"pass {_i}/{_pass_total} — utility-scale cooling water / NPDES / state environmental (Firecrawl)"
+                        )
                 _city_label = str((scout_jurisdiction or {}).get("city") or "").strip() or "local"
                 _st_scout = str((scout_jurisdiction or {}).get("state") or "").strip().upper()
                 _dallas_tx = _city_label.strip().lower() == "dallas" and _st_scout == "TX"
-                _scout_reasoning = {
+                _scout_reasoning: Dict[str, str] = {
                     "step_jurisdiction": f"Scouting {_city_label} jurisdiction, AHJ hints, and trusted .gov anchors…",
                     "step_building_permits": f"Scouting {_city_label} Building Dept — fee schedules and permit portals…",
                     "step_building_codes": f"Cross-referencing {_city_label} adopted codes and NEC 2023 amendment deltas…",
+                    "step_residential_zoning": (
+                        f"Residential tier — Municode / codified setbacks and yard lines for {_city_label} "
+                        f"(OpenGov portal cues where published)…"
+                    ),
                     "step_federal_fast41": (
-                        f"Checking FAST-41 / Permitting Council federal status cues for "
+                        f"Data-center / infra tier — FAST-41 / Permitting Council federal status cues for "
                         f"{_city_label} ({scout_profile_payload.get('vertical') or 'vertical'}) scope…"
+                    ),
+                    "step_data_center_water": (
+                        f"Data-center / infra tier — cross-referencing utility-scale cooling-water / NPDES / "
+                        f"state EQ commission signals for {_city_label}…"
                     ),
                 }
                 if _dallas_tx:
@@ -1035,7 +1057,7 @@ async def research(
                     )
                 yield _reasoning_sse_frame(
                     "scout",
-                    "Scout — Running sequential Firecrawl passes (jurisdiction → permits → adopted codes)…",
+                    "Scout — Running multi-tier Firecrawl passes (jurisdiction → permits → codes → vertical intelligence)…",
                 )
                 while True:
                     ev: Optional[Dict[str, Any]] = None
@@ -1064,7 +1086,9 @@ async def research(
                         "step_jurisdiction",
                         "step_building_permits",
                         "step_building_codes",
+                        "step_residential_zoning",
                         "step_federal_fast41",
+                        "step_data_center_water",
                     ):
                         await asyncio.sleep(0.5)
             except Exception:

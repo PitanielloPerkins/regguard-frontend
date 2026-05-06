@@ -1251,6 +1251,27 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   line-height: 1.4;
 }
 
+.rg-followup-section {
+  margin-top: 0.75rem;
+}
+
+.rg-followup-section:first-of-type {
+  margin-top: 0.35rem;
+}
+
+.rg-followup-section__label {
+  font-size: 0.65rem;
+  font-weight: 800;
+  letter-spacing: 0.05em;
+  text-transform: uppercase;
+  color: var(--rg-muted);
+  margin-bottom: 0.4rem;
+}
+
+.rg-followup-section--admin .rg-followup-section__label {
+  color: rgba(196, 165, 116, 0.95);
+}
+
 .rg-action-chips {
   display: flex;
   flex-wrap: wrap;
@@ -1273,10 +1294,24 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
     transform 0.12s ease;
 }
 
+.rg-action-chip--technical {
+  border-color: rgba(138, 180, 248, 0.55);
+}
+
+.rg-action-chip--admin {
+  border-color: rgba(196, 165, 116, 0.55);
+  background: rgba(196, 165, 116, 0.1);
+}
+
 .rg-action-chip:hover:not(:disabled) {
   background: rgba(138, 180, 248, 0.22);
   border-color: var(--rg-accent);
   transform: translateY(-1px);
+}
+
+.rg-action-chip--admin:hover:not(:disabled) {
+  background: rgba(196, 165, 116, 0.22);
+  border-color: rgba(196, 165, 116, 0.85);
 }
 
 .rg-action-chip:disabled {
