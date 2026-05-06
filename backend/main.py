@@ -5,6 +5,10 @@ Research memo: ``research_memo.build_research_digest``. **Universal Scout** appl
 in ``scraper.py``: every query line appends **City, ST** or **County, ST** via ``LOCALITY_LOCK`` using phrasing such as
 **``{city}, {state} official city code and building permits``** (looser than a strict in-state-only SERP lock).
 **Plano, TX** also appends ``PLANO_SCOUT_*`` strings there.
+
+**FinOps:** Firecrawl ``/search`` responses are deduplicated by normalized query in ``semantic_scout_cache`` (TTL, opt-out
+``REG_GUARD_SEMANTIC_SCOUT_CACHE=0``). Trusted-page **markdown** rescrapes are cached in ``markdown_scraper`` (opt-out
+``REG_GUARD_MARKDOWN_SCRAPER_CACHE=0``); call ``fetch_trusted_url_markdown`` when you need cheap page text.
 """
 from __future__ import annotations
 

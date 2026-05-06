@@ -157,43 +157,6 @@ type MaintenanceSubscription = {
   ai_evaluation_note?: string;
 };
 
-type NdjsonLine =
-  | { event: "open" }
-  | { event: "heartbeat"; ts?: number }
-  | { event: "vision_delta"; text: string }
-  | {
-      event: "context";
-      enhanced_query?: string;
-      job_description?: string;
-      photo_analysis?: string | null;
-    }
-  | {
-      event: "jurisdiction";
-      site_address?: string | null;
-      profile?: Record<string, unknown>;
-    }
-  | { event: "step"; step?: string; data?: unknown }
-  | { event: "reasoning"; phase?: string; text: string }
-  | { event: "future_risk_alert"; payload?: unknown }
-  | { event: "community_inspector_feedback"; zip?: string; notes?: unknown }
-  | { event: "summary_delta"; text: string }
-  | {
-      event: "complete";
-      summary?: string;
-      source_urls?: string[];
-      site_address?: string | null;
-      zip?: string;
-      city?: string | null;
-      county?: string | null;
-      jurisdiction?: unknown;
-      visual_audit?: unknown;
-      ahj_label?: string | null;
-      future_risk_alert?: unknown;
-      community_inspector_feedback?: unknown;
-    }
-  | { event: "visual_audit"; payload: unknown }
-  | { event: "error"; message: string };
-
 /** Markdown slice for live Universal Scout step payloads shown in the Contractor Action Plan panel. */
 function scoutStepDataToMarkdown(stepKey: string, data: unknown): string {
   if (data == null || typeof data !== "object") {
@@ -1029,11 +992,16 @@ export default function App() {
         },
         onerror(err) {
           setSseConnectionLive(false);
-          const msg = err instanceof Error ? err.message : String(err);
           const stack = err instanceof Error ? (err.stack ?? "") : "";
+          const message = err instanceof Error ? err.message : String(err);
           sseErrorToastedRef.current = true;
           toast.error("Connection interrupted. Retrying...");
-          console.error("[RegGuard research] SSE transport error (not retrying)", err, stack.slice(0, 800));
+          console.error(
+            "[RegGuard research] SSE transport error (not retrying)",
+            message,
+            err,
+            stack.slice(0, 800),
+          );
           throw err;
         },
       });

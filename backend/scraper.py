@@ -20,6 +20,9 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from firecrawl import Firecrawl
 from firecrawl.v2.types import ScrapeOptions, SearchData
+from semantic_scout_cache import cache_get as _semantic_scout_cache_get
+from semantic_scout_cache import cache_set as _semantic_scout_cache_set
+from semantic_scout_cache import semantic_scout_cache_enabled
 
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
@@ -513,6 +516,18 @@ def clear_scout_run_caches() -> None:
     """
     import gc
 
+    try:
+        from semantic_scout_cache import clear_semantic_scout_cache
+
+        clear_semantic_scout_cache()
+    except ImportError:
+        pass
+    try:
+        from markdown_scraper import clear_markdown_scrape_cache
+
+        clear_markdown_scrape_cache()
+    except ImportError:
+        pass
     gc.collect()
 
 
@@ -710,6 +725,9 @@ def _scout_search(
 
     Optionally could pass ``SEARCH_BUNDLED_SCRAPE_OPTIONS`` as ``scrape_options`` so each SERP URL
     is scraped as a single page (still not a multi-page crawl — no ``maxDepth`` path here).
+
+    Duplicate scoped queries reuse **semantic cache** rows (see ``semantic_scout_cache``) to cut
+    repeat Firecrawl search cost within TTL.
     """
     api_limit = _effective_search_limit(user_limit)
     primary_q = _append_scope(query)
@@ -719,7 +737,17 @@ def _scout_search(
         "fallback_query": None,
         "firecrawl_mode": "search_web_serp_only",
         "firecrawl_limit": api_limit,
+        "semantic_cache_hit": False,
     }
+
+    if semantic_scout_cache_enabled():
+        cached = _semantic_scout_cache_get(primary_q, user_limit, project_state)
+        if cached is not None:
+            hits_c, meta_c = cached
+            out_m = dict(meta_c)
+            out_m["semantic_cache_hit"] = True
+            out_m.setdefault("primary_query", primary_q)
+            return hits_c, out_m
 
     r = fc.search(
         primary_q,
@@ -730,12 +758,25 @@ def _scout_search(
     )
     trusted = _filter_trusted(_web_hits_raw(r), user_limit, project_state=project_state)
     if trusted:
+        if semantic_scout_cache_enabled():
+            _semantic_scout_cache_set(primary_q, user_limit, project_state, trusted, dict(meta))
         return trusted, meta
-
+    # Do not cache empty primary results — the fallback query may still yield trusted URLs.
     fb_core = _fallback_official_query(query)
     fb = _append_scope(fb_core)
     meta["fallback_used"] = True
     meta["fallback_query"] = fb
+
+    if semantic_scout_cache_enabled():
+        cached_fb = _semantic_scout_cache_get(fb, user_limit, project_state)
+        if cached_fb is not None:
+            hits_f, meta_f = cached_fb
+            out_m = dict(meta_f)
+            out_m["semantic_cache_hit"] = True
+            out_m["fallback_used"] = True
+            out_m["fallback_query"] = fb
+            return hits_f, out_m
+
     r2 = fc.search(
         fb,
         limit=api_limit,
@@ -743,7 +784,11 @@ def _scout_search(
         location="US",
         scrape_options=None,
     )
-    return _filter_trusted(_web_hits_raw(r2), user_limit, project_state=project_state), meta
+    trusted_fb = _filter_trusted(_web_hits_raw(r2), user_limit, project_state=project_state)
+    if semantic_scout_cache_enabled():
+        meta_fb = dict(meta)
+        _semantic_scout_cache_set(fb, user_limit, project_state, trusted_fb, meta_fb)
+    return trusted_fb, meta
 
 
 def _step_result_dict(
