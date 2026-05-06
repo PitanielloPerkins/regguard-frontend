@@ -187,13 +187,13 @@ function scoutStepDataToMarkdown(stepKey: string, data: unknown): string {
           ? "### Jurisdiction (live scout)"
           : stepKey === "step_federal_fast41"
             ? "### Federal FAST-41 permitting (live scout)"
-          : stepKey === "step_data_center_water"
-            ? "### Utility-scale cooling water / NPDES (live scout)"
-            : stepKey === "step_dc_state_energy"
-              ? "### State energy riders / grid surcharge (live scout)"
-              : stepKey === "step_dc_local_moratorium"
-                ? "### Local 2026 data center moratorium scout (live scout)"
-                : `### Scout: ${stepKey}`;
+            : stepKey === "step_data_center_water"
+              ? "### Utility-scale cooling water / NPDES (live scout)"
+              : stepKey === "step_dc_state_energy"
+                ? "### State energy riders / grid surcharge (live scout)"
+                : stepKey === "step_dc_local_moratorium"
+                  ? "### Local 2026 data center moratorium scout (live scout)"
+                  : `### Scout: ${stepKey}`;
   let md = `\n\n${heading}\n\n`;
   if (query) {
     md += `**Query:** ${query}\n\n`;
