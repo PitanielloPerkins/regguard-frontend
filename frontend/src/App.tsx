@@ -368,6 +368,19 @@ export default function App() {
     void refreshMaintenanceSubs();
   }, [refreshMaintenanceSubs]);
 
+  useEffect(() => {
+    fetch("/api/finops-cache", { cache: "no-store" })
+      .then((r) => (r.ok ? r.json() : null))
+      .then((j) => {
+        if (j && typeof j === "object") {
+          console.info("[RegGuard FinOps — caches]", j);
+        }
+      })
+      .catch(() => {
+        /* ignore offline / CORS during static preview */
+      });
+  }, []);
+
   const setJobDescriptionRef = useRef(setJobDescription);
   setJobDescriptionRef.current = setJobDescription;
   const setSpeechHintRef = useRef(setSpeechHint);

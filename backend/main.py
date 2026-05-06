@@ -159,6 +159,18 @@ async def _log_firecrawl_key_prefix() -> None:
     k = os.getenv("FIRECRAWL_API_KEY") or ""
     prefix = k[:5] if k else "(not set)"
     print(f"Using Firecrawl Key: {prefix}...")
+    try:
+        from semantic_scout_cache import scout_cache_ttl_sec, semantic_scout_cache_enabled
+        from markdown_scraper import markdown_scraper_cache_enabled
+
+        print(
+            "FinOps — "
+            f"semantic scout search cache: {'on' if semantic_scout_cache_enabled() else 'off'} "
+            f"(TTL {scout_cache_ttl_sec():.0f}s), "
+            f"markdown scraper cache: {'on' if markdown_scraper_cache_enabled() else 'off'}"
+        )
+    except Exception as ex:
+        print(f"FinOps — status unavailable: {ex}")
 
 
 app.add_middleware(
@@ -634,6 +646,22 @@ def permit_draft_calculations(job_description: str = "") -> Dict[str, Any]:
     Drives the frontend **Permit Submittal Package** PDF section (load VA, feeder amps, copper size).
     """
     return permit_draft_calculation_response(job_description)
+
+
+@app.get("/finops-cache")
+def finops_cache_status() -> Dict[str, Any]:
+    """
+    Profit / FinOps: whether in-process Firecrawl **search** semantic cache and **markdown** scrape cache are enabled.
+    Opt-out via ``REG_GUARD_SEMANTIC_SCOUT_CACHE=0`` and ``REG_GUARD_MARKDOWN_SCRAPER_CACHE=0``.
+    """
+    from markdown_scraper import markdown_scraper_cache_enabled
+    from semantic_scout_cache import scout_cache_ttl_sec, semantic_scout_cache_enabled
+
+    return {
+        "semantic_scout_cache_enabled": semantic_scout_cache_enabled(),
+        "semantic_scout_cache_ttl_sec": scout_cache_ttl_sec(),
+        "markdown_scraper_cache_enabled": markdown_scraper_cache_enabled(),
+    }
 
 
 @app.get("/dashboard-revision")
