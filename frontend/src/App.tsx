@@ -30,7 +30,7 @@ import {
   type FollowUpChip,
 } from "./FollowUpActions";
 
-/** Flat fee model — matches backend ``base_search_value`` for dashboard display. */
+/** Flat fee model — matches backend ``base_search_value`` ($5.00 customer-facing research value). */
 const BASE_SEARCH_VALUE_USD = 5;
 
 /** Gemini Reality Capture Audit payload (SSE ``visual_audit`` / ``complete``). */
@@ -72,7 +72,11 @@ function parseVisualAuditPayload(v: unknown): VisualAuditPayload | null {
   if (typeof w !== "number" || typeof h !== "number" || !Array.isArray(dets)) {
     return null;
   }
-  return v as VisualAuditPayload;
+  const rest = { ...o };
+  delete rest.cost_usd;
+  delete rest.input_tokens;
+  delete rest.output_tokens;
+  return rest as VisualAuditPayload;
 }
 
 type FutureRiskHit = {
@@ -89,6 +93,27 @@ type FutureRiskAlertPayload = {
   hits?: FutureRiskHit[];
   notes?: string;
 };
+
+/** Data-center moratorium jurisdiction warning (SSE ``complete.moratorium_state_alert``). */
+type MoratoriumStateAlertPayload = {
+  active: boolean;
+  text: string;
+};
+
+function parseMoratoriumStateAlertPayload(v: unknown): MoratoriumStateAlertPayload | null {
+  if (v == null || typeof v !== "object") {
+    return null;
+  }
+  const o = v as Record<string, unknown>;
+  if (o.active !== true) {
+    return null;
+  }
+  const t = typeof o.text === "string" ? o.text.trim() : "";
+  if (!t) {
+    return null;
+  }
+  return { active: true, text: t };
+}
 
 function parseFutureRiskPayload(v: unknown): FutureRiskAlertPayload | null {
   if (v == null || typeof v !== "object") {
@@ -354,6 +379,7 @@ export default function App() {
     researchValueUsd: number;
     estimatedLiabilityAvoidedUsd: number;
   } | null>(null);
+  const [moratoriumStateAlert, setMoratoriumStateAlert] = useState<MoratoriumStateAlertPayload | null>(null);
   const [futureRiskAlert, setFutureRiskAlert] = useState<FutureRiskAlertPayload | null>(null);
   const [communityInspectorFeedback, setCommunityInspectorFeedback] =
     useState<CommunityInspectorFeedbackPayload | null>(null);
@@ -530,6 +556,7 @@ export default function App() {
     setReasoningStep(null);
     setVisualAudit(null);
     setProjectValueMetrics(null);
+    setMoratoriumStateAlert(null);
     setFutureRiskAlert(null);
     setCommunityInspectorFeedback(null);
     setInspectorNoteModalOpen(false);
@@ -1084,6 +1111,11 @@ export default function App() {
                     estimatedLiabilityAvoidedUsd: 0,
                   });
                 }
+              }
+              {
+                const msRaw = (payload as { moratorium_state_alert?: unknown }).moratorium_state_alert;
+                const msParsed = parseMoratoriumStateAlertPayload(msRaw);
+                setMoratoriumStateAlert(msParsed);
               }
               break;
             }
@@ -2127,6 +2159,19 @@ export default function App() {
                   </dd>
                 </div>
               </dl>
+            </div>
+          ) : null}
+
+          {phase === "Complete" && moratoriumStateAlert ? (
+            <div
+              className="rg-bottom-line-moratorium-alert"
+              role="alert"
+              aria-labelledby="rg-moratorium-alert-heading"
+            >
+              <div id="rg-moratorium-alert-heading" className="rg-bottom-line-moratorium-alert__title">
+                RED ALERT — The Bottom Line
+              </div>
+              <p className="rg-bottom-line-moratorium-alert__text">{moratoriumStateAlert.text}</p>
             </div>
           ) : null}
 
