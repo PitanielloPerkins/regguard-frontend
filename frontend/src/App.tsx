@@ -24,6 +24,11 @@ import {
   scheduleDictationSilenceStop,
 } from "./speech-recognition";
 import { downloadActionPlanPdf, downloadPermitPackagePdf } from "./downloadActionPlanPdf";
+import {
+  deriveProactiveFollowUps,
+  FollowUpActions,
+  type FollowUpChip,
+} from "./FollowUpActions";
 
 /** Gemini Reality Capture Audit payload (SSE ``visual_audit`` / ``complete``). */
 export type VisualDetection = {
@@ -348,6 +353,8 @@ export default function App() {
   const [bimBridgeReport, setBimBridgeReport] = useState<Record<string, unknown> | null>(null);
   const [bimImportBusy, setBimImportBusy] = useState(false);
   const [bimJsonDraft, setBimJsonDraft] = useState("");
+  /** Aggregate of ``summary_delta`` chunks for Proactive Guide (avoids scout-step noise in heuristics). */
+  const [proactiveSummaryBuffer, setProactiveSummaryBuffer] = useState("");
 
   const refreshMaintenanceSubs = useCallback(async () => {
     setMaintenanceLoading(true);
@@ -391,6 +398,22 @@ export default function App() {
   const canSubmit = useMemo(() => {
     return Boolean(selection?.formattedAddress && selection.zip && !busy);
   }, [selection, busy]);
+
+  const followUpSourceText = useMemo(() => {
+    const stream = proactiveSummaryBuffer.trim();
+    if (stream.length >= 40) {
+      return stream;
+    }
+    if (phase === "Complete" && actionPlan.trim().length > 120) {
+      return actionPlan;
+    }
+    return "";
+  }, [proactiveSummaryBuffer, phase, actionPlan]);
+
+  const followUpSuggestions = useMemo(
+    () => (followUpSourceText ? deriveProactiveFollowUps(followUpSourceText, jobDescription) : []),
+    [followUpSourceText, jobDescription],
+  );
 
   useEffect(() => {
     if (!imageFile) {
@@ -485,6 +508,7 @@ export default function App() {
     setInspectorNoteDraft("");
     setInspectorNoteSaving(false);
     setResultsTab("plan");
+    setProactiveSummaryBuffer("");
   }, []);
 
   const handleNewJob = useCallback(() => {
@@ -715,7 +739,12 @@ export default function App() {
     );
   }, []);
 
-  const runResearch = useCallback(async () => {
+  const runResearch = useCallback(async (launchOpts?: {
+    followUpAppend?: string;
+    tradeBoost?: FollowUpChip["tradeBoost"];
+    vertical?: FollowUpChip["vertical"];
+    missionCritical?: FollowUpChip["missionCritical"];
+  }) => {
     if (!selection) {
       return;
     }
@@ -725,6 +754,7 @@ export default function App() {
     researchCompleteRef.current = false;
     const epochAtStart = researchEpochRef.current;
     sseErrorToastedRef.current = false;
+    setProactiveSummaryBuffer("");
     setBusy(true);
     setPhase("Connecting…");
 
@@ -735,21 +765,31 @@ export default function App() {
     if (clientCity) {
       form.append("client_city", clientCity);
     }
-    form.append("job_description", jobDescription.trim());
+    const jd0 = jobDescription.trim();
+    const jd =
+      launchOpts?.followUpAppend != null && launchOpts.followUpAppend.trim()
+        ? `${jd0}\n\n${launchOpts.followUpAppend.trim()}`.trim()
+        : jd0;
+    form.append("job_description", jd);
     form.append("search_limit", String(searchLimit));
+    const te = tradeElectrician || !!launchOpts?.tradeBoost?.electrician;
+    const tp = tradePlumber || !!launchOpts?.tradeBoost?.plumber;
+    const th = tradeHvac || !!launchOpts?.tradeBoost?.hvac;
     const trades: string[] = [];
-    if (tradeElectrician) {
+    if (te) {
       trades.push("electrician");
     }
-    if (tradePlumber) {
+    if (tp) {
       trades.push("plumber");
     }
-    if (tradeHvac) {
+    if (th) {
       trades.push("hvac");
     }
     form.append("scout_trades", trades.join(","));
-    form.append("mission_critical_dc", missionCriticalDc ? "true" : "false");
-    form.append("scout_vertical", scoutVertical);
+    const mc = launchOpts?.missionCritical ?? missionCriticalDc;
+    form.append("mission_critical_dc", mc ? "true" : "false");
+    const vert = launchOpts?.vertical ?? scoutVertical;
+    form.append("scout_vertical", vert);
     if (imageFile) {
       form.append("image", imageFile);
     }
@@ -940,6 +980,7 @@ export default function App() {
               }
               setPhase("Writing Contractor Action Plan");
               appendToActionPlan(piece);
+              setProactiveSummaryBuffer((b) => b + piece);
               break;
             }
             case "complete": {
@@ -950,6 +991,7 @@ export default function App() {
               const fin = typeof payload.summary === "string" ? payload.summary : "";
               if (fin.trim()) {
                 setActionPlan(fin);
+                setProactiveSummaryBuffer(fin.trim());
               }
               const urls = payload.source_urls;
               if (Array.isArray(urls)) {
