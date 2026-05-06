@@ -1223,3 +1223,63 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   margin-top: 0.2rem;
   flex-shrink: 0;
 }
+
+/* Proactive Guide — follow-up action chips */
+.rg-proactive-guide {
+  margin-top: 1.25rem;
+  padding-top: 1rem;
+  border-top: 1px solid var(--rg-border);
+}
+
+.rg-proactive-guide__head {
+  margin-bottom: 0.65rem;
+}
+
+.rg-proactive-guide__title {
+  display: block;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.06em;
+  text-transform: uppercase;
+  color: var(--rg-accent-dim);
+  margin-bottom: 0.25rem;
+}
+
+.rg-proactive-guide__sub {
+  font-size: 0.78rem;
+  color: var(--rg-muted);
+  line-height: 1.4;
+}
+
+.rg-action-chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.45rem;
+}
+
+.rg-action-chip {
+  font-family: "Inter", "Roboto", system-ui, sans-serif;
+  font-size: 0.78rem;
+  font-weight: 600;
+  padding: 0.38rem 0.85rem;
+  border-radius: 999px;
+  border: 1px solid var(--rg-accent-dim);
+  background: rgba(138, 180, 248, 0.12);
+  color: var(--rg-text);
+  cursor: pointer;
+  transition:
+    background 0.15s ease,
+    border-color 0.15s ease,
+    transform 0.12s ease;
+}
+
+.rg-action-chip:hover:not(:disabled) {
+  background: rgba(138, 180, 248, 0.22);
+  border-color: var(--rg-accent);
+  transform: translateY(-1px);
+}
+
+.rg-action-chip:disabled {
+  opacity: 0.45;
+  cursor: not-allowed;
+}

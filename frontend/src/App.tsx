@@ -1118,6 +1118,29 @@ export default function App() {
     bimBridgeReport,
   ]);
 
+  const handleFollowUpChip = useCallback(
+    (chip: FollowUpChip) => {
+      if (!selection?.formattedAddress || !selection.zip) {
+        toast.error("Select a job site first.");
+        return;
+      }
+      if (busy) {
+        return;
+      }
+      toast.success(`RegGuard just saved you ${chip.minutesSaved} minutes of manual research.`, {
+        autoClose: 3800,
+        hideProgressBar: true,
+      });
+      void runResearch({
+        followUpAppend: `[Proactive Guide — ${chip.label}]\n\nFocused scout: ${chip.scoutPrompt}`,
+        tradeBoost: chip.tradeBoost,
+        vertical: chip.vertical,
+        missionCritical: chip.missionCritical,
+      });
+    },
+    [selection, busy, runResearch],
+  );
+
   const geolocationReadOptions = useMemo<PositionOptions>(
     () => ({
       enableHighAccuracy: true,
@@ -2346,6 +2369,12 @@ export default function App() {
               </>
             )}
           </div>
+
+          <FollowUpActions
+            suggestions={followUpSuggestions}
+            disabled={busy || !selection?.zip}
+            onSelect={handleFollowUpChip}
+          />
         </section>
       </div>
 
