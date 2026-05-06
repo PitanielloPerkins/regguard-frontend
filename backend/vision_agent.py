@@ -2,6 +2,8 @@
 Reg Guard — Reality Capture Audit: Gemini multimodal analysis of job-site photos vs scout context.
 
 Uses Gemini 1.5 Pro (configurable) with JSON output for observations + normalized bounding boxes.
+Scout context is flattened via **multi-tier Universal Regulatory Guardrail** summaries (see ``scout_summary_for_reality_capture``):
+jurisdiction → permits → codes, then **residential zoning** (Municode · .gov · OpenGov) or **FAST-41** plus **utility-scale water** tiers by vertical.
 **Austin 78704 gas clearance:** pixel geometry runs only when the site ZIP is **78704** and the model labels
 include a **gas meter** (see ``_gas_meter_detected_in_detections``).
 """

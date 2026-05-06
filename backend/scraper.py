@@ -1183,8 +1183,8 @@ def iter_universal_scout(
     ``ahj_identification`` is echoed into the final payload for the memo.
 
     ``scout_profile`` enables **Full MEP** trade scoping, **mission-critical data-center** code
-    discovery, project **vertical**, and (for **infrastructure** / **data_center**) a **FAST-41**
-    federal-permitting pass.
+    discovery, project **vertical**, **residential zoning** (building), and for **infrastructure** /
+    **data_center** the **FAST-41** and **utility-scale water** passes.
     """
     z = normalize_us_zip(zip_code)
     ctx = (enhanced_context or "").strip() or None
@@ -1308,12 +1308,14 @@ def search_local_building_codes_by_zip(
     scout_profile: Optional[Mapping[str, Any]] = None,
 ) -> Dict[str, Any]:
     """
-    Universal Scout workflow (ZIP-centric — three core passes plus optional FAST-41):
+    Universal Scout workflow (ZIP-centric — three core passes plus vertical intelligence tiers):
 
     1. Jurisdiction hints for the ZIP (trusted domains only).
     2. Building department / permits for that area.
     3. Adopted codes and amendments.
-    4. (Optional) FAST-41 federal permitting when ``scout_profile`` vertical is infrastructure/data center.
+    4. **Building** vertical: **step_residential_zoning** (Municode / .gov / OpenGov setbacks & yard lines).
+    5. **Infrastructure / data center** vertical: **step_federal_fast41** and **step_data_center_water**
+       (utility-scale cooling-water / NPDES / state environmental cues).
 
     Each step uses Firecrawl **/v2/search** (``web`` source only): URL + snippet discovery
     without bundled full-page scrape; capped at a few SERP rows per query.
