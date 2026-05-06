@@ -996,7 +996,7 @@ async def research(
             try:
                 _log_research_step(
                     "Universal Scout",
-                    detail="Firecrawl /search — jurisdiction, permits, codes (sequential)",
+                    detail="Firecrawl /search — multi-tier sequential passes (see backend scraper)",
                 )
                 # Universal Scout: each query line includes ``City, ST`` / county + ``(site:gov OR site:municode.com)`` — see ``scraper.py``.
                 it = iter(
