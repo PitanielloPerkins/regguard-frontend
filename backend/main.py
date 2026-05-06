@@ -953,7 +953,9 @@ async def research(
     ``step`` (including ``step_ahj_identification`` before Universal Scout), ``step`` (scout:
     ``step_jurisdiction``, ``step_building_permits``, ``step_building_codes``; **building** vertical adds
     ``step_residential_zoning`` (Municode / .gov / OpenGov setbacks); **infrastructure** or **data_center** adds
-    ``step_federal_fast41`` and ``step_data_center_water``),
+    ``step_federal_fast41`` (data_center augments with **Executive Order 14141** keywords) and ``step_data_center_water``;
+    **data_center** alone adds ``step_dc_state_energy`` (ratepayer pledges / state riders / interconnect surcharge cues)
+    and ``step_dc_local_moratorium`` (**2026** township pause scout)),
     ``future_risk_alert``, ``community_inspector_feedback`` (ZIP-indexed crowdsourced inspector notes when present),
     ``summary_delta``, ``complete``.
 
