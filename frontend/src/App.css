@@ -628,8 +628,58 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   color: var(--rg-muted);
 }
 
-.rg-results-panel h2 {
-  margin-bottom: 0.5rem;
+.rg-results-panel__header {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 0.5rem 1rem;
+  margin-bottom: 0.55rem;
+}
+
+.rg-results-panel__header h2 {
+  margin: 0;
+  flex: 1 1 auto;
+}
+
+.rg-search-cost-badge {
+  flex-shrink: 0;
+  font-size: 0.7rem;
+  font-weight: 800;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  padding: 0.22rem 0.62rem;
+  border-radius: 999px;
+  color: #e8e1cf;
+  background: rgba(15, 23, 42, 0.88);
+  border: 1px solid rgba(251, 191, 36, 0.45);
+}
+
+.rg-bottom-line-box {
+  margin: 0 0 0.9rem;
+  padding: 0.7rem 0.92rem;
+  border-radius: 10px;
+  border: 1px solid rgba(212, 175, 55, 0.55);
+  background: linear-gradient(145deg, rgba(212, 175, 55, 0.22), rgba(120, 90, 20, 0.14));
+  box-shadow:
+    inset 0 1px 0 rgba(255, 255, 255, 0.08),
+    0 1px 3px rgba(0, 0, 0, 0.2);
+}
+
+.rg-bottom-line-box__label {
+  font-size: 0.69rem;
+  font-weight: 800;
+  letter-spacing: 0.1em;
+  text-transform: uppercase;
+  color: #daa520;
+  margin-bottom: 0.42rem;
+}
+
+.rg-bottom-line-box__text {
+  margin: 0;
+  font-size: 0.93rem;
+  line-height: 1.52;
+  color: #f8efd4;
 }
 
 /** Live Scout/Audit reasoning from SSE — subtle, non-blocking cue above results. */

@@ -339,6 +339,26 @@ def _extract_gemini_usage(resp: Any) -> Tuple[Optional[int], Optional[int]]:
     return inp_i, out_i
 
 
+# Gemini-style list pricing for Reality Capture (input / output per token).
+_GEMINI_USD_PER_INPUT_TOKEN = 0.000000075
+_GEMINI_USD_PER_OUTPUT_TOKEN = 0.0000003
+
+
+def gemini_search_cost_usd(
+    input_tokens: Optional[int],
+    output_tokens: Optional[int],
+) -> Optional[float]:
+    """
+    Estimated USD for one multimodal audit call:
+    (input_tokens × 0.000000075) + (output_tokens × 0.0000003).
+    """
+    if input_tokens is None and output_tokens is None:
+        return None
+    inp = float(input_tokens or 0)
+    out = float(output_tokens or 0)
+    return round(inp * _GEMINI_USD_PER_INPUT_TOKEN + out * _GEMINI_USD_PER_OUTPUT_TOKEN, 8)
+
+
 def _austin_78704_clearance_skip_notes(zip5: str, detections: List[Dict[str, Any]]) -> str:
     z = (zip5 or "").strip()
     if z != "78704":
@@ -400,7 +420,11 @@ def _run_gemini_audit_sync(
 
     schema_instructions = (
         "Return ONE JSON object only (no markdown). Keys:\n"
-        '- "observations": array of 3–8 short strings (neutral facts referencing scout context where relevant).\n'
+        '- "observations": array of 3–8 short strings (neutral facts referencing scout URLs / code signals where '
+        "relevant — treat those as your legal-style citations).\n"
+        '- "bottom_line": string — **The Bottom Line**: after those grounded observations, write **exactly two sentences** '
+        "in plain English for a field electrician (e.g. whether a permit pathway or inspection hook is implied, and what "
+        "an AHJ inspector is likely to look for). No markdown, no numbering, two sentences only.\n"
         '- "detections": array of objects with "label" (string: e.g. Gas Meter, Gas Valve, Electrical Panel, '
         'Ground Rod, Service Disconnect, Meter Socket) and '
         '"box_2d": [ymin, xmin, ymax, xmax] integers 0–1000 relative to image (top-left origin).\n'
@@ -418,10 +442,13 @@ def _run_gemini_audit_sync(
         "jurisdiction → permits → codes, then either **residential zoning/setbacks** (Municode · government · OpenGov) "
         "or **FAST-41** plus **utility-scale water / NPDES** signals depending on project vertical. "
         "Reference only what the tiers support; flag when field measurements (e.g. setbacks) cannot be confirmed from a photo.\n"
-        "Scout results (titles + URLs):\n"
+        "Scout results (titles + URLs — your citation layer):\n"
         f"{scout_summary}\n\n"
         "Analyze the attached photo against this scout context: equipment, grounding, gas proximity to electrical, "
         "and permit/code relevance. No legal advice.\n"
+        "Order of reasoning: first ground your `observations` in the scout URLs and code signals above; then set "
+        "`bottom_line` to **The Bottom Line** — exactly two plain-English sentences summarizing what matters for permits "
+        "and inspections on this job.\n"
         + schema_instructions
     )
 
@@ -434,13 +461,17 @@ def _run_gemini_audit_sync(
         ),
     )
     in_tok, out_tok = _extract_gemini_usage(resp)
+    cost_usd = gemini_search_cost_usd(in_tok, out_tok)
+    usage_meta: Dict[str, Any] = {"phase": "gemini_multimodal_audit"}
+    if cost_usd is not None:
+        usage_meta["cost_usd"] = cost_usd
     log_api_usage(
         project_key=zip_clean or "unknown",
         route="reality_capture",
         model=spatial_model,
         input_tokens=in_tok,
         output_tokens=out_tok,
-        meta={"phase": "gemini_multimodal_audit"},
+        meta=usage_meta,
     )
     raw_text = ""
     if hasattr(resp, "text") and resp.text:
@@ -452,6 +483,9 @@ def _run_gemini_audit_sync(
     data = json.loads(_strip_json_fence(raw_text))
     if not isinstance(data, dict):
         raise ValueError("Gemini returned non-object JSON.")
+
+    bottom_raw = data.get("bottom_line")
+    bottom_line = str(bottom_raw).strip() if isinstance(bottom_raw, str) else ""
 
     observations = data.get("observations") or []
     obs_lines: List[str] = []
@@ -526,12 +560,16 @@ def _run_gemini_audit_sync(
         else:
             det["status"] = "ok"
 
-    visual_audit = {
+    visual_audit: Dict[str, Any] = {
         "image_width": width,
         "image_height": height,
         "detections": detections,
         "austin_clearance": clearance_block,
         "model_id": spatial_model,
+        "bottom_line": bottom_line or None,
+        "cost_usd": cost_usd,
+        "input_tokens": in_tok,
+        "output_tokens": out_tok,
     }
 
     if clearance_block.get("applies") and isinstance(obs_text, str):
@@ -543,7 +581,14 @@ def _run_gemini_audit_sync(
         )
         obs_text = normalize_vision_text(obs_text + extra)
 
-    return {"photo_analysis": obs_text, "visual_audit": visual_audit}
+    return {
+        "photo_analysis": obs_text,
+        "visual_audit": visual_audit,
+        "cost_usd": cost_usd,
+        "bottom_line": bottom_line or None,
+        "input_tokens": in_tok,
+        "output_tokens": out_tok,
+    }
 
 
 def run_reality_capture_audit(
@@ -556,7 +601,7 @@ def run_reality_capture_audit(
     state: str,
     zip5: str,
 ) -> Dict[str, Any]:
-    """Blocking Gemini multimodal audit; returns photo_analysis + visual_audit dict."""
+    """Blocking Gemini multimodal audit; returns ``photo_analysis``, ``visual_audit`` (incl. ``bottom_line``, ``cost_usd``), and top-level token/cost mirrors."""
     img = Image.open(io.BytesIO(image_bytes))
     width, height = img.size
     return _run_gemini_audit_sync(

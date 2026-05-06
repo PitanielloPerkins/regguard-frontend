@@ -42,6 +42,12 @@ export type VisualAuditPayload = {
   image_height: number;
   detections: VisualDetection[];
   model_id?: string;
+  /** Plain-English two-sentence summary from Reality Capture (Gemini). */
+  bottom_line?: string | null;
+  /** Estimated USD: (input_tokens × 75e-9) + (output_tokens × 3e-7). */
+  cost_usd?: number | null;
+  input_tokens?: number | null;
+  output_tokens?: number | null;
   austin_clearance?: {
     applies?: boolean;
     edge_distance_px?: number | null;
@@ -2038,7 +2044,40 @@ export default function App() {
         </section>
 
         <section className="rg-panel rg-results-panel">
-          <h2>Results</h2>
+          <header className="rg-results-panel__header">
+            <h2 id="rg-results-heading">Results</h2>
+            {visualAudit != null &&
+            typeof visualAudit.cost_usd === "number" &&
+            !Number.isNaN(visualAudit.cost_usd) ? (
+              <span
+                className="rg-search-cost-badge"
+                title="Estimated Gemini Reality Capture token cost for this compliance run."
+              >
+                Search cost{" "}
+                {visualAudit.cost_usd.toLocaleString(undefined, {
+                  style: "currency",
+                  currency: "USD",
+                  minimumFractionDigits: 2,
+                  maximumFractionDigits: 6,
+                })}
+              </span>
+            ) : null}
+          </header>
+
+          {visualAudit != null &&
+          typeof visualAudit.bottom_line === "string" &&
+          visualAudit.bottom_line.trim() ? (
+            <div
+              className="rg-bottom-line-box"
+              role="region"
+              aria-labelledby="rg-bottom-line-label"
+            >
+              <div id="rg-bottom-line-label" className="rg-bottom-line-box__label">
+                The Bottom Line
+              </div>
+              <p className="rg-bottom-line-box__text">{visualAudit.bottom_line.trim()}</p>
+            </div>
+          ) : null}
 
           {reasoningStep ? (
             <p className="rg-reasoning-step rg-reasoning-step--in-results" aria-live="polite">
