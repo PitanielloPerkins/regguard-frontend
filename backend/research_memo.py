@@ -15,6 +15,7 @@ from typing import Any, Dict, Iterator, List, Optional, Set
 from anthropic import Anthropic
 from dotenv import load_dotenv
 
+from data_center_intel import build_digest_intel_block
 from scraper import SCOUT_SOURCE_STEP_KEYS, future_risk_alerts_from_raw
 
 _ROOT = Path(__file__).resolve().parent.parent
@@ -142,6 +143,27 @@ def _merge_tagged_hits(
     return out
 
 
+def compute_data_center_intel_snapshot(
+    raw: Dict[str, Any],
+    job_description: str,
+    enhanced_query: str,
+) -> Dict[str, Any]:
+    """Structured DC intelligence for digest JSON and Bottom Line injection (moratorium hits from scout)."""
+    ju = raw.get("jurisdiction") if isinstance(raw.get("jurisdiction"), dict) else {}
+    state = str(ju.get("state") or ju.get("state_short") or "").strip()
+    sp = raw.get("scout_profile") if isinstance(raw.get("scout_profile"), dict) else {}
+    vert = str(sp.get("vertical") or "building").strip().lower()
+    mor_block = raw.get("step_dc_local_moratorium") if isinstance(raw.get("step_dc_local_moratorium"), dict) else {}
+    mor_count = len(mor_block.get("results") or [])
+    return build_digest_intel_block(
+        vertical=vert,
+        job_description=job_description or "",
+        enhanced_query=enhanced_query or "",
+        state=state,
+        moratorium_hit_count=mor_count,
+    )
+
+
 def scout_has_no_trusted_results(raw: Dict[str, Any]) -> bool:
     """True when every scout step present on ``raw`` has zero trusted ``results`` rows."""
     for key in SCOUT_SOURCE_STEP_KEYS:
@@ -153,7 +175,11 @@ def scout_has_no_trusted_results(raw: Dict[str, Any]) -> bool:
     return True
 
 
-def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
+def _build_inspector_digest_directive(
+    raw: Dict[str, Any],
+    *,
+    data_center_intel: Optional[Dict[str, Any]] = None,
+) -> Dict[str, Any]:
     ju = raw.get("jurisdiction") if isinstance(raw.get("jurisdiction"), dict) else {}
     city = str(ju.get("city") or "").strip()
     state = str(ju.get("state") or ju.get("state_short") or "").strip()
@@ -229,6 +255,15 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             "include federal permitting coordination `- [ ]` tasks; otherwise note counsel / program verification. "
             "If `step_data_center_water` hits reference **NPDES**, **water withdrawal**, or state **environmental quality** / **utility commission** proceedings, "
             "add checklist lines for cooling-water compliance and permit coupling — verify against live agency dockets."
+        )
+
+    dc_intel = data_center_intel if isinstance(data_center_intel, dict) else {}
+    if vert_sp == "data_center" and dc_intel.get("vertical") == "data_center":
+        consultant_role += (
+            " **Data Center Intelligence Module:** Read **`data_center_intelligence`** in this digest: verify **Executive Order 14141** (July 2025 — confirm citation) "
+            "against Federal Register sources; flag **FAST-41** scale candidacy when `fast41_streamlining_scale_candidate` is true (**>100 MW** or **≥ $500M** capex hints). "
+            "Under **### Permit Costs**, add `- [ ]` lines citing the illustrative **`infrastructure_surcharge_estimate_usd`** band (explicitly **not** a tariff quote — utility **LGIA** / studies control). "
+            "Mine **`step_dc_state_energy`** for **ratepayer protection pledges** / PSC riders and **`step_dc_local_moratorium`** for **2026** pause or moratorium language."
         )
 
     if city and state:
@@ -313,6 +348,11 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             (
                 "Step 4 — Closeout: After **### Reference Links**, add **### The Bottom Line** with exactly **two sentences** "
                 "of plain-English contractor to-do guidance (no `- [ ]` lines)."
+                + (
+                    " If **`data_center_permit_conflict_alert`** is true (see **`data_center_intelligence`**), add **one more sentence** beginning **PERMIT CONFLICT ALERT:**."
+                    if vert_sp == "data_center" and dc_intel.get("data_center_permit_conflict_alert")
+                    else ""
+                )
             ),
         ]
         if empty_scout
@@ -332,6 +372,11 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             (
                 "Step 4 — Closeout: After **### Reference Links**, add **### The Bottom Line** with exactly **two sentences** "
                 "of plain-English contractor to-do guidance (no `- [ ]` lines)."
+                + (
+                    " If **`data_center_permit_conflict_alert`** is true (see **`data_center_intelligence`**), add **one more sentence** beginning **PERMIT CONFLICT ALERT:**."
+                    if vert_sp == "data_center" and dc_intel.get("data_center_permit_conflict_alert")
+                    else ""
+                )
             ),
         ]
     )
@@ -387,6 +432,11 @@ def _build_inspector_digest_directive(raw: Dict[str, Any]) -> Dict[str, Any]:
             "`required_checklist_headings`, in order. Optional single-line **MANDATORY GOTCHA:** immediately before related "
             "checkboxes. Then **### Reference Links** for `unique_source_urls`. Finally **### The Bottom Line**: "
             "exactly **two sentences** in plain English—contractor **to-do** recap—no `- [ ]` lines."
+            + (
+                " When **`data_center_permit_conflict_alert`** is true, append **one sentence** starting **PERMIT CONFLICT ALERT:** after those two."
+                if vert_sp == "data_center" and dc_intel.get("data_center_permit_conflict_alert")
+                else ""
+            )
         ),
         "gotchas_guidance": gotchas_guidance,
         "fee_and_code_guidance": (
@@ -406,6 +456,7 @@ def build_research_digest(
     future_risk: Optional[Dict[str, Any]] = None,
     community_scout_notes: Optional[List[Dict[str, Any]]] = None,
     bim_clash_report: Optional[Dict[str, Any]] = None,
+    job_description: str = "",
 ) -> str:
     """Compact research context for the action-plan model (no full page bodies)."""
     ju = raw.get("jurisdiction")
@@ -458,7 +509,8 @@ def build_research_digest(
 
     fr = future_risk if future_risk is not None else future_risk_alerts_from_raw(raw)
 
-    directive = dict(_build_inspector_digest_directive(raw))
+    dc_intel_snap = compute_data_center_intel_snapshot(raw, job_description, enhanced_query)
+    directive = dict(_build_inspector_digest_directive(raw, data_center_intel=dc_intel_snap))
     if fr.get("active"):
         directive["future_risk_watchdog"] = (
             "The digest includes `future_code_change_watchdog` with active=true. Open the Contractor Action Plan with "
@@ -530,6 +582,8 @@ def build_research_digest(
         "community_scout_inspector_notes": comm,
     }
     payload.update(bim_payload)
+    if dc_intel_snap.get("vertical") == "data_center":
+        payload["data_center_intelligence"] = dc_intel_snap
     if scout_has_no_trusted_results(raw):
         payload["empty_scout_nec_2023_fallback"] = True
     if city_guess.lower() == "dallas" and (state_guess or "").strip().upper() in ("TX",):
@@ -593,6 +647,7 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                         "`dallas_minimum_trade_permit_usd` / `dallas_minimum_trade_permit_note`, `dallas_oncor_disconnect_coordination`, "
                         "`austin_design_criteria_requirement`, `austin_development_services_fees_url`, `austin_safety_surcharge_note`, "
                         "`austin_central_zip_service_upgrade`, "
+                        "`data_center_intelligence` (when present — EO **14141**, FAST-41 scale flags, **`infrastructure_surcharge_estimate_usd`**, permit conflict), "
                         "and `empty_scout_nec_2023_fallback` if present, then "
                         "`community_scout_inspector_notes` (when non-empty you MUST satisfy `community_inspector_moat` under **### Technical Punch List**), "
                         "`bim_clash_zones` / `bim_scout_cross_reference` when present (satisfy `bim_clash_zone_moat` and/or `bim_integration_crossref`), "

@@ -20,6 +20,7 @@ from urllib.parse import urlparse
 from dotenv import load_dotenv
 from firecrawl import Firecrawl
 from firecrawl.v2.types import ScrapeOptions, SearchData
+from data_center_intel import state_energy_law_cues as _dc_state_energy_law_cues
 from semantic_scout_cache import cache_get as _semantic_scout_cache_get
 from semantic_scout_cache import cache_set as _semantic_scout_cache_set
 from semantic_scout_cache import semantic_scout_cache_enabled
@@ -45,6 +46,8 @@ SCOUT_SOURCE_STEP_KEYS: Tuple[str, ...] = (
     "step_residential_zoning",
     "step_federal_fast41",
     "step_data_center_water",
+    "step_dc_state_energy",
+    "step_dc_local_moratorium",
 )
 
 # City of Plano — product-targeted scout supplements (documented in ``main`` module docstring).
@@ -271,10 +274,16 @@ def _fast41_query_line(
         loc_bits.append(f"{city}, {st}")
     loc = " ".join(loc_bits).strip()
     vlabel = "infrastructure" if vertical == "infrastructure" else "data center"
-    return (
+    core = (
         f"FAST-41 federal permitting Title 41 Permitting Council covered project status "
         f"{vlabel} environmental review milestone dashboard {loc} — {zip_tag}"
     )
+    if vertical == "data_center":
+        core += (
+            " Executive Order 14141 July 2025 AI data center infrastructure permitting acceleration "
+            "federal priority FAST-41 eligibility greater than 100 MW 500 million dollars capex threshold"
+        )
+    return core
 
 
 def _scout_geo_phrase(
@@ -326,6 +335,59 @@ def _residential_zoning_setback_query_line(
     return (
         f"{loc} zoning ordinance setback front yard side yard rear yard lot line "
         f"residential single-family R-1 Chapter 150 Municode codified GIS open data portal — {zip_tag}"
+    )
+
+
+def _dc_state_energy_query_line(
+    *,
+    zip_tag: str,
+    city: str,
+    county: str,
+    st: str,
+    mode: str,
+    site_address: Optional[str],
+) -> str:
+    """Ratepayer protection / PSC rider / interconnect surcharge discovery (data-center vertical only)."""
+    loc = _scout_geo_phrase(
+        zip_tag=zip_tag,
+        city=city,
+        county=county,
+        st=st,
+        mode=mode,
+        site_address=site_address,
+    )
+    stx = (st or "").strip().upper()
+    cues = _dc_state_energy_law_cues(stx)
+    cue_seg = (" ".join(cues[:2]) + " ") if cues else ""
+    return (
+        f"{loc} data center {cue_seg}"
+        f"ratepayer protection pledge utility commission tariff rider transmission allocation "
+        f"large electric load interconnect deposit infrastructure surcharge network upgrade cost sharing "
+        f"hyperscale facility — {zip_tag}"
+    )
+
+
+def _dc_local_moratorium_query_line(
+    *,
+    zip_tag: str,
+    city: str,
+    county: str,
+    st: str,
+    mode: str,
+    site_address: Optional[str],
+) -> str:
+    """2026 township/county moratorium & pause language via trusted-domain SERP."""
+    loc = _scout_geo_phrase(
+        zip_tag=zip_tag,
+        city=city,
+        county=county,
+        st=st,
+        mode=mode,
+        site_address=site_address,
+    )
+    return (
+        f"{loc} township county zoning moratorium 2026 data center pause ordinance interim ban "
+        f"cooling tower moratorium AI infrastructure halt emergency ordinance — {zip_tag}"
     )
 
 
@@ -925,6 +987,10 @@ def _final_scout_response(
     zoning_meta: Optional[Dict[str, Any]] = None,
     water_hits: Optional[List[Dict[str, Optional[str]]]] = None,
     water_meta: Optional[Dict[str, Any]] = None,
+    dc_energy_hits: Optional[List[Dict[str, Optional[str]]]] = None,
+    dc_energy_meta: Optional[Dict[str, Any]] = None,
+    moratorium_hits: Optional[List[Dict[str, Optional[str]]]] = None,
+    moratorium_meta: Optional[Dict[str, Any]] = None,
 ) -> Dict[str, Any]:
     addr = (site_address or "").strip()
     ju = dict(jurisdiction) if jurisdiction else None
@@ -969,12 +1035,23 @@ def _final_scout_response(
     if fast41_meta is not None:
         wf.append(
             "**Intelligence tier — Infrastructure / data center:** **FAST-41** / Title 41 **Permitting Council** "
-            "federal permitting status cues."
+            "federal permitting status cues"
+            + (" (data-center pass includes **Executive Order 14141** acceleration keywords)." if prof_snap["vertical"] == "data_center" else ".")
         )
     if water_meta is not None:
         wf.append(
             "**Intelligence tier — Utility-scale water:** cooling-water **withdrawal**, **NPDES** / discharge, "
             "and state **environmental quality** or **utility commission** signals (cross-reference with FAST-41 context)."
+        )
+    if dc_energy_meta is not None:
+        wf.append(
+            "**Data Center Intelligence — State energy / grid:** ratepayer-protection pledges, **PSC/PUC** riders, "
+            "and **interconnect deposit / surcharge** proceedings (CA/OH/UT/VA emphasis when applicable)."
+        )
+    if moratorium_meta is not None:
+        wf.append(
+            "**Data Center Intelligence — Local moratorium scout:** trusted-domain cues for **2026** township/county "
+            "**pause / freeze / moratorium** language targeting hyperscale or AI infrastructure."
         )
     out: Dict[str, Any] = {
         "zip": z,
@@ -1022,6 +1099,10 @@ def _final_scout_response(
         out["step_residential_zoning"] = _step_result_dict(zoning_hits or [], zoning_meta)
     if water_meta is not None:
         out["step_data_center_water"] = _step_result_dict(water_hits or [], water_meta)
+    if dc_energy_meta is not None:
+        out["step_dc_state_energy"] = _step_result_dict(dc_energy_hits or [], dc_energy_meta)
+    if moratorium_meta is not None:
+        out["step_dc_local_moratorium"] = _step_result_dict(moratorium_hits or [], moratorium_meta)
     if ahj:
         out["step_ahj_identification"] = ahj
     return out
@@ -1277,6 +1358,39 @@ def iter_universal_scout(
         )
         yield {"event": "step", "step": "step_data_center_water", "data": _step_result_dict(water_hits, water_meta)}
 
+    dc_energy_hits: Optional[List[Dict[str, Optional[str]]]] = None
+    dc_energy_meta: Optional[Dict[str, Any]] = None
+    moratorium_hits: Optional[List[Dict[str, Optional[str]]]] = None
+    moratorium_meta: Optional[Dict[str, Any]] = None
+    if prof["vertical"] == "data_center":
+        qe_core = _dc_state_energy_query_line(
+            zip_tag=zip_tag,
+            city=city_j,
+            county=county_j,
+            st=st_j,
+            mode=mode_j,
+            site_address=addr,
+        )
+        qe = _with_context(qe_core, ctx)
+        dc_energy_hits, dc_energy_meta = _scout_search(
+            fc, qe, user_limit=search_limit, project_state=st_for_filter
+        )
+        yield {"event": "step", "step": "step_dc_state_energy", "data": _step_result_dict(dc_energy_hits, dc_energy_meta)}
+
+        qm_core = _dc_local_moratorium_query_line(
+            zip_tag=zip_tag,
+            city=city_j,
+            county=county_j,
+            st=st_j,
+            mode=mode_j,
+            site_address=addr,
+        )
+        qm = _with_context(qm_core, ctx)
+        moratorium_hits, moratorium_meta = _scout_search(
+            fc, qm, user_limit=search_limit, project_state=st_for_filter
+        )
+        yield {"event": "step", "step": "step_dc_local_moratorium", "data": _step_result_dict(moratorium_hits, moratorium_meta)}
+
     full = _final_scout_response(
         z,
         ctx,
@@ -1296,6 +1410,10 @@ def iter_universal_scout(
         zoning_meta=zoning_meta,
         water_hits=water_hits,
         water_meta=water_meta,
+        dc_energy_hits=dc_energy_hits,
+        dc_energy_meta=dc_energy_meta,
+        moratorium_hits=moratorium_hits,
+        moratorium_meta=moratorium_meta,
     )
     yield {"event": "complete", "raw": full}
 
