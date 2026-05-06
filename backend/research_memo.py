@@ -332,6 +332,19 @@ def _build_inspector_digest_directive(
             "using **MANDATORY GOTCHA:** plus `- [ ]` tasks—only when the digest supports it."
         )
 
+    _step4_dc_extras = ""
+    if vert_sp == "data_center" and dc_intel.get("vertical") == "data_center":
+        if dc_intel.get("data_center_permit_conflict_alert"):
+            _step4_dc_extras += (
+                " If **`data_center_permit_conflict_alert`** is true (see **`data_center_intelligence`**), "
+                "add **one more sentence** beginning **PERMIT CONFLICT ALERT:**."
+            )
+        if dc_intel.get("moratorium_state_bottom_line_red_alert"):
+            _step4_dc_extras += (
+                f" If **`moratorium_state_bottom_line_red_alert`** is true, append this sentence verbatim under **### The Bottom Line**: "
+                f"`{MORATORIUM_BOTTOM_RED_WARNING_TEXT}`"
+            )
+
     logic_steps: List[Any] = (
         [
             (
@@ -351,11 +364,7 @@ def _build_inspector_digest_directive(
             (
                 "Step 4 — Closeout: After **### Reference Links**, add **### The Bottom Line** with exactly **two sentences** "
                 "of plain-English contractor to-do guidance (no `- [ ]` lines)."
-                + (
-                    " If **`data_center_permit_conflict_alert`** is true (see **`data_center_intelligence`**), add **one more sentence** beginning **PERMIT CONFLICT ALERT:**."
-                    if vert_sp == "data_center" and dc_intel.get("data_center_permit_conflict_alert")
-                    else ""
-                )
+                + _step4_dc_extras
             ),
         ]
         if empty_scout
@@ -375,11 +384,7 @@ def _build_inspector_digest_directive(
             (
                 "Step 4 — Closeout: After **### Reference Links**, add **### The Bottom Line** with exactly **two sentences** "
                 "of plain-English contractor to-do guidance (no `- [ ]` lines)."
-                + (
-                    " If **`data_center_permit_conflict_alert`** is true (see **`data_center_intelligence`**), add **one more sentence** beginning **PERMIT CONFLICT ALERT:**."
-                    if vert_sp == "data_center" and dc_intel.get("data_center_permit_conflict_alert")
-                    else ""
-                )
+                + _step4_dc_extras
             ),
         ]
     )
@@ -438,6 +443,11 @@ def _build_inspector_digest_directive(
             + (
                 " When **`data_center_permit_conflict_alert`** is true, append **one sentence** starting **PERMIT CONFLICT ALERT:** after those two."
                 if vert_sp == "data_center" and dc_intel.get("data_center_permit_conflict_alert")
+                else ""
+            )
+            + (
+                f" When **`moratorium_state_bottom_line_red_alert`** is true, append verbatim: {MORATORIUM_BOTTOM_RED_WARNING_TEXT}"
+                if vert_sp == "data_center" and dc_intel.get("moratorium_state_bottom_line_red_alert")
                 else ""
             )
         ),
@@ -650,7 +660,8 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                         "`dallas_minimum_trade_permit_usd` / `dallas_minimum_trade_permit_note`, `dallas_oncor_disconnect_coordination`, "
                         "`austin_design_criteria_requirement`, `austin_development_services_fees_url`, `austin_safety_surcharge_note`, "
                         "`austin_central_zip_service_upgrade`, "
-                        "`data_center_intelligence` (when present — EO **14141**, FAST-41 scale flags, **`infrastructure_surcharge_estimate_usd`**, permit conflict), "
+                        "`data_center_intelligence` (when present — **May 2026 rescission** posture, **FAST-41 Transparency Project** >100 MW gate, "
+                        "**Virginia HB 1515** / **Ohio ballot** flags, **`infrastructure_surcharge_estimate_usd`**, permit conflict, moratorium High Alert), "
                         "and `empty_scout_nec_2023_fallback` if present, then "
                         "`community_scout_inspector_notes` (when non-empty you MUST satisfy `community_inspector_moat` under **### Technical Punch List**), "
                         "`bim_clash_zones` / `bim_scout_cross_reference` when present (satisfy `bim_clash_zone_moat` and/or `bim_integration_crossref`), "
@@ -662,9 +673,11 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                         "using NEC 2023 training knowledge for 200A scope. "
                         f"When Dallas fee fields are set, include the **${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD:.2f}** floor in **Permit Costs**. "
                         "When `dallas_oncor_disconnect_coordination` is set, include **Oncor coordination** gotchas under **Technical Punch List**. "
-                        "When `data_center_intelligence` is present, satisfy **Data Center Intelligence Module** tasks in `consultant_role` "
-                        "(EO **14141** verification line, FAST-41 candidacy checkbox when `fast41_streamlining_scale_candidate`, surcharge band citation, state-energy / moratorium mining). "
+                        "When `data_center_intelligence` is present, satisfy **Conflict Intelligence Engine** tasks in `consultant_role` "
+                        "(**no EO 14141** reliance — cite **`federal_permitting_may_2026_note`**; **FAST-41 Transparency** checkbox when "
+                        "`fast41_transparency_project_candidate`; **`bill_specific_flags`** for VA/OH; surcharge band; moratorium mining). "
                         "When `data_center_permit_conflict_alert` is true, Bottom Line must include **PERMIT CONFLICT ALERT:** sentence. "
+                        "When `moratorium_state_bottom_line_red_alert` is true, Bottom Line must include the verbatim **WARNING:** moratorium sentence from the digest. "
                         "Use ONLY checklist lines (`- [ ] `) under the headings in `required_checklist_headings`, "
                         "then add **### Reference Links** listing `unique_source_urls`. "
                         "End with **### The Bottom Line** — exactly **two sentences** of plain-English contractor to-do recap (no checkboxes). "
