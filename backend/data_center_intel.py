@@ -326,9 +326,9 @@ def inject_bottom_line_permit_conflict(summary_md: str, *, alert_on: bool, ratio
     return text.rstrip() + "\n\n" + extra + "\n"
 
 
-def inject_bottom_line_moratorium_state_red_alert(summary_md: str, *, active: bool, warning_text: str) -> str:
+def inject_bottom_line_moratorium_state_red_alert(summary_md: str, *, active: bool) -> str:
     """Append fixed WARNING line for Moratorium High Alert states (idempotent)."""
-    if not active or not (warning_text or "").strip():
+    if not active:
         return summary_md or ""
     text = summary_md or ""
     if "WARNING: State Moratorium Bill in session." in text:
