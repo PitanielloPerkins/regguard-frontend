@@ -187,7 +187,13 @@ function scoutStepDataToMarkdown(stepKey: string, data: unknown): string {
           ? "### Jurisdiction (live scout)"
           : stepKey === "step_federal_fast41"
             ? "### Federal FAST-41 permitting (live scout)"
-            : `### Scout: ${stepKey}`;
+          : stepKey === "step_data_center_water"
+            ? "### Utility-scale cooling water / NPDES (live scout)"
+            : stepKey === "step_dc_state_energy"
+              ? "### State energy riders / grid surcharge (live scout)"
+              : stepKey === "step_dc_local_moratorium"
+                ? "### Local 2026 data center moratorium scout (live scout)"
+                : `### Scout: ${stepKey}`;
   let md = `\n\n${heading}\n\n`;
   if (query) {
     md += `**Query:** ${query}\n\n`;
@@ -482,6 +488,15 @@ export default function App() {
       }
       if (phase.startsWith("Research: step_federal_fast41")) {
         return "Status — Scanning FAST-41 / federal permitting status cues (Infrastructure or Data Center vertical)…";
+      }
+      if (phase.startsWith("Research: step_data_center_water")) {
+        return "Status — Cross-referencing cooling-water / NPDES / state environmental signals (DC / infra vertical)…";
+      }
+      if (phase.startsWith("Research: step_dc_state_energy")) {
+        return "Status — Data center tier: ratepayer pledges, state riders, interconnect surcharge cues…";
+      }
+      if (phase.startsWith("Research: step_dc_local_moratorium")) {
+        return "Status — Data center tier: 2026 township moratorium / pause ordinance scout…";
       }
       if (phase === "Writing Contractor Action Plan") {
         return "Status — Synthesizing Master Electrician punch list (fees, technical gotchas, inspections)…";
@@ -971,7 +986,10 @@ export default function App() {
                 name === "step_building_codes" ||
                 name === "step_building_permits" ||
                 name === "step_jurisdiction" ||
-                name === "step_federal_fast41"
+                name === "step_federal_fast41" ||
+                name === "step_data_center_water" ||
+                name === "step_dc_state_energy" ||
+                name === "step_dc_local_moratorium"
               ) {
                 appendToActionPlan(scoutStepDataToMarkdown(name, payload.data));
               }

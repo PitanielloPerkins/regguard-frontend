@@ -1130,6 +1130,14 @@ async def research(
                         _scout_labels[_key] = (
                             f"pass {_i}/{_pass_total} — utility-scale cooling water / NPDES / state environmental (Firecrawl)"
                         )
+                    elif _key == "step_dc_state_energy":
+                        _scout_labels[_key] = (
+                            f"pass {_i}/{_pass_total} — state energy riders / ratepayer pledges / grid surcharge (Firecrawl)"
+                        )
+                    elif _key == "step_dc_local_moratorium":
+                        _scout_labels[_key] = (
+                            f"pass {_i}/{_pass_total} — 2026 data center moratorium / township pause scout (Firecrawl)"
+                        )
                 _city_label = str((scout_jurisdiction or {}).get("city") or "").strip() or "local"
                 _st_scout = str((scout_jurisdiction or {}).get("state") or "").strip().upper()
                 _dallas_tx = _city_label.strip().lower() == "dallas" and _st_scout == "TX"
@@ -1148,6 +1156,14 @@ async def research(
                     "step_data_center_water": (
                         f"Data-center / infra tier — cross-referencing utility-scale cooling-water / NPDES / "
                         f"state EQ commission signals for {_city_label}…"
+                    ),
+                    "step_dc_state_energy": (
+                        f"Data-center tier — scanning PSC/PUC riders, **ratepayer protection** cues, and interconnect surcharge signals "
+                        f"for {_city_label}…"
+                    ),
+                    "step_dc_local_moratorium": (
+                        f"Data-center tier — hunting trusted-domain cues for **2026** township/county **moratorium** or **pause** "
+                        f"language affecting hyperscale / AI sites near {_city_label}…"
                     ),
                 }
                 if _dallas_tx:
@@ -1189,6 +1205,8 @@ async def research(
                         "step_residential_zoning",
                         "step_federal_fast41",
                         "step_data_center_water",
+                        "step_dc_state_energy",
+                        "step_dc_local_moratorium",
                     ):
                         await asyncio.sleep(0.5)
             except Exception:
@@ -1324,6 +1342,7 @@ async def research(
                 future_risk=future_risk_snapshot,
                 community_scout_notes=_community_notes,
                 bim_clash_report=bim_digest,
+                job_description=jd,
             )
 
             summary: str
@@ -1366,6 +1385,7 @@ async def research(
                             raw,
                             source_urls,
                             enhanced_query,
+                            job_description=jd,
                             community_gotchas=_community_notes,
                             bim_clash_report=bim_digest,
                         )
@@ -1386,6 +1406,7 @@ async def research(
                     raw,
                     source_urls,
                     enhanced_query,
+                    job_description=jd,
                     community_gotchas=_community_notes,
                     bim_clash_report=bim_digest,
                 )
@@ -1400,6 +1421,12 @@ async def research(
             ju_complete = scout_jurisdiction or {}
             ahj_bl = str(ju_complete.get("label") or ju_complete.get("city") or "").strip()
             summary = _ensure_bottom_line_section(summary, ahj_hint=ahj_bl)
+            _dc_intel_run = compute_data_center_intel_snapshot(raw, jd, enhanced_query or "")
+            summary = inject_bottom_line_permit_conflict(
+                summary,
+                alert_on=bool(_dc_intel_run.get("data_center_permit_conflict_alert")),
+                rationale=str(_dc_intel_run.get("data_center_permit_conflict_rationale") or ""),
+            )
 
             liability_est = _estimated_liability_avoided_usd(summary)
             value_metrics = {
