@@ -39,6 +39,31 @@ def _load_township_rules() -> List[Dict[str, Any]]:
     return [r for r in rules if isinstance(r, dict)] if isinstance(rules, list) else []
 
 
+def _matched_township_rules(city: str, state: str, zip5: str) -> List[Dict[str, str]]:
+    """Seeded township_db rows whose locality filters match (for confidence-labeled rule matches)."""
+    city_n = (city or "").strip().lower()
+    state_n = (state or "").strip().upper()
+    zip_clean = (zip5 or "").strip()
+    out: List[Dict[str, str]] = []
+    for rule in _load_township_rules():
+        rc = str(rule.get("city") or "").strip().lower()
+        rs = str(rule.get("state") or "").strip().upper()
+        if rc and rc != city_n:
+            continue
+        if rs and rs != state_n:
+            continue
+        prefixes = rule.get("zip_prefixes")
+        if isinstance(prefixes, list) and prefixes and zip_clean:
+            if not any(zip_clean.startswith(str(p).strip()) for p in prefixes if str(p).strip()):
+                continue
+        summary = str(rule.get("summary") or "").strip()
+        if not summary:
+            continue
+        rid = str(rule.get("id") or "local").strip()
+        out.append({"rule_id": rid, "summary": summary})
+    return out
+
+
 def _township_gotcha_block(city: str, state: str, zip5: str) -> str:
     """Lines folded into Reality Capture scout text when locality matches seeded rules."""
     city_n = (city or "").strip().lower()
@@ -339,6 +364,55 @@ def _extract_gemini_usage(resp: Any) -> Tuple[Optional[int], Optional[int]]:
     return inp_i, out_i
 
 
+def _mean_token_probability_from_candidate(candidate: Any) -> Optional[float]:
+    """
+    Average probability of chosen output tokens using exp(log_probability) when the API returns logprobs.
+    """
+    lp_result = getattr(candidate, "logprobs_result", None)
+    if lp_result is None:
+        return None
+    chosen = getattr(lp_result, "chosen_candidates", None) or []
+    probs: List[float] = []
+    for ch in chosen:
+        lp = getattr(ch, "log_probability", None)
+        if lp is None:
+            continue
+        try:
+            probs.append(math.exp(float(lp)))
+        except (TypeError, ValueError, OverflowError):
+            continue
+    if not probs:
+        return None
+    return sum(probs) / len(probs)
+
+
+def _confidence_pct_from_mean_token_probability(mean_p: float) -> int:
+    pct = int(round(100.0 * max(0.0, min(1.0, mean_p))))
+    return max(1, min(99, pct))
+
+
+def _sequence_confidence_from_response(resp: Any) -> Optional[int]:
+    """Single audit confidence score from Gemini output-token log-probabilities (sequence-level)."""
+    try:
+        cands = resp.candidates
+    except Exception:
+        return None
+    if not cands:
+        return None
+    cand = cands[0]
+    mean_p = _mean_token_probability_from_candidate(cand)
+    if mean_p is None:
+        avg_lp = getattr(cand, "avg_logprobs", None)
+        if avg_lp is not None:
+            try:
+                mean_p = math.exp(float(avg_lp))
+            except (TypeError, ValueError, OverflowError):
+                mean_p = None
+    if mean_p is None:
+        return None
+    return _confidence_pct_from_mean_token_probability(mean_p)
+
+
 # Gemini-style list pricing for Reality Capture (input / output per token).
 _GEMINI_USD_PER_INPUT_TOKEN = 0.000000075
 _GEMINI_USD_PER_OUTPUT_TOKEN = 0.0000003
@@ -453,13 +527,14 @@ def _run_gemini_audit_sync(
     )
 
     image_part = {"mime_type": media, "data": image_bytes}
-    resp = model.generate_content(
-        [prompt, image_part],
-        generation_config=genai.GenerationConfig(
-            temperature=0.2,
-            response_mime_type="application/json",
-        ),
-    )
+    _gc_base: Dict[str, Any] = {"temperature": 0.2, "response_mime_type": "application/json"}
+    _gc_logprobs = {**_gc_base, "response_logprobs": True, "logprobs": 5}
+    try:
+        resp = model.generate_content([prompt, image_part], generation_config=_gc_logprobs)
+    except Exception:
+        # Older SDKs / models may reject logprobs fields — fall back to JSON-only config.
+        resp = model.generate_content([prompt, image_part], generation_config=_gc_base)
+    seq_conf: Optional[int] = _sequence_confidence_from_response(resp)
     in_tok, out_tok = _extract_gemini_usage(resp)
     cost_usd = gemini_search_cost_usd(in_tok, out_tok)
     usage_meta: Dict[str, Any] = {"phase": "gemini_multimodal_audit"}
@@ -509,7 +584,10 @@ def _run_gemini_audit_sync(
                 box_n = [int(round(float(box[i]))) for i in range(4)]
             except (TypeError, ValueError):
                 continue
-            detections.append({"label": lab, "box_2d": box_n})
+            row: Dict[str, Any] = {"label": lab, "box_2d": box_n}
+            if seq_conf is not None:
+                row["match_confidence_pct"] = seq_conf
+            detections.append(row)
 
     run_78704_gas_geometry = zip_clean == "78704" and _gas_meter_detected_in_detections(detections)
     strict_meter = _gas_meter_detected_in_detections(detections)
@@ -560,6 +638,14 @@ def _run_gemini_audit_sync(
         else:
             det["status"] = "ok"
 
+    township_hits = _matched_township_rules(city.strip(), state.strip(), zip_clean)
+    rule_matches: List[Dict[str, Any]] = []
+    for tr in township_hits:
+        rm: Dict[str, Any] = {"rule_id": tr["rule_id"], "summary": tr["summary"]}
+        if seq_conf is not None:
+            rm["confidence_pct"] = seq_conf
+        rule_matches.append(rm)
+
     visual_audit: Dict[str, Any] = {
         "image_width": width,
         "image_height": height,
@@ -571,6 +657,10 @@ def _run_gemini_audit_sync(
         "input_tokens": in_tok,
         "output_tokens": out_tok,
     }
+    if seq_conf is not None:
+        visual_audit["sequence_confidence_pct"] = seq_conf
+    if rule_matches:
+        visual_audit["township_rule_matches"] = rule_matches
 
     if clearance_block.get("applies") and isinstance(obs_text, str):
         extra = (
