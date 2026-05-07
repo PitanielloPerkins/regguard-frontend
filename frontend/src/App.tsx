@@ -420,6 +420,7 @@ export default function App() {
     estimatedLiabilityAvoidedUsd: number;
   } | null>(null);
   const [moratoriumStateAlert, setMoratoriumStateAlert] = useState<MoratoriumStateAlertPayload | null>(null);
+  const [pdfFrictionAck, setPdfFrictionAck] = useState(false);
   const [futureRiskAlert, setFutureRiskAlert] = useState<FutureRiskAlertPayload | null>(null);
   const [communityInspectorFeedback, setCommunityInspectorFeedback] =
     useState<CommunityInspectorFeedbackPayload | null>(null);
@@ -498,6 +499,21 @@ export default function App() {
     () => (followUpSourceText ? deriveProactiveFollowUps(followUpSourceText, jobDescription) : []),
     [followUpSourceText, jobDescription],
   );
+
+  const needsPdfFriction = useMemo(
+    () =>
+      Boolean(
+        moratoriumStateAlert ||
+          (actionPlan &&
+            (/\bPERMIT CONFLICT ALERT\b/i.test(actionPlan) ||
+              /WARNING:\s*State Moratorium/i.test(actionPlan))),
+      ),
+    [moratoriumStateAlert, actionPlan],
+  );
+
+  const planParts = useMemo(() => partitionContractorActionPlan(actionPlan), [actionPlan]);
+
+  const pdfExportBlocked = Boolean(needsPdfFriction && phase === "Complete" && !pdfFrictionAck);
 
   useEffect(() => {
     if (!imageFile) {
@@ -597,6 +613,7 @@ export default function App() {
     setVisualAudit(null);
     setProjectValueMetrics(null);
     setMoratoriumStateAlert(null);
+    setPdfFrictionAck(false);
     setFutureRiskAlert(null);
     setCommunityInspectorFeedback(null);
     setInspectorNoteModalOpen(false);
@@ -1608,6 +1625,13 @@ export default function App() {
       window.setTimeout(() => setPlanToolbarMsg(null), 4000);
       return;
     }
+    if (needsPdfFriction && phase === "Complete" && !pdfFrictionAck) {
+      setPlanToolbarMsg(
+        "Confirm & Acknowledge the moratorium or conflict flags before downloading the PDF.",
+      );
+      window.setTimeout(() => setPlanToolbarMsg(null), 4500);
+      return;
+    }
     try {
       downloadActionPlanPdf({
         markdown: md,
@@ -1622,13 +1646,20 @@ export default function App() {
       const msg = e instanceof Error ? e.message : String(e);
       toast.error(`Could not generate PDF: ${msg}`);
     }
-  }, [actionPlan, meta, selection]);
+  }, [actionPlan, meta, selection, needsPdfFriction, phase, pdfFrictionAck]);
 
   const handleGeneratePermitPackage = useCallback(() => {
     const md = actionPlan.trim();
     if (!md) {
       setPlanToolbarMsg("Nothing to export — run research first so the Contractor Action Plan is available.");
       window.setTimeout(() => setPlanToolbarMsg(null), 4000);
+      return;
+    }
+    if (needsPdfFriction && phase === "Complete" && !pdfFrictionAck) {
+      setPlanToolbarMsg(
+        "Confirm & Acknowledge the moratorium or conflict flags before downloading the permit package.",
+      );
+      window.setTimeout(() => setPlanToolbarMsg(null), 4500);
       return;
     }
     void (async () => {
@@ -1651,7 +1682,7 @@ export default function App() {
         toast.error(`Could not generate permit package: ${msg}`);
       }
     })();
-  }, [actionPlan, meta, selection, jobDescription, visualAudit, photoObjectUrl]);
+  }, [actionPlan, meta, selection, jobDescription, visualAudit, photoObjectUrl, needsPdfFriction, phase, pdfFrictionAck]);
 
   const dismissBackendNotice = useCallback(() => {
     dismissedRevisionRef.current = lastPollRevisionRef.current;
@@ -2387,6 +2418,39 @@ export default function App() {
             className="rg-results-tab-panel"
           >
           <div id="contractor-action-plan">
+            {planParts.bottomLine ? (
+              <div
+                className="rg-bottom-line-box rg-bottom-line-box--memo"
+                role="region"
+                aria-labelledby="rg-memo-bottom-line-label"
+              >
+                <div id="rg-memo-bottom-line-label" className="rg-bottom-line-box__label">
+                  The Bottom Line
+                </div>
+                <p className="rg-bottom-line-box__text">{planParts.bottomLine}</p>
+              </div>
+            ) : null}
+            {planParts.proceedPreview ? (
+              <div className="rg-proceed-intent" role="region" aria-labelledby="rg-proceed-intent-label">
+                <div id="rg-proceed-intent-label" className="rg-proceed-intent__label">
+                  Proceed — intent preview
+                </div>
+                <p className="rg-proceed-intent__text">{planParts.proceedPreview}</p>
+              </div>
+            ) : null}
+            {needsPdfFriction && phase === "Complete" ? (
+              <label className="rg-pdf-friction-ack">
+                <input
+                  type="checkbox"
+                  checked={pdfFrictionAck}
+                  onChange={(e) => setPdfFrictionAck(e.target.checked)}
+                />
+                <span>
+                  <strong>Confirm & Acknowledge</strong> — This run flags a <strong>moratorium</strong> or{" "}
+                  <strong>permit conflict</strong>. I have reviewed the Bottom Line before exporting PDFs.
+                </span>
+              </label>
+            ) : null}
             <div className="rg-action-plan-header">
               <strong className="rg-subheading">Contractor action plan</strong>
               <span className="rg-plan-actions">
@@ -2403,6 +2467,7 @@ export default function App() {
                   type="button"
                   className="rg-btn rg-btn--primary rg-btn--compact rg-plan-action-btn rg-plan-action-btn--package"
                   title="Download punch list plus NEC load/conductor memo, Vision photo overlay, and AHJ worksheet"
+                  disabled={pdfExportBlocked}
                   onClick={handleGeneratePermitPackage}
                 >
                   Generate Permit Package
@@ -2420,6 +2485,7 @@ export default function App() {
                   type="button"
                   className="rg-btn rg-btn--ghost rg-btn--compact rg-plan-action-btn rg-plan-action-btn--pdf"
                   title="Download the punch list as a printable PDF"
+                  disabled={pdfExportBlocked}
                   onClick={handleDownloadPunchListPdf}
                 >
                   Download Punch List as PDF
@@ -2441,7 +2507,7 @@ export default function App() {
             ) : null}
             <div ref={actionPlanPanelRef} className="rg-summary rg-summary--md">
               {actionPlan.trim() ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{actionPlan}</ReactMarkdown>
+                <ReactMarkdown remarkPlugins={[remarkGfm]}>{planParts.bodyMarkdown}</ReactMarkdown>
               ) : (
                 <p className="rg-plan-placeholder">Results will stream here during research.</p>
               )}

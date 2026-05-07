@@ -1,1 +1,190 @@
-{}
+{
+  "43031": {
+    "updated_at": "2026-05-06T02:43:20.548004+00:00",
+    "raw": {
+      "zip": "43031",
+      "site_address": "8352 Johnstown-Alexandria Rd, Johnstown, OH 43031, USA",
+      "jurisdiction": {
+        "mode": "city",
+        "zip": "43031",
+        "street_line": "8352 Johnstown-Alexandria Road",
+        "city": "Johnstown",
+        "county": "Licking",
+        "state": "OH",
+        "state_long": "Ohio",
+        "formatted_address": "8352 Johnstown-Alexandria Rd, Johnstown, OH 43031, USA",
+        "label": "Incorporated / municipal — Johnstown, OH 43031 (city building department)"
+      },
+      "scout_profile": {
+        "trades": [
+          "electrician",
+          "plumber",
+          "hvac"
+        ],
+        "vertical": "data_center",
+        "mission_critical_dc": true
+      },
+      "scout": {
+        "mode": "search_web",
+        "search_domain_scope": "(site:gov OR site:municode.com)",
+        "search_domain_scope_zoning_residential": "(site:gov OR site:municode.com OR site:opengov.com)",
+        "trust_policy": "hostname ends with .gov, hostname contains municode, or hostname under .opengov.com (SERP scoped per step)",
+        "sources": [
+          "web"
+        ],
+        "scrape_options": null,
+        "max_depth_note": "N/A — Universal Scout does not call Firecrawl crawl/map; depth 1 crawl would use max_discovery_depth on /v2/crawl, not used here.",
+        "exclude_external_links_note": "N/A for SERP-only search. For crawl, omit following off-domain links via allow_external_links=False.",
+        "page_limit_per_search": {
+          "min": 3,
+          "max": 5
+        },
+        "bundled_single_page_scrape_options": "disabled — SERP snippets only; see SEARCH_BUNDLED_SCRAPE_OPTIONS if re-enabled (markdown only, fast_mode, no links format, exclude_tags strips media/CSS).",
+        "fallback": "If a scoped step returns zero trusted URLs, Universal Scout runs a follow-up search that still appends (site:gov OR site:municode.com) and biases keywords toward *official* / *city government* (no fully unscoped web search)."
+      },
+      "enhanced_context_used": true,
+      "agentic_workflow": [
+        "AHJ identification — **City**: Johnstown; **County**: Licking (municipal/city building-code steering, ZIP 43031).",
+        "Fallback — If a scoped step returns no trusted URLs: follow-up search **retains** the step’s **site:** scope (see ``scout.search_domain_scope`` / zoning ``OPENGOV`` extension) and adds *official* / *city government landing page*.",
+        "Universal Scout 1 — Jurisdiction: city/county AHJ hints (trusted hosts).",
+        "Universal Scout 2 — Permits: **city** or **county** building department (steered from address).",
+        "Universal Scout 3 — Building codes: **city-specific** (incorporated) or **county-specific** (unincorporated) adopted codes and amendments, plus **Code-Change Monitoring** cues (upcoming adoptions / council minutes keywords).",
+        "Scout profile — **Trades**: electrician, plumber, hvac; **vertical**: data_center; **mission-critical DC scout**: on.",
+        "**Intelligence tier — Infrastructure / data center:** **FAST-41** / Title 41 **Permitting Council** federal permitting status cues (data-center pass includes **May 2026 rescission / FAST-41 Transparency Project** + moratorium-bill keywords).",
+        "**Intelligence tier — Utility-scale water:** cooling-water **withdrawal**, **NPDES** / discharge, and state **environmental quality** or **utility commission** signals (cross-reference with FAST-41 context).",
+        "**Data Center Intelligence — State energy / grid:** ratepayer-protection pledges, **PSC/PUC** riders, and **interconnect deposit / surcharge** proceedings (CA/OH/UT/VA emphasis when applicable).",
+        "**Data Center Intelligence — Local moratorium scout:** trusted-domain cues for **2026** township/county **pause / freeze / moratorium** language targeting hyperscale or AI infrastructure."
+      ],
+      "step_jurisdiction": {
+        "query": "Johnstown, OH: Job site 8352 Johnstown-Alexandria Rd, Johnstown, OH 43031, USA — incorporated Johnstown, OH (ZIP 43031). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Johnstown, OH official city code and building permits | Site/job context: — (no job description or image provided; ZIP-only research) (site:gov OR site:municode.com)",
+        "results": [
+          {
+            "url": "https://johnstownpa.gov/permits/",
+            "title": "Permits - City of Johnstown, Pennsylvania",
+            "description": "Building and Demolition permits are required for all demolition, repairs, renovations, remodels and new construction in the City, excluding painting and ..."
+          },
+          {
+            "url": "https://www.reynoldsburg.gov/157/Building-Department",
+            "title": "Building Department | Reynoldsburg, OH",
+            "description": "Building staff review plans, issue yearly registrations to contractors, complete inspections, and issue certificates of occupancy, building, electrical, ..."
+          },
+          {
+            "url": "https://johnstownco.gov/210/Building-Inspections-and-Permits",
+            "title": "Building Department | Johnstown, CO",
+            "description": "The Building Department accepts contractor license and building permit applications electronically through eTRAKiT, the Self-Service Portal. To find ..."
+          }
+        ],
+        "fallback_used": false,
+        "fallback_query": null,
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_building_permits": {
+        "query": "Johnstown, OH: Johnstown OH building department permits plan check electrical official — ZIP 43031 | LOCALITY_LOCK Johnstown, OH official city code and building permits | Johnstown, OH official building permit fees 2026 | Johnstown, OH electrical subcontractor permit NEC NFPA 70 amendments utility coordination — ZIP 43031 | Johnstown, OH plumbing permit IPC UPC adopted amendments drainage water pipe sizing inspections — ZIP 43031 | Johnstown, OH mechanical HVAC permit IMC energy code load calcul (site:gov OR site:municode.com)",
+        "results": [],
+        "fallback_used": true,
+        "fallback_query": "Johnstown, OH: Johnstown OH building department permits plan check electrical official — ZIP 43031 | LOCALITY_LOCK Johnstown, OH official city code and building permits | Johnstown, OH official building permit fees 2026 | Johnstown, OH electrical subcontractor permit NEC NFPA 70 amendments utility coordination — ZIP 43031 | Johnstown, OH plumbing permit IPC UPC adopted amendments drainage water pipe sizing inspections — ZIP 43031 | Johnstown, OH mechanical HVAC permit IMC energy code load calcul city government landing page (site:gov OR site:municode.com)",
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_building_codes": {
+        "query": "Johnstown, OH: Building codes adopted for Johnstown OH: municipal amendments IBC IRC — ZIP 43031 | LOCALITY_LOCK Johnstown, OH official city code and building permits | Johnstown, OH NEC 2023 amendments | Johnstown, OH upcoming building code adoption NEC NFPA 70 effective date transition council workshop — ZIP 43031 | Johnstown, OH city council agenda minutes ordinance building code amendment hearing first reading — ZIP 43031 | Johnstown, OH electrical subcontractor permit NEC NFPA 70 amendments (site:gov OR site:municode.com)",
+        "results": [],
+        "fallback_used": true,
+        "fallback_query": "Johnstown, OH: Building codes adopted for Johnstown OH: municipal amendments IBC IRC — ZIP 43031 | LOCALITY_LOCK Johnstown, OH official city code and building permits | Johnstown, OH NEC 2023 amendments | Johnstown, OH upcoming building code adoption NEC NFPA 70 effective date transition council workshop — ZIP 43031 | Johnstown, OH city council agenda minutes ordinance building code amendment hearing first reading — ZIP 43031 | Johnstown, OH electrical subcontractor permit NEC NFPA 70 amendments city government landing page (site:gov OR site:municode.com)",
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_federal_fast41": {
+        "query": "FAST-41 federal permitting Title 41 Permitting Council covered project status data center environmental review milestone dashboard 8352 Johnstown-Alexandria Rd, Johnstown, OH 43031, USA Johnstown, OH — ZIP 43031 May 5 2026 presidential action rescinds EO 14141 FAST-41 Transparency Project Permitting Council transparency dashboard greater than 100 MW facility gate Virginia HB 1515 interconnection Ohio 2026 ballot initiative greater than 25 MW ban data center (site:gov OR site:municode.com)",
+        "results": [
+          {
+            "url": "https://www.permits.performance.gov/projects/fast-41-covered",
+            "title": "FAST-41 Covered Projects | Permitting Dashboard - Performance.gov",
+            "description": "The infrastructure projects below are identified as Covered Projects under Title 41 of the Fixing America's Surface Transportation (FAST) Act."
+          },
+          {
+            "url": "https://www.permitting.gov/projects/current-fast-41-portfolio",
+            "title": "Current FAST-41 Covered Projects - Permitting Council",
+            "description": "The list below details the FAST-41 projects currently receiving assistance from the Permitting Council for their federal permitting reviews."
+          },
+          {
+            "url": "https://www.permitting.gov/projects/title-41-fixing-americas-surface-transportation-act-fast-41",
+            "title": "FAST-41 Program | Permitting Council",
+            "description": "FAST-41 is a legislatively established process for improving federal agency coordination and timeliness of environmental reviews for infrastructure projects."
+          },
+          {
+            "url": "https://www.permitting.gov/newsroom/press-releases/first-data-center-project-gains-permitting-councils-fast-41-coverage",
+            "title": "First Data Center Project Gains Permitting Council's FAST-41 ...",
+            "description": "QTS Richmond Technology Park Data Center 5 becomes the first FAST-41 project in the data storage and data management sector."
+          },
+          {
+            "url": "https://www.permits.performance.gov/projects/transparency-projects",
+            "title": "FAST-41 Transparency Projects | Permitting Dashboard",
+            "description": "The full project data set and a pre-filtered report created from the full project data set is now available in the Permitting Dashboard Data Portal."
+          }
+        ],
+        "fallback_used": false,
+        "fallback_query": null,
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_data_center_water": {
+        "query": "8352 Johnstown-Alexandria Rd, Johnstown, OH 43031, USA Johnstown, OH data center cooling water withdrawal consumptive use NPDES discharge permit utility scale EPA state environmental quality commission drought management — ZIP 43031 | Site/job context: — (no job description or image provided; ZIP-only research) (site:gov OR site:municode.com)",
+        "results": [
+          {
+            "url": "https://epa.ohio.gov/divisions-and-offices/surface-water/permitting/wastewater-discharges-from-data-centers--general-permit",
+            "title": "Wastewater and Stormwater Discharges from Data Centers - Ohio EPA",
+            "description": "The comment period for this permit is now closed. This permit covers data center facility operations that discharge to waters of the state."
+          },
+          {
+            "url": "https://dam.assets.ohio.gov/image/upload/epa.ohio.gov/Portals/35/permits/Data_Centers/OHD000001_Draft.fs.pdf",
+            "title": "[PDF] NPDES Permit No. OHD000001 - Ohio.gov",
+            "description": "The purpose of this General NPDES permit is to ensure that discharges from data center facilities to waters of the state are in compliance with all ..."
+          }
+        ],
+        "fallback_used": false,
+        "fallback_query": null,
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_dc_state_energy": {
+        "query": "8352 Johnstown-Alexandria Rd, Johnstown, OH 43031, USA Johnstown, OH data center Ohio 2026 ballot initiative data center moratorium greater than 25 MW ban petition Ohio utility commission rider data center economic development transmission charge ratepayer protection pledge utility commission tariff rider transmission allocation large electric load interconnect deposit infrastructure surcharge network upgrade cost sharing hyperscale facility — ZIP 43031 (site:gov OR site:municode.com)",
+        "results": [
+          {
+            "url": "https://www.ohioattorneygeneral.gov/Media/News-Releases/March-2026/Title-and-Summary-Certified-for-Proposed-Prohibiti",
+            "title": "Title and Summary Certified for Proposed 'Prohibition of ...",
+            "description": "Title and Summary Certified for Proposed 'Prohibition of Construction of a Data Center' Constitutional Amendment. 3/26/2026. (COLUMBUS, Ohio) — The Ohio ..."
+          }
+        ],
+        "fallback_used": false,
+        "fallback_query": null,
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_dc_local_moratorium": {
+        "query": "8352 Johnstown-Alexandria Rd, Johnstown, OH 43031, USA Johnstown, OH  Ohio 2026 ballot initiative greater than 25 MW data center ban moratorium township county zoning moratorium 2026 data center pause ordinance interim ban cooling tower moratorium AI infrastructure halt emergency ordinance High Alert — ZIP 43031 | Site/job context: — (no job description or image provided; ZIP-only research) (site:gov OR site:municode.com)",
+        "results": [
+          {
+            "url": "https://www.ohioattorneygeneral.gov/Media/News-Releases/March-2026/Title-and-Summary-Certified-for-Proposed-Prohibiti",
+            "title": "Title and Summary Certified for Proposed 'Prohibition of ...",
+            "description": "Title and Summary Certified for Proposed 'Prohibition of Construction of a Data Center' Constitutional Amendment. 3/26/2026. (COLUMBUS, Ohio) — The Ohio ..."
+          }
+        ],
+        "fallback_used": true,
+        "fallback_query": "8352 Johnstown-Alexandria Rd, Johnstown, OH 43031, USA Johnstown, OH  Ohio 2026 ballot initiative greater than 25 MW data center ban moratorium township county zoning moratorium 2026 data center pause ordinance interim ban cooling tower moratorium AI infrastructure halt emergency ordinance High Alert — ZIP 43031 | Site/job context: — (no job description or image provided; ZIP-only research) official city government landing page (site:gov OR site:municode.com)",
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_ahj_identification": {
+        "city": "Johnstown",
+        "county": "Licking",
+        "state": "OH",
+        "mode": "city",
+        "zip": "43031",
+        "formatted_address": "8352 Johnstown-Alexandria Rd, Johnstown, OH 43031, USA",
+        "label": "Incorporated / municipal — Johnstown, OH 43031 (city building department)"
+      }
+    }
+  }
+}
