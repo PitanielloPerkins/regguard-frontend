@@ -2576,6 +2576,7 @@ export default function App() {
                             />
                             <text x={xmin + 6} y={ymin + 22} className="rg-vbox-label">
                               {det.label}
+                              {det.match_confidence_pct != null ? ` · ${det.match_confidence_pct}%` : ""}
                             </text>
                           </g>
                         );
