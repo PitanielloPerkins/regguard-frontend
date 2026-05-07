@@ -1,17 +1,17 @@
 :root {
-  /* Deep Construction Navy — dashboard shell anchored at #0D1B2A */
-  --rg-bg: #0d1b2a;
-  --rg-bg-mid: #1b263b;
-  --rg-surface: #1b263b;
-  --rg-surface-2: #243652;
-  --rg-border: #415a77;
-  --rg-text: #e0e1dd;
-  --rg-muted: #778da9;
-  --rg-accent: #e0e1dd;
-  --rg-accent-dim: #c9d1dc;
-  --rg-accent-strong: #415a77;
-  --rg-link: #a8c5e8;
-  --rg-danger: #f87171;
+  /* Default palette — overridden by App.css (Professional Trust Suite / Midnight Indigo). */
+  --rg-bg: #040f49;
+  --rg-bg-mid: #071a5c;
+  --rg-surface: #0a1852;
+  --rg-surface-2: #0f2170;
+  --rg-border: #2a3f8f;
+  --rg-text: #e8eaf6;
+  --rg-muted: #9fa8da;
+  --rg-accent: #e8eaf6;
+  --rg-accent-dim: #c5cae9;
+  --rg-accent-strong: #5c6bc0;
+  --rg-link: #8fa2ff;
+  --rg-danger: #ff6b6b;
   --font-ui: "DM Sans", system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
 }
@@ -30,9 +30,9 @@ body {
   background: var(--rg-bg);
   background-image: linear-gradient(
     165deg,
-    #0d1b2a 0%,
-    #1b263b 42%,
-    #0d1b2a 100%
+    #040f49 0%,
+    #071a5c 45%,
+    #030a2e 100%
   );
 }
 

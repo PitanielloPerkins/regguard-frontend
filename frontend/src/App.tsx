@@ -38,6 +38,8 @@ export type VisualDetection = {
   label: string;
   box_2d: [number, number, number, number];
   status?: "ok" | "violation" | "unknown";
+  /** Sequence-level Reality Capture confidence from Gemini token log-probabilities (when returned). */
+  match_confidence_pct?: number;
 };
 
 export type VisualAuditPayload = {
@@ -50,6 +52,12 @@ export type VisualAuditPayload = {
   cost_usd?: number | null;
   input_tokens?: number | null;
   output_tokens?: number | null;
+  sequence_confidence_pct?: number | null;
+  township_rule_matches?: Array<{
+    rule_id: string;
+    summary: string;
+    confidence_pct?: number;
+  }>;
   austin_clearance?: {
     applies?: boolean;
     edge_distance_px?: number | null;
@@ -148,6 +156,38 @@ function parseFutureRiskPayload(v: unknown): FutureRiskAlertPayload | null {
     hits,
     notes: typeof o.notes === "string" ? o.notes : undefined,
   };
+}
+
+/** Split memo markdown so the Bottom Line + first checklist item render before the technical body. */
+const RE_BOTTOM_LINE_SECTION = /^#{2,3}\s*the\s+bottom\s+line\s*$/im;
+
+function partitionContractorActionPlan(md: string): {
+  bottomLine: string | null;
+  proceedPreview: string | null;
+  bodyMarkdown: string;
+} {
+  const raw = (md || "").trim();
+  if (!raw) {
+    return { bottomLine: null, proceedPreview: null, bodyMarkdown: "" };
+  }
+  const m = raw.match(RE_BOTTOM_LINE_SECTION);
+  let bottomLine: string | null = null;
+  let withoutBottom = raw;
+  if (m && m.index !== undefined) {
+    const start = m.index + m[0].length;
+    const restFromBl = raw.slice(start).replace(/^\s*\n/, "");
+    const nextHdr = restFromBl.search(/^#{2,3}\s+/m);
+    const cut = nextHdr === -1 ? restFromBl.length : nextHdr;
+    const blBody = restFromBl.slice(0, cut).trim();
+    bottomLine = blBody || null;
+    const afterBl = restFromBl.slice(cut).trim();
+    const before = raw.slice(0, m.index).trim();
+    withoutBottom = [before, afterBl].filter(Boolean).join("\n\n").trim();
+  }
+  const checklistMatch = withoutBottom.match(/(?:^|\n)(- \[[ xX]\]\s*.+)/);
+  const proceedPreview = checklistMatch ? checklistMatch[1].trim() : null;
+  const bodyMarkdown = m && m.index !== undefined ? withoutBottom : raw;
+  return { bottomLine, proceedPreview, bodyMarkdown };
 }
 
 type CommunityInspectorNote = { text: string; created_at?: string };
