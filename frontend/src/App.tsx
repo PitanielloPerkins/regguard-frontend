@@ -30,6 +30,15 @@ import {
   type FollowUpChip,
 } from "./FollowUpActions";
 
+/** Universal Scout trade buttons (single-select in UI; maps to ``scout_trades`` API tokens). */
+type ScoutTradeId =
+  | "general_contractor"
+  | "electrician"
+  | "plumber"
+  | "hvac"
+  | "zoning_planning"
+  | "owner_builder";
+
 /** Flat fee model — matches backend ``base_search_value`` ($5.00 customer-facing research value). */
 const BASE_SEARCH_VALUE_USD = 5;
 
@@ -377,12 +386,7 @@ export default function App() {
   const [selection, setSelection] = useState<AddressSelection | null>(null);
   const [jobDescription, setJobDescription] = useState("");
   const [searchLimit, setSearchLimit] = useState(5);
-  const [tradeGeneralContractor, setTradeGeneralContractor] = useState(false);
-  const [tradeElectrician, setTradeElectrician] = useState(true);
-  const [tradePlumber, setTradePlumber] = useState(false);
-  const [tradeHvacMechanical, setTradeHvacMechanical] = useState(false);
-  const [tradeZoningPlanning, setTradeZoningPlanning] = useState(false);
-  const [tradeOwnerBuilder, setTradeOwnerBuilder] = useState(false);
+  const [scoutTrade, setScoutTrade] = useState<ScoutTradeId>("electrician");
   const [missionCriticalDc, setMissionCriticalDc] = useState(true);
   const [scoutVertical, setScoutVertical] = useState<"building" | "infrastructure" | "data_center">(
     "building",
@@ -813,7 +817,7 @@ export default function App() {
       const n = Array.isArray(clashes) ? clashes.length : 0;
       toast.success(
         n > 0
-          ? `BIM import: ${n} Austin gas/conduit clash zone(s) — will merge into the next research for this ZIP.`
+          ? `BIM import: ${n} gas/conduit clash zone(s) — will merge into the next research for this ZIP.`
           : "BIM import complete — cross-referenced to Universal Scout archive.",
         { autoClose: 4200, hideProgressBar: true },
       );
@@ -823,39 +827,6 @@ export default function App() {
       setBimImportBusy(false);
     }
   }, [bimJsonDraft]);
-
-  const loadSampleBimJson = useCallback(() => {
-    setBimJsonDraft(
-      JSON.stringify(
-        {
-          zip: "78704",
-          project: {
-            name: "RegGuard BIM sample",
-            city: "Austin",
-            state: "TX",
-            zip: "78704",
-            units: "ft",
-          },
-          elements: [
-            {
-              id: "c-demo-1",
-              category: "Conduits",
-              family: "EMT",
-              curve: { start: [0, 0, 0], end: [2.5, 0, 0] },
-            },
-            {
-              id: "g-demo-1",
-              category: "Mechanical Equipment",
-              family: "Gas Meter",
-              location: [2.4, 0, 0],
-            },
-          ],
-        },
-        null,
-        2,
-      ),
-    );
-  }, []);
 
   const runResearch = useCallback(async (launchOpts?: {
     followUpAppend?: string;
@@ -891,12 +862,12 @@ export default function App() {
     form.append("job_description", jd);
     form.append("search_limit", String(searchLimit));
     const tb = launchOpts?.tradeBoost;
-    const tg = tradeGeneralContractor || !!tb?.generalContractor;
-    const te = tradeElectrician || !!tb?.electrician;
-    const tp = tradePlumber || !!tb?.plumber;
-    const tm = tradeHvacMechanical || !!tb?.hvac;
-    const tz = tradeZoningPlanning || !!tb?.zoningPlanning;
-    const to = tradeOwnerBuilder || !!tb?.ownerBuilder;
+    const tg = scoutTrade === "general_contractor" || !!tb?.generalContractor;
+    const te = scoutTrade === "electrician" || !!tb?.electrician;
+    const tp = scoutTrade === "plumber" || !!tb?.plumber;
+    const tm = scoutTrade === "hvac" || !!tb?.hvac;
+    const tz = scoutTrade === "zoning_planning" || !!tb?.zoningPlanning;
+    const to = scoutTrade === "owner_builder" || !!tb?.ownerBuilder;
     const trades: string[] = [];
     if (tg) {
       trades.push("general_contractor");
@@ -1272,12 +1243,7 @@ export default function App() {
     selection,
     jobDescription,
     searchLimit,
-    tradeGeneralContractor,
-    tradeElectrician,
-    tradePlumber,
-    tradeHvacMechanical,
-    tradeZoningPlanning,
-    tradeOwnerBuilder,
+    scoutTrade,
     missionCriticalDc,
     scoutVertical,
     imageFile,
@@ -1981,55 +1947,55 @@ export default function App() {
             <div className="rg-trade-toggles" role="group" aria-labelledby="universal-scout-profile-label">
               <button
                 type="button"
-                className={`rg-btn rg-btn--compact${tradeGeneralContractor ? " rg-btn--primary" : " rg-btn--ghost"}`}
-                aria-pressed={tradeGeneralContractor}
+                className={`rg-btn rg-btn--compact${scoutTrade === "general_contractor" ? " rg-btn--primary" : " rg-btn--ghost"}`}
+                aria-pressed={scoutTrade === "general_contractor"}
                 disabled={busy}
-                onClick={() => setTradeGeneralContractor((v) => !v)}
+                onClick={() => setScoutTrade("general_contractor")}
               >
                 General Contractor
               </button>
               <button
                 type="button"
-                className={`rg-btn rg-btn--compact${tradeElectrician ? " rg-btn--primary" : " rg-btn--ghost"}`}
-                aria-pressed={tradeElectrician}
+                className={`rg-btn rg-btn--compact${scoutTrade === "electrician" ? " rg-btn--primary" : " rg-btn--ghost"}`}
+                aria-pressed={scoutTrade === "electrician"}
                 disabled={busy}
-                onClick={() => setTradeElectrician((v) => !v)}
+                onClick={() => setScoutTrade("electrician")}
               >
                 Electrician
               </button>
               <button
                 type="button"
-                className={`rg-btn rg-btn--compact${tradePlumber ? " rg-btn--primary" : " rg-btn--ghost"}`}
-                aria-pressed={tradePlumber}
+                className={`rg-btn rg-btn--compact${scoutTrade === "plumber" ? " rg-btn--primary" : " rg-btn--ghost"}`}
+                aria-pressed={scoutTrade === "plumber"}
                 disabled={busy}
-                onClick={() => setTradePlumber((v) => !v)}
+                onClick={() => setScoutTrade("plumber")}
               >
                 Plumber
               </button>
               <button
                 type="button"
-                className={`rg-btn rg-btn--compact${tradeHvacMechanical ? " rg-btn--primary" : " rg-btn--ghost"}`}
-                aria-pressed={tradeHvacMechanical}
+                className={`rg-btn rg-btn--compact${scoutTrade === "hvac" ? " rg-btn--primary" : " rg-btn--ghost"}`}
+                aria-pressed={scoutTrade === "hvac"}
                 disabled={busy}
-                onClick={() => setTradeHvacMechanical((v) => !v)}
+                onClick={() => setScoutTrade("hvac")}
               >
                 HVAC / Mechanical
               </button>
               <button
                 type="button"
-                className={`rg-btn rg-btn--compact${tradeZoningPlanning ? " rg-btn--primary" : " rg-btn--ghost"}`}
-                aria-pressed={tradeZoningPlanning}
+                className={`rg-btn rg-btn--compact${scoutTrade === "zoning_planning" ? " rg-btn--primary" : " rg-btn--ghost"}`}
+                aria-pressed={scoutTrade === "zoning_planning"}
                 disabled={busy}
-                onClick={() => setTradeZoningPlanning((v) => !v)}
+                onClick={() => setScoutTrade("zoning_planning")}
               >
                 Zoning &amp; Planning
               </button>
               <button
                 type="button"
-                className={`rg-btn rg-btn--compact${tradeOwnerBuilder ? " rg-btn--primary" : " rg-btn--ghost"}`}
-                aria-pressed={tradeOwnerBuilder}
+                className={`rg-btn rg-btn--compact${scoutTrade === "owner_builder" ? " rg-btn--primary" : " rg-btn--ghost"}`}
+                aria-pressed={scoutTrade === "owner_builder"}
                 disabled={busy}
-                onClick={() => setTradeOwnerBuilder((v) => !v)}
+                onClick={() => setScoutTrade("owner_builder")}
               >
                 Owner-Builder
               </button>
@@ -2063,8 +2029,8 @@ export default function App() {
             </label>
             <p className="field-hint">
               <strong>Infrastructure</strong> or <strong>Data center</strong> adds a FAST-41 federal permitting pass.
-              Selected trades append scout phrases for GC/multi-trade sequencing, NEC/IPC/IMC, entitlement (FAR, setbacks,
-              parking overlays), owner-builder affidavit cues, and MEP coordination.
+              The selected trade appends scout phrases for GC sequencing, NEC/IPC/IMC, entitlement (FAR, setbacks,
+              parking overlays), owner-builder affidavit cues, or MEP coordination, depending on which profile is active.
             </p>
           </div>
 
@@ -2112,32 +2078,23 @@ export default function App() {
             <p className="field-hint">
               <strong>BIM:</strong> paste a Revit-style JSON export. The backend cross-references your archived{" "}
               <strong>Universal Scout</strong> snapshot for that ZIP and flags <strong>clash zones</strong> where conduit
-              encroaches on Austin&apos;s ~36-inch gas-relief / meter clearance pattern (787 / Austin). Seed the archive
-              by running compliance research once per ZIP before BIM import. Matching ZIP merges into the next research
-              automatically.
+              encroaches on typical gas-relief / meter clearance envelopes for that area. Seed the archive by running
+              compliance research once per ZIP before BIM import. Matching ZIP merges into the next research automatically.
             </p>
-            <div className="rg-service-bridge__row">
-              <button
-                type="button"
-                className="rg-btn rg-btn--ghost rg-btn--compact"
-                disabled={busy || bimImportBusy}
-                onClick={loadSampleBimJson}
-              >
-                Load Austin sample JSON
-              </button>
-              {bimBridgeReport && typeof bimBridgeReport.zip === "string" ? (
+            {bimBridgeReport && typeof bimBridgeReport.zip === "string" ? (
+              <div className="rg-service-bridge__row">
                 <span className="field-hint rg-service-bridge__badge">
                   Last BIM bridge: ZIP <strong>{String(bimBridgeReport.zip)}</strong>
                   {Array.isArray(bimBridgeReport.clash_zones) ? (
                     <> — {bimBridgeReport.clash_zones.length} clash zone(s)</>
                   ) : null}
                 </span>
-              ) : null}
-            </div>
+              </div>
+            ) : null}
             <textarea
               className="rg-input rg-service-bridge__textarea"
               rows={5}
-              placeholder={'{"zip":"78704","project":{...},"elements":[...]}'}
+              placeholder={'{"zip":"…","project":{...},"elements":[...]}'}
               value={bimJsonDraft}
               disabled={busy || bimImportBusy}
               onChange={(e) => setBimJsonDraft(e.target.value)}
