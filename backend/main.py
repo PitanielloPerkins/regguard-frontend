@@ -146,11 +146,9 @@ When the digest locality is **Plano, Texas**, also prioritize City of Plano amen
 
 When the digest locality is **Plano, Texas**, under **Permit Costs** include a `- [ ]` line for **Reg Guard 2026 sync**: **$75.00** total electrical permit (**$65.00** base + **$10.00** laborer) — confirm on official City of Plano fee schedule.
 
-When the digest locality is **Dallas, Texas**, under **Permit Costs** include a `- [ ]` line stating **$167.00** total minimum **trade** permit (incl. **administrative fees**); under **Technical Punch List** include **MANDATORY GOTCHA: Oncor coordination** with `- [ ]` tasks for **mandatory Oncor** notification and coordination before **service disconnect**, **meter seal** / **pull**, or other **utility-side** work.
+When the digest locality is **Dallas, Texas**, under **Permit Costs** include a `- [ ]` line stating **$167.00** total minimum **trade** permit (incl. **administrative fees**); under **Technical Punch List** include **MANDATORY GOTCHA: Oncor coordination** with `- [ ]` tasks for **mandatory Oncor** notification and coordination before **service disconnect**, **meter seal** / **pull**, or other **utility-side** work. When **`dallas_field_intel_*`** keys populate the digest JSON, emit bold **FIELD INTEL:** sections (separate from Oncor) synthesized from **`dallas_field_intel_three_ft_setback`**, **`dallas_field_intel_far_duplex_25pct`**, **`dallas_field_intel_parking_reform_2025`** — AHJ‑verify setbacks / FAR worksheets / adopted **2025 parking reform** overlays (stall minima / bike tiers / curb cuts).
 
-When the digest locality is **Austin, Texas**, under **### Technical Punch List** include **MANDATORY GOTCHA: City of Austin Design Criteria** with `- [ ]` tasks for **36-inch** clearance from **gas relief valves** and, for **service upgrades** (incl. **78704** / **787** Austin), the **225A** interior **panel bus** with **200A** main / **Solar-Ready** pattern where Austin requires it. Under **Permit Costs**, itemize **Safety Surcharges** from **austintexas.gov/development-services/fees**.
-
-The JSON includes ``inspector_digest_directive`` and may include ``bim_clash_zones``, ``bim_scout_cross_reference``, ``community_scout_inspector_notes``, ``plano_ord_250_50_requirement``, ``plano_electrical_permit_fee_sync_usd``, ``plano_electrical_permit_fee_2026_note``, ``dallas_minimum_trade_permit_usd``, ``dallas_minimum_trade_permit_note``, ``dallas_oncor_disconnect_coordination``, ``austin_design_criteria_requirement``, ``austin_development_services_fees_url``, ``austin_safety_surcharge_note``, ``austin_central_zip_service_upgrade``, and ``empty_scout_nec_2023_fallback``:
+The JSON includes ``inspector_digest_directive`` and may include ``bim_clash_zones``, ``bim_scout_cross_reference``, ``community_scout_inspector_notes``, ``plano_ord_250_50_requirement``, ``plano_electrical_permit_fee_sync_usd``, ``plano_electrical_permit_fee_2026_note``, ``dallas_minimum_trade_permit_usd``, ``dallas_minimum_trade_permit_note``, ``dallas_oncor_disconnect_coordination``, ``dallas_field_intel_three_ft_setback``, ``dallas_field_intel_far_duplex_25pct``, ``dallas_field_intel_parking_reform_2025``, ``austin_design_criteria_requirement``, ``austin_development_services_fees_url``, ``austin_safety_surcharge_note``, ``austin_central_zip_service_upgrade``, and ``empty_scout_nec_2023_fallback``:
 - **consultant_role**, **gotchas_guidance**, **fee_and_code_guidance**, **output_format**, **community_inspector_moat** (when present)
 - Obey **required_checklist_headings** exactly. If ``plano_ord_250_50_requirement`` is present, satisfy it.
 
@@ -162,7 +160,7 @@ Then **exactly** these headings in order—only ``- [ ] `` task lines after opti
 
 ### Permit Costs
 ### Technical Punch List
-Place **MANDATORY GOTCHA:** lines (with supporting `- [ ]` items) for local amendments that **differ** from national NEC when the digest supports it—for Plano, **250.50 / dual 8 ft rods / 20 ft apart / 2/0 AWG bond** between rods is mandatory; for **Austin**, **Design Criteria** (gas relief **36-inch**, **225A**/ **200A** solar-ready bus on upgrades); other examples: exterior disconnect labeling, stricter working space, etc. Do not fabricate ordinance text.
+Place **MANDATORY GOTCHA:** lines (with supporting `- [ ]` items) for local amendments that **differ** from national NEC when the digest supports it—for Plano, **250.50 / dual 8 ft rods / 20 ft apart / 2/0 AWG bond** between rods is mandatory; for **Austin**, **Design Criteria** (gas relief **36-inch**, **225A**/ **200A** solar-ready bus on upgrades); for **Dallas**, combine **FIELD INTEL:** (**three-ft setback regimes**, **25% FAR duplex spreadsheets**, **2025 parking reform**) with **Oncor** sequencing; other examples: exterior disconnect labeling, stricter working space, etc. Do not fabricate ordinance text.
 
 ### Inspection Must-Haves
 ### Reference Links
@@ -486,6 +484,18 @@ def _research_action_plan_fallback_markdown(
         punch_core.insert(
             0,
             "- [ ] **MANDATORY GOTCHA: Oncor coordination** — **Mandatory Oncor** scheduling / notification for **service disconnect**, **meter seal**, and **utility reconnect**; no **hot** service work without Oncor clearance per current contractor rules.",
+        )
+        punch_core.insert(
+            0,
+            "- [ ] **FIELD INTEL: 2025 Dallas parking reform (Dallas, TX)** — confirm adopted **effective date**, district overlays, stall minima reductions, bicycle parking tiers, and curb-cut / stacking assumptions vs any pre-reform entitlement package (**verify Planning bulletin**).",
+        )
+        punch_core.insert(
+            0,
+            "- [ ] **FIELD INTEL: Duplex FAR / ~25% worksheet trap (Dallas, TX)** — reconcile combined FAR/lot coverage for **two-unit** reuse vs SF calculators; confirm **classification** plus basement/mezzanine treatment (**Planning worksheet QA**).",
+        )
+        punch_core.insert(
+            0,
+            "- [ ] **FIELD INTEL: Three-foot setback / side-yard discipline (Dallas, TX)** — field-stake vs GIS setbacks for **district / interior-side / corner** lots before masonry or pours (~3-ft-class misconceptions) (**survey + Planning GIS**).",
         )
     if city.lower() == "austin" and (state or "").strip().upper() == "TX":
         punch_core.insert(
@@ -943,7 +953,10 @@ async def research(
     ),
     scout_trades: str = Form(
         "",
-        description="Comma-separated trade toggles: electrician, plumber, hvac (Universal Scout MEP augment)",
+        description=(
+            "Comma-separated trade toggles: general_contractor, electrician, plumber, hvac, zoning_planning, "
+            "owner_builder (Universal Scout augment — HVAC/MEP + entitlement cues)"
+        ),
     ),
     mission_critical_dc: str = Form(
         "false",
@@ -980,7 +993,8 @@ async def research(
     ``future_risk_alert``, ``community_inspector_feedback`` (ZIP-indexed crowdsourced inspector notes when present),
     ``summary_delta``, ``complete``.
 
-    Multipart fields **scout_trades** (comma list: electrician, plumber, hvac), **mission_critical_dc**, and
+    Multipart fields **scout_trades** (comma list: general_contractor, electrician, plumber, hvac, zoning_planning, owner_builder),
+    **mission_critical_dc**, and
     **scout_vertical** (building | infrastructure | data_center) steer Universal Scout MEP augmentation and FAST-41.
     """
     try:

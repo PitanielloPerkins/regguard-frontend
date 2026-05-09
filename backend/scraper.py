@@ -146,6 +146,19 @@ def _normalize_scout_vertical(v: Optional[str]) -> str:
     return "building"
 
 
+_VALID_TRADE_TOKENS: frozenset[str] = frozenset(
+    {
+        "general_contractor",
+        "electrician",
+        "plumber",
+        "hvac",
+        "hvac_mechanical",
+        "zoning_planning",
+        "owner_builder",
+    }
+)
+
+
 def _normalize_trade_tokens(raw: Any) -> List[str]:
     if raw is None:
         return []
@@ -159,14 +172,43 @@ def _normalize_trade_tokens(raw: Any) -> List[str]:
         "electrical": "electrician",
         "electric": "electrician",
         "mechanical": "hvac",
+        "hvac/mechanical": "hvac_mechanical",
+        "hvac_mechanical": "hvac_mechanical",
         "plumbing": "plumber",
+        "gc": "general_contractor",
+        "generalcontractor": "general_contractor",
+        "zoning": "zoning_planning",
+        "planning": "zoning_planning",
+        "zoning_and_planning": "zoning_planning",
+        "owner-builder": "owner_builder",
+        "ownerbuilder": "owner_builder",
     }
     out: List[str] = []
     for p in parts:
-        p = aliases.get(p, p)
-        if p in ("electrician", "plumber", "hvac") and p not in out:
-            out.append(p)
+        base = aliases.get(p, p.strip()).lower().strip()
+        norm = (
+            base.replace("&", " and ")
+            .replace("/", " ")
+            .replace("-", " ")
+            .replace(",", " ")
+        )
+        q = aliases.get(norm, "_".join(norm.split()))
+        while q in aliases:
+            q = aliases[q]
+        if q in _VALID_TRADE_TOKENS and q not in out:
+            out.append(q)
     return out
+
+
+def _effective_mep_trade_set(trades: List[str]) -> set[str]:
+    """Treat ``hvac_mechanical`` like ``hvac`` for MEP / multi-trade coordination counts."""
+    s: set[str] = set()
+    for t in trades:
+        if t == "hvac_mechanical":
+            s.add("hvac")
+        elif t in ("electrician", "plumber", "hvac"):
+            s.add(t)
+    return s
 
 
 def _append_mep_trade_segments(
@@ -200,7 +242,14 @@ def _append_mep_trade_segments(
         city_disp = city or "municipality"
         loc = f"{city_disp}, {st}".strip().strip(",") if st else city_disp
 
+    mep_eff = _effective_mep_trade_set(trades)
+
     chunks: List[str] = []
+    if "general_contractor" in trades:
+        chunks.append(
+            f"{loc} general contractor superintendent IBC OSHA multi-trade permit sequencing inspection hold points — "
+            f"{zip_tag}"
+        )
     if "electrician" in trades:
         chunks.append(
             f"{loc} electrical subcontractor permit NEC NFPA 70 amendments utility coordination — {zip_tag}"
@@ -209,11 +258,22 @@ def _append_mep_trade_segments(
         chunks.append(
             f"{loc} plumbing permit IPC UPC adopted amendments drainage water pipe sizing inspections — {zip_tag}"
         )
-    if "hvac" in trades:
+    if "hvac" in trades or "hvac_mechanical" in trades:
         chunks.append(
-            f"{loc} mechanical HVAC permit IMC energy code load calculation ACCA Manual J adoption — {zip_tag}"
+            f"{loc} HVAC mechanical permit IMC energy code Manual J ACCA adoption refrigerant commissioning — "
+            f"{zip_tag}"
         )
-    if len(trades) >= 3:
+    if "zoning_planning" in trades:
+        chunks.append(
+            f"{loc} zoning planning board subdivision FAR lot coverage duplex setbacks side yard driveway "
+            f"minimum parking bicycle parking ordinance 2025 amendment — {zip_tag}"
+        )
+    if "owner_builder" in trades:
+        chunks.append(
+            f"{loc} owner builder affidavit owner-occupancy construction liability insurance affidavit "
+            f"registered builder exceptions — {zip_tag}"
+        )
+    if len(mep_eff) >= 3:
         chunks.append(
             f"{loc} combined MEP multi-trade permitting mechanical electrical plumbing coordination — {zip_tag}"
         )

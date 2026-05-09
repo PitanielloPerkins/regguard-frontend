@@ -25,6 +25,29 @@ load_dotenv(_ROOT / ".env")
 REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD: float = 167.0
 REG_GUARD_PLANO_ELECTRICAL_PERMIT_TOTAL_USD: float = 75.0
 
+# Dallas entitlement / zoning — digest **Field Intel** strings (AHJ-verify; scout supports, does not statute-parse).
+REG_GUARD_DALLAS_FIELD_INTEL_3FT_SETBACK: str = (
+    "FIELD INTEL (Dallas, TX — **three-foot setback / side-yard line** regimes): Emit **FIELD INTEL:** under "
+    "**### Technical Punch List** with `- [ ]` tasks confirming **measuring methodology** "
+    "(**side / rear / interior side / corner lots**), **lot lines vs alleys**, and **district-specific** setbacks before "
+    "foundations/masonry/impervious cover assumptions — crews often cite a **three-foot-class** clearance that still fails "
+    "subdivision / form-based checks (**verify codified setbacks + GIS tie-outs with Planning / Building**)."
+)
+
+REG_GUARD_DALLAS_FIELD_INTEL_FAR_DUPLEX_25PCT: str = (
+    "FIELD INTEL (Dallas, TX — **≈25% FAR duplex envelope risk**): Add `- [ ]` lines flagging duplex / **two-unit** reuse "
+    "where **combined floor-area ratio** and **lot coverage** math trips **planned / by-right FAR caps** differently than "
+    "single-family calculators show — reconcile **Accessory Dwelling Unit** vs duplex classification, attic/basement ratios, "
+    "and mechanical voids (**verify zoning district + worksheet with Planning** — spreadsheet trap)."
+)
+
+REG_GUARD_DALLAS_FIELD_INTEL_PARKING_2025: str = (
+    "FIELD INTEL (Dallas, TX — **2025 parking reform / bike parking overlays**): Add `- [ ]` tasks to confirm **effective "
+    "date**, **district option / transit / affordability** overlays, revised **minimum stall** counts, bicycle parking tier, "
+    "and curb-cut / stacking assumptions for this use — entitlement packages filed pre-reform versus post-reform can "
+    "re-open site plans (**pull current adopted parking ordinance + staff bulletin**)."
+)
+
 # City of Austin — Development Services fee page (safety surcharges, permit calculators).
 REG_GUARD_AUSTIN_DEVELOPMENT_SERVICES_FEES_URL: str = "https://www.austintexas.gov/development-services/fees"
 
@@ -228,6 +251,13 @@ def _build_inspector_digest_directive(
             "and **Electrical Service Requirements** — not generic NEC-only narratives for clearances or bus/main sizing."
             f"{ztxt}: treat as **Austin AHJ** scope for **Design Criteria** punch-list items."
         )
+    if is_dallas_tx:
+        consultant_role += (
+            " **Dallas, Texas:** Translate digest **`dallas_field_intel_*`** strings into **`FIELD INTEL:`** clusters under "
+            "**### Technical Punch List** (**three‑foot setback discipline**, **~25% FAR duplex worksheet trap**, **2025 parking reform overlays**) "
+            "while retaining **MANDATORY GOTCHA: Oncor coordination** and **`dallas_minimum_trade_permit_usd`** — verify every zoning claim "
+            "against `.gov` / Municode rows present in this digest."
+        )
     if empty_scout:
         consultant_role += (
             " **Empty scout:** there are no trusted `.gov` / Municode rows in this digest—complete **Technical Punch List** "
@@ -241,8 +271,12 @@ def _build_inspector_digest_directive(
     mc_sp = bool(sp.get("mission_critical_dc"))
     if trades_list:
         consultant_role += (
-            f" **Universal Scout trades toggled:** {', '.join(trades_list)} — extend the punch list for each selected trade "
-            "(IPC/UPC plumbing, IMC / energy code / Manual J-class HVAC evidence, NEC electrical) using only trusted `.gov` / Municode rows in this digest for locality claims."
+            f" **Universal Scout trades toggled:** {', '.join(trades_list)} — extend the punch list for each selected trade: "
+            "**general_contractor** (IBC/OSHA multi-trade sequencing / superintendent checkpoints), "
+            "**electrician** (NEC + utility), **plumber** (IPC/UPC), **hvac / hvac_mechanical** (IMC / energy / Manual-J-class cues), "
+            "**zoning_planning** (FAR, setbacks, subdivision, driveway, parking overlays), "
+            "**owner_builder** (affidavit / occupancy / insurer expectations) — locality claims **only** from trusted `.gov` / Municode "
+            "rows in this digest."
         )
     if mc_sp:
         consultant_role += (
@@ -308,12 +342,32 @@ def _build_inspector_digest_directive(
             "the digest text supports them."
         )
     elif is_dallas_tx:
+        trade_set = frozenset([str(x).strip().lower() for x in (sp.get("trades") or []) if str(x).strip()])
+        _fi_extra = ""
+        if trade_set.intersection(
+            frozenset({"general_contractor", "zoning_planning", "owner_builder", "electrician", "hvac_mechanical", "hvac"})
+        ):
+            _fi_extra = (
+                "**Anchor Field Intel aggressively** — these entitlement traps bankrupt schedules when projects are assumed "
+                "too residential-simple.**\n\n"
+            )
         gotchas_guidance = (
             "**MANDATORY — Dallas / Oncor:** Under **Technical Punch List**, include **MANDATORY GOTCHA: Oncor coordination** "
             "with `- [ ]` tasks requiring **mandatory Oncor notification / coordination** before **service disconnect**, **meter seal**, "
-            "or **utility-side** work; confirm current Oncor contractor rules and scheduled outage / reconnect steps.\n"
+            "or **utility-side** work; confirm current Oncor contractor rules and scheduled outage / reconnect steps.\n\n"
+            + _fi_extra
+            + "**FIELD INTEL — Dallas Development Code checkpoints (verify every line with AHJ GIS + published ordinance):**\n"
+            "- **Three-foot setback / side-yard regimes:** crews often mis-measure versus **district / form-based yard lines** / "
+            "**~3-ft-class** setbacks — reconcile **corner / interior side**, **measuring points**, and alleys (**do not fabricate ordinance citations**).\n"
+            "- **Duplex FAR \"25%\" spreadsheet trap:** two-unit redevelopment can trip **combined FAR/lot‑coverage caps** versus "
+            "single-family calculators; reconcile **classification**, basements/mezzanine treatment, worksheet rows.\n"
+            "- **Post‑2025 parking reform overlays:** reconcile **effective date**, stall minima reductions, bicycle parking tiers, "
+            "and stacking / alley access assumptions — entitlement packages drafted pre-reform can miss adopted parking language.\n"
+            "**Emit checklist voice:** Prefix each actionable cluster with **`FIELD INTEL:`** (bold) then `- [ ]` lines — still no long prose paragraphs.\n\n"
             f"**Permit Costs — Dallas:** include an explicit `- [ ]` line for the **{_df_amt}** total minimum **trade** permit "
-            "(incl. **administrative fees**) per **Reg Guard sync**, with confirmation on official Dallas permit / fee pages."
+            "(incl. **administrative fees**) per **Reg Guard sync**, with confirmation on official Dallas permit / fee pages.\n\n"
+            "Consult digest JSON **`dallas_field_intel_*`** verbatim strings — merge them under **Technical Punch List** "
+            "(not **The Bottom Line**)."
         )
     elif is_austin_tx:
         gotchas_guidance = (
@@ -405,6 +459,16 @@ def _build_inspector_digest_directive(
                 "Step 2b — **Technical Punch List (Austin Design Criteria):** Under **### Technical Punch List**, emit **MANDATORY GOTCHA: City of Austin Design Criteria** "
                 "with `- [ ]` tasks for **36-inch** clearance at **gas relief valves** and for **service upgrades** the **225A** bus / **200A** main "
                 "**Solar-Ready** pattern where Austin requires it (confirm **78704** / **787** projects against current **Design Criteria**)."
+            ),
+        )
+    if is_dallas_tx:
+        logic_steps.insert(
+            2,
+            (
+                "Step 2b — **Technical Punch List (Dallas Field Intel + Oncor):** Under **### Technical Punch List**, emit **FIELD INTEL:** headings "
+                "and `- [ ]` tasks synthesized from **`dallas_field_intel_three_ft_setback`**, **`dallas_field_intel_far_duplex_25pct`**, "
+                "**`dallas_field_intel_parking_reform_2025`** (verbatim AHJ‑verify cues), separately from "
+                "**MANDATORY GOTCHA: Oncor coordination** — do **not** move Field Intel into **### The Bottom Line**."
             ),
         )
 
@@ -610,6 +674,9 @@ def build_research_digest(
             "**mandatory Oncor** notification and coordination for **service disconnect**, **meter**, and **utility-side** sequences "
             "before energizing or cutting service."
         )
+        payload["dallas_field_intel_three_ft_setback"] = REG_GUARD_DALLAS_FIELD_INTEL_3FT_SETBACK
+        payload["dallas_field_intel_far_duplex_25pct"] = REG_GUARD_DALLAS_FIELD_INTEL_FAR_DUPLEX_25PCT
+        payload["dallas_field_intel_parking_reform_2025"] = REG_GUARD_DALLAS_FIELD_INTEL_PARKING_2025
     if city_guess.lower() == "plano" and (state_guess or "").strip().upper() in ("TX",):
         payload["plano_electrical_permit_fee_sync_usd"] = REG_GUARD_PLANO_ELECTRICAL_PERMIT_TOTAL_USD
         pf = f"${REG_GUARD_PLANO_ELECTRICAL_PERMIT_TOTAL_USD:.2f}"
@@ -658,6 +725,8 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                         "`gotchas_guidance`, `output_format`, `community_inspector_moat`, `bim_clash_zone_moat`, and `bim_integration_crossref` if present), then `plano_ord_250_50_requirement`, "
                         "`plano_electrical_permit_fee_sync_usd` / `plano_electrical_permit_fee_2026_note`, "
                         "`dallas_minimum_trade_permit_usd` / `dallas_minimum_trade_permit_note`, `dallas_oncor_disconnect_coordination`, "
+                        "`dallas_field_intel_three_ft_setback`, `dallas_field_intel_far_duplex_25pct`, "
+                        "`dallas_field_intel_parking_reform_2025`, "
                         "`austin_design_criteria_requirement`, `austin_development_services_fees_url`, `austin_safety_surcharge_note`, "
                         "`austin_central_zip_service_upgrade`, "
                         "`data_center_intelligence` (when present — **May 2026 rescission** posture, **FAST-41 Transparency Project** >100 MW gate, "
@@ -673,6 +742,8 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                         "using NEC 2023 training knowledge for 200A scope. "
                         f"When Dallas fee fields are set, include the **${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD:.2f}** floor in **Permit Costs**. "
                         "When `dallas_oncor_disconnect_coordination` is set, include **Oncor coordination** gotchas under **Technical Punch List**. "
+                        "When **`dallas_field_intel_*`** strings are present, emit separate **`FIELD INTEL:`** headings for **three-foot setback**, "
+                        "**duplex FAR / 25% worksheet trap**, and **2025 parking reform** overlays as `- [ ]` tasks (Planning/GIS verification labels). "
                         "When `data_center_intelligence` is present, satisfy **Conflict Intelligence Engine** tasks in `consultant_role` "
                         "(**no EO 14141** reliance — cite **`federal_permitting_may_2026_note`**; **FAST-41 Transparency** checkbox when "
                         "`fast41_transparency_project_candidate`; **`bill_specific_flags`** for VA/OH; surcharge band; moratorium mining). "

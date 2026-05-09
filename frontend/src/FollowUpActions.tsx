@@ -2,9 +2,12 @@
  * Proactive Guide — smart follow-up chips derived from streamed AI summary (summary_delta aggregate).
  */
 export type TradeBoost = {
+  generalContractor?: boolean;
   electrician?: boolean;
   plumber?: boolean;
   hvac?: boolean;
+  zoningPlanning?: boolean;
+  ownerBuilder?: boolean;
 };
 
 export type FollowUpCategory = "technical_compliance" | "administrative_paperwork";

@@ -377,9 +377,12 @@ export default function App() {
   const [selection, setSelection] = useState<AddressSelection | null>(null);
   const [jobDescription, setJobDescription] = useState("");
   const [searchLimit, setSearchLimit] = useState(5);
+  const [tradeGeneralContractor, setTradeGeneralContractor] = useState(false);
   const [tradeElectrician, setTradeElectrician] = useState(true);
   const [tradePlumber, setTradePlumber] = useState(false);
-  const [tradeHvac, setTradeHvac] = useState(false);
+  const [tradeHvacMechanical, setTradeHvacMechanical] = useState(false);
+  const [tradeZoningPlanning, setTradeZoningPlanning] = useState(false);
+  const [tradeOwnerBuilder, setTradeOwnerBuilder] = useState(false);
   const [missionCriticalDc, setMissionCriticalDc] = useState(true);
   const [scoutVertical, setScoutVertical] = useState<"building" | "infrastructure" | "data_center">(
     "building",
@@ -651,9 +654,12 @@ export default function App() {
     setJobDescription("");
     setImageFile(null);
     setSearchLimit(5);
+    setTradeGeneralContractor(false);
     setTradeElectrician(true);
     setTradePlumber(false);
-    setTradeHvac(false);
+    setTradeHvacMechanical(false);
+    setTradeZoningPlanning(false);
+    setTradeOwnerBuilder(false);
     setMissionCriticalDc(true);
     setScoutVertical("building");
     setLocateMessage(null);
@@ -884,18 +890,31 @@ export default function App() {
         : jd0;
     form.append("job_description", jd);
     form.append("search_limit", String(searchLimit));
-    const te = tradeElectrician || !!launchOpts?.tradeBoost?.electrician;
-    const tp = tradePlumber || !!launchOpts?.tradeBoost?.plumber;
-    const th = tradeHvac || !!launchOpts?.tradeBoost?.hvac;
+    const tb = launchOpts?.tradeBoost;
+    const tg = tradeGeneralContractor || !!tb?.generalContractor;
+    const te = tradeElectrician || !!tb?.electrician;
+    const tp = tradePlumber || !!tb?.plumber;
+    const tm = tradeHvacMechanical || !!tb?.hvac;
+    const tz = tradeZoningPlanning || !!tb?.zoningPlanning;
+    const to = tradeOwnerBuilder || !!tb?.ownerBuilder;
     const trades: string[] = [];
+    if (tg) {
+      trades.push("general_contractor");
+    }
     if (te) {
       trades.push("electrician");
     }
     if (tp) {
       trades.push("plumber");
     }
-    if (th) {
+    if (tm) {
       trades.push("hvac");
+    }
+    if (tz) {
+      trades.push("zoning_planning");
+    }
+    if (to) {
+      trades.push("owner_builder");
     }
     form.append("scout_trades", trades.join(","));
     const mc = launchOpts?.missionCritical ?? missionCriticalDc;
@@ -1253,9 +1272,12 @@ export default function App() {
     selection,
     jobDescription,
     searchLimit,
+    tradeGeneralContractor,
     tradeElectrician,
     tradePlumber,
-    tradeHvac,
+    tradeHvacMechanical,
+    tradeZoningPlanning,
+    tradeOwnerBuilder,
     missionCriticalDc,
     scoutVertical,
     imageFile,
@@ -1959,6 +1981,15 @@ export default function App() {
             <div className="rg-trade-toggles" role="group" aria-labelledby="universal-scout-profile-label">
               <button
                 type="button"
+                className={`rg-btn rg-btn--compact${tradeGeneralContractor ? " rg-btn--primary" : " rg-btn--ghost"}`}
+                aria-pressed={tradeGeneralContractor}
+                disabled={busy}
+                onClick={() => setTradeGeneralContractor((v) => !v)}
+              >
+                General Contractor
+              </button>
+              <button
+                type="button"
                 className={`rg-btn rg-btn--compact${tradeElectrician ? " rg-btn--primary" : " rg-btn--ghost"}`}
                 aria-pressed={tradeElectrician}
                 disabled={busy}
@@ -1977,12 +2008,30 @@ export default function App() {
               </button>
               <button
                 type="button"
-                className={`rg-btn rg-btn--compact${tradeHvac ? " rg-btn--primary" : " rg-btn--ghost"}`}
-                aria-pressed={tradeHvac}
+                className={`rg-btn rg-btn--compact${tradeHvacMechanical ? " rg-btn--primary" : " rg-btn--ghost"}`}
+                aria-pressed={tradeHvacMechanical}
                 disabled={busy}
-                onClick={() => setTradeHvac((v) => !v)}
+                onClick={() => setTradeHvacMechanical((v) => !v)}
               >
-                HVAC
+                HVAC / Mechanical
+              </button>
+              <button
+                type="button"
+                className={`rg-btn rg-btn--compact${tradeZoningPlanning ? " rg-btn--primary" : " rg-btn--ghost"}`}
+                aria-pressed={tradeZoningPlanning}
+                disabled={busy}
+                onClick={() => setTradeZoningPlanning((v) => !v)}
+              >
+                Zoning &amp; Planning
+              </button>
+              <button
+                type="button"
+                className={`rg-btn rg-btn--compact${tradeOwnerBuilder ? " rg-btn--primary" : " rg-btn--ghost"}`}
+                aria-pressed={tradeOwnerBuilder}
+                disabled={busy}
+                onClick={() => setTradeOwnerBuilder((v) => !v)}
+              >
+                Owner-Builder
               </button>
             </div>
             <div className="rg-scout-vertical-row">
@@ -2014,7 +2063,8 @@ export default function App() {
             </label>
             <p className="field-hint">
               <strong>Infrastructure</strong> or <strong>Data center</strong> adds a FAST-41 federal permitting pass.
-              Selected trades append IPC/UPC, Manual J/IMC, and multi-trade coordination phrases to scout queries.
+              Selected trades append scout phrases for GC/multi-trade sequencing, NEC/IPC/IMC, entitlement (FAR, setbacks,
+              parking overlays), owner-builder affidavit cues, and MEP coordination.
             </p>
           </div>
 
