@@ -23,7 +23,7 @@ import {
   DICTATION_SILENCE_MS,
   scheduleDictationSilenceStop,
 } from "./speech-recognition";
-import { downloadActionPlanPdf, downloadPermitPackagePdf } from "./downloadActionPlanPdf";
+import { downloadActionPlanPdf } from "./downloadActionPlanPdf";
 import {
   deriveProactiveFollowUps,
   FollowUpActions,
@@ -38,6 +38,35 @@ type ScoutTradeId =
   | "hvac"
   | "zoning_planning"
   | "owner_builder";
+
+const SCOUT_TRADE_LABELS: Record<ScoutTradeId, string> = {
+  general_contractor: "General contractor",
+  electrician: "Electrician / electrical",
+  plumber: "Plumber / plumbing",
+  hvac: "HVAC / mechanical",
+  zoning_planning: "Zoning & planning",
+  owner_builder: "Owner-builder",
+};
+
+function jobSiteLooksLikeDallas(
+  city: string | null | undefined,
+  siteAddress: string | null | undefined,
+): boolean {
+  if ((city || "").trim().toLowerCase() === "dallas") {
+    return true;
+  }
+  const a = (siteAddress || "").toLowerCase();
+  return /\bdallas\b/.test(a) && /\b(tx|texas)\b/.test(a);
+}
+
+function permitPackageDownloadFilename(): string {
+  const d = new Date();
+  const p = (n: number) => String(n).padStart(2, "0");
+  return `RegGuard-Dallas-permit-package-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.pdf`;
+}
+
+/** Sync with ``backend/main.py`` / permit package PDF (Dallas minimum trade permit). */
+const REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD = "167.00";
 
 /** Flat fee model — matches backend ``base_search_value`` ($5.00 customer-facing research value). */
 const BASE_SEARCH_VALUE_USD = 5;
@@ -382,6 +411,7 @@ export default function App() {
   const researchSawChunkRef = useRef(false);
   const researchCompleteRef = useRef(false);
   const researchEpochRef = useRef(0);
+  const permitPackageBlobUrlRef = useRef<string | null>(null);
 
   const [selection, setSelection] = useState<AddressSelection | null>(null);
   const [jobDescription, setJobDescription] = useState("");
@@ -447,6 +477,9 @@ export default function App() {
   const [bimJsonDraft, setBimJsonDraft] = useState("");
   /** Aggregate of ``summary_delta`` chunks for Proactive Guide (avoids scout-step noise in heuristics). */
   const [proactiveSummaryBuffer, setProactiveSummaryBuffer] = useState("");
+  const [permitPackageBusy, setPermitPackageBusy] = useState(false);
+  const [permitPackageReady, setPermitPackageReady] = useState(false);
+  const [permitPackageDownloadUrl, setPermitPackageDownloadUrl] = useState<string | null>(null);
 
   const refreshMaintenanceSubs = useCallback(async () => {
     setMaintenanceLoading(true);
@@ -478,6 +511,14 @@ export default function App() {
       .catch(() => {
         /* ignore offline / CORS during static preview */
       });
+  }, []);
+
+  useEffect(() => {
+    return () => {
+      if (permitPackageBlobUrlRef.current) {
+        URL.revokeObjectURL(permitPackageBlobUrlRef.current);
+      }
+    };
   }, []);
 
   const setJobDescriptionRef = useRef(setJobDescription);
@@ -606,6 +647,13 @@ export default function App() {
   }, [busy, phase, meta, selection, streamBroken]);
 
   const resetOutput = useCallback(() => {
+    if (permitPackageBlobUrlRef.current) {
+      URL.revokeObjectURL(permitPackageBlobUrlRef.current);
+      permitPackageBlobUrlRef.current = null;
+    }
+    setPermitPackageBusy(false);
+    setPermitPackageReady(false);
+    setPermitPackageDownloadUrl(null);
     setError(null);
     setPhase("");
     setSteps([]);
@@ -658,12 +706,7 @@ export default function App() {
     setJobDescription("");
     setImageFile(null);
     setSearchLimit(5);
-    setTradeGeneralContractor(false);
-    setTradeElectrician(true);
-    setTradePlumber(false);
-    setTradeHvacMechanical(false);
-    setTradeZoningPlanning(false);
-    setTradeOwnerBuilder(false);
+    setScoutTrade("electrician");
     setMissionCriticalDc(true);
     setScoutVertical("building");
     setLocateMessage(null);
@@ -1650,27 +1693,71 @@ export default function App() {
       window.setTimeout(() => setPlanToolbarMsg(null), 4500);
       return;
     }
+    const siteAddress = meta?.site ?? selection?.formattedAddress ?? "";
+    const zip = meta?.zip ?? selection?.zip ?? "";
+    const city = meta?.city ?? "";
+    const county = meta?.county ?? "";
+    const jd = jobDescription.trim() || "200 A service / panel upgrade (planning basis)";
+    const scopeParts = [jd];
+    if (md.length > 0) {
+      scopeParts.push("--- Contractor Action Plan (research excerpt) ---", md.slice(0, 12_000));
+    }
+    const scope = scopeParts.join("\n\n").slice(0, 28_000);
+    const isDallas = jobSiteLooksLikeDallas(city || null, siteAddress || null);
+    const feeSummary = isDallas
+      ? `Reg Guard fee sync (Dallas, TX): minimum trade permit USD $${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD} including administrative fees. Confirm on official City of Dallas building inspection / fee pages before payment.`
+      : "Confirm all permit, plan review, surcharge, and impact fees with the local Authority Having Jurisdiction before payment.";
     void (async () => {
+      if (permitPackageBlobUrlRef.current) {
+        URL.revokeObjectURL(permitPackageBlobUrlRef.current);
+        permitPackageBlobUrlRef.current = null;
+      }
+      setPermitPackageReady(false);
+      setPermitPackageDownloadUrl(null);
+      setPermitPackageBusy(true);
       try {
-        await downloadPermitPackagePdf({
-          markdown: md,
-          siteAddress: meta?.site ?? selection?.formattedAddress ?? null,
-          zip: meta?.zip ?? selection?.zip ?? null,
-          city: meta?.city ?? null,
-          county: meta?.county ?? null,
-          jobDescription: jobDescription.trim() || "200A upgrade",
-          visualAudit,
-          photoObjectUrl,
-          ahjLabel: meta?.ahjLabel ?? null,
+        const res = await fetch("/api/permit-package", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            site_address: siteAddress,
+            scope,
+            fee_summary: feeSummary,
+            trade: SCOUT_TRADE_LABELS[scoutTrade],
+            zip,
+            city,
+            county,
+            ahj_label: meta?.ahjLabel ?? "",
+          }),
         });
-        setPlanToolbarMsg("Permit package PDF downloaded.");
-        window.setTimeout(() => setPlanToolbarMsg(null), 3500);
+        if (!res.ok) {
+          const t = await res.text().catch(() => "");
+          throw new Error(t.trim() || `Permit package failed (HTTP ${res.status}).`);
+        }
+        const blob = await res.blob();
+        const url = URL.createObjectURL(blob);
+        permitPackageBlobUrlRef.current = url;
+        setPermitPackageDownloadUrl(url);
+        setPermitPackageReady(true);
+        setPlanToolbarMsg("Package ready — download the Dallas permit worksheet using the link below.");
+        window.setTimeout(() => setPlanToolbarMsg(null), 6000);
       } catch (e) {
         const msg = e instanceof Error ? e.message : String(e);
         toast.error(`Could not generate permit package: ${msg}`);
+      } finally {
+        setPermitPackageBusy(false);
       }
     })();
-  }, [actionPlan, meta, selection, jobDescription, visualAudit, photoObjectUrl, needsPdfFriction, phase, pdfFrictionAck]);
+  }, [
+    actionPlan,
+    meta,
+    selection,
+    jobDescription,
+    needsPdfFriction,
+    phase,
+    pdfFrictionAck,
+    scoutTrade,
+  ]);
 
   const dismissBackendNotice = useCallback(() => {
     dismissedRevisionRef.current = lastPollRevisionRef.current;
@@ -2473,11 +2560,11 @@ export default function App() {
                 <button
                   type="button"
                   className="rg-btn rg-btn--primary rg-btn--compact rg-plan-action-btn rg-plan-action-btn--package"
-                  title="Download punch list plus NEC load/conductor memo, Vision photo overlay, and AHJ worksheet"
-                  disabled={pdfExportBlocked}
+                  title="Build a Dallas Building Inspection-style permit worksheet PDF (includes Oncor / zoning notices for 722 Munger Ave)"
+                  disabled={pdfExportBlocked || permitPackageBusy}
                   onClick={handleGeneratePermitPackage}
                 >
-                  Generate Permit Package
+                  {permitPackageBusy ? "Generating…" : "Generate Permit Package"}
                 </button>
                 <button
                   type="button"
@@ -2507,6 +2594,18 @@ export default function App() {
                 </button>
               </span>
             </div>
+            {permitPackageReady && permitPackageDownloadUrl ? (
+              <div className="rg-permit-package-ready" role="status" aria-live="polite">
+                <span className="rg-permit-package-ready__badge">Package ready</span>
+                <a
+                  className="rg-permit-package-ready__link"
+                  href={permitPackageDownloadUrl}
+                  download={permitPackageDownloadFilename()}
+                >
+                  Download permit package PDF
+                </a>
+              </div>
+            ) : null}
             {planToolbarMsg ? (
               <div className="rg-plan-toolbar-msg" role="status">
                 {planToolbarMsg}

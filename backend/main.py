@@ -26,9 +26,11 @@ from pathlib import Path
 from queue import Queue
 from typing import Any, Dict, Iterator, List, Optional, Tuple, cast
 
+from pydantic import BaseModel, ConfigDict, Field
+
 from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import StreamingResponse
+from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
 
 from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
@@ -59,6 +61,7 @@ from scraper import (
     normalize_us_zip,
 )
 from bim_sync import run_bim_sync_bridge
+from permit_package import build_permit_package_pdf
 from calculations import permit_draft_calculation_response
 from community_gotchas import append_note, list_notes_for_zip
 from cost_tracking import log_api_usage
@@ -776,6 +779,47 @@ def permit_draft_calculations(job_description: str = "") -> Dict[str, Any]:
     Drives the frontend **Permit Submittal Package** PDF section (load VA, feeder amps, copper size).
     """
     return permit_draft_calculation_response(job_description)
+
+
+class _PermitPackagePayload(BaseModel):
+    """POST body for Dallas-style permit application package PDF."""
+
+    model_config = ConfigDict(populate_by_name=True)
+
+    site_address: str = ""
+    scope: str = ""
+    fee_summary: str = ""
+    trade: str = ""
+    zip_code: str = Field(default="", alias="zip")
+    city: str = ""
+    county: str = ""
+    ahj_label: str = ""
+
+
+@app.post("/permit-package")
+def permit_package_pdf(body: _PermitPackagePayload) -> Response:
+    """
+    Build a Dallas Building Inspection–style permit worksheet PDF from research context.
+
+    Includes **Oncor** and **zoning variance** warnings when the job site address matches **722 Munger Ave**, Dallas.
+    """
+    pdf_bytes = build_permit_package_pdf(
+        site_address=body.site_address,
+        scope=body.scope,
+        fee_summary=body.fee_summary,
+        trade=body.trade,
+        zip_code=body.zip_code,
+        city=body.city,
+        county=body.county,
+        ahj_label=body.ahj_label,
+    )
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={
+            "Content-Disposition": 'attachment; filename="RegGuard-Dallas-permit-application-package.pdf"',
+        },
+    )
 
 
 @app.get("/finops-cache")

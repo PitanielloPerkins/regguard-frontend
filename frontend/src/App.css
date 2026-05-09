@@ -190,6 +190,38 @@ body {
   margin: 0 0 0.5rem;
 }
 
+.rg-permit-package-ready {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.65rem 1.1rem;
+  margin: 0 0 0.65rem;
+  padding: 0.55rem 0.8rem;
+  border-radius: 8px;
+  border: 1px solid rgba(129, 199, 132, 0.55);
+  background: rgba(46, 125, 50, 0.14);
+}
+
+.rg-permit-package-ready__badge {
+  font-weight: 800;
+  font-size: 0.72rem;
+  color: #a5d6a7;
+  text-transform: uppercase;
+  letter-spacing: 0.07em;
+}
+
+.rg-permit-package-ready__link {
+  color: var(--rg-link);
+  font-weight: 700;
+  font-size: 0.9rem;
+  text-decoration: underline;
+  text-underline-offset: 2px;
+}
+
+.rg-permit-package-ready__link:hover {
+  color: var(--rg-accent);
+}
+
 .rg-plan-placeholder {
   margin: 0;
   font-size: 0.875rem;
