@@ -186,5 +186,99 @@
         "label": "Incorporated / municipal — Johnstown, OH 43031 (city building department)"
       }
     }
+  },
+  "75204": {
+    "updated_at": "2026-05-09T23:33:45.600001+00:00",
+    "raw": {
+      "zip": "75204",
+      "site_address": "Munger Ave, Dallas, TX 75204, USA",
+      "jurisdiction": {
+        "mode": "city",
+        "zip": "75204",
+        "street_line": "Munger Avenue",
+        "city": "Dallas",
+        "county": "Dallas",
+        "state": "TX",
+        "state_long": "Texas",
+        "formatted_address": "Munger Ave, Dallas, TX 75204, USA",
+        "label": "Incorporated / municipal — Dallas, TX 75204 (city building department)"
+      },
+      "scout_profile": {
+        "trades": [
+          "electrician"
+        ],
+        "vertical": "building",
+        "mission_critical_dc": true
+      },
+      "scout": {
+        "mode": "search_web",
+        "search_domain_scope": "(site:gov OR site:municode.com)",
+        "search_domain_scope_zoning_residential": "(site:gov OR site:municode.com OR site:opengov.com)",
+        "trust_policy": "hostname ends with .gov, hostname contains municode, or hostname under .opengov.com (SERP scoped per step)",
+        "sources": [
+          "web"
+        ],
+        "scrape_options": null,
+        "max_depth_note": "N/A — Universal Scout does not call Firecrawl crawl/map; depth 1 crawl would use max_discovery_depth on /v2/crawl, not used here.",
+        "exclude_external_links_note": "N/A for SERP-only search. For crawl, omit following off-domain links via allow_external_links=False.",
+        "page_limit_per_search": {
+          "min": 3,
+          "max": 5
+        },
+        "bundled_single_page_scrape_options": "disabled — SERP snippets only; see SEARCH_BUNDLED_SCRAPE_OPTIONS if re-enabled (markdown only, fast_mode, no links format, exclude_tags strips media/CSS).",
+        "fallback": "If a scoped step returns zero trusted URLs, Universal Scout runs a follow-up search that still appends (site:gov OR site:municode.com) and biases keywords toward *official* / *city government* (no fully unscoped web search)."
+      },
+      "enhanced_context_used": true,
+      "agentic_workflow": [
+        "AHJ identification — **City**: Dallas; **County**: Dallas (municipal/city building-code steering, ZIP 75204).",
+        "Fallback — If a scoped step returns no trusted URLs: follow-up search **retains** the step’s **site:** scope (see ``scout.search_domain_scope`` / zoning ``OPENGOV`` extension) and adds *official* / *city government landing page*.",
+        "Universal Scout 1 — Jurisdiction: city/county AHJ hints (trusted hosts).",
+        "Universal Scout 2 — Permits: **city** or **county** building department (steered from address).",
+        "Universal Scout 3 — Building codes: **city-specific** (incorporated) or **county-specific** (unincorporated) adopted codes and amendments, plus **Code-Change Monitoring** cues (upcoming adoptions / council minutes keywords).",
+        "Scout profile — **Trades**: electrician; **vertical**: building; **mission-critical DC scout**: on.",
+        "**Intelligence tier — Residential / building vertical:** Municode / `.gov` / **OpenGov** portal discovery for **setbacks**, yard lines, and codified zoning chapters."
+      ],
+      "step_jurisdiction": {
+        "query": "Dallas, TX: Job site Munger Ave, Dallas, TX 75204, USA — incorporated Dallas, TX (ZIP 75204). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | Site/job context: [Job description (voice or typed)] \"Garage conversion to ADU. Garage sits 3ft from property line. House is 2400 sq ft, garage is 600 sq ft.\" [Proactive Guide — Draft permit application] Focused scout: Deep scout: electrical permit types, online p… (site:gov OR site:municode.com)",
+        "results": [],
+        "fallback_used": true,
+        "fallback_query": "Dallas, TX: Job site Munger Ave, Dallas, TX 75204, USA — incorporated Dallas, TX (ZIP 75204). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | Site/job context: [Job description (voice or typed)] \"Garage conversion to ADU. Garage sits 3ft from property line. House is 2400 sq ft, garage is 600 sq ft.\" [Proactive Guide — Draft permit application] Focused scout: Deep scout: electrical permit types, online p… city government landing page (site:gov OR site:municode.com)",
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_building_permits": {
+        "query": "Dallas, TX: Dallas TX building department permits plan check electrical official — ZIP 75204 | LOCALITY_LOCK Dallas, TX official city code and building permits | Dallas, TX official building permit fees 2026 | Dallas, TX electrical subcontractor permit NEC NFPA 70 amendments utility coordination — ZIP 75204 | Dallas, TX data center Tier III Tier IV redundancy 2N N+1 concurrent maintainability mission critical facility code adopted amendments — ZIP 75204 | Dallas, TX liquid cooling containment CD (site:gov OR site:municode.com)",
+        "results": [],
+        "fallback_used": true,
+        "fallback_query": "Dallas, TX: Dallas TX building department permits plan check electrical official — ZIP 75204 | LOCALITY_LOCK Dallas, TX official city code and building permits | Dallas, TX official building permit fees 2026 | Dallas, TX electrical subcontractor permit NEC NFPA 70 amendments utility coordination — ZIP 75204 | Dallas, TX data center Tier III Tier IV redundancy 2N N+1 concurrent maintainability mission critical facility code adopted amendments — ZIP 75204 | Dallas, TX liquid cooling containment CD city government landing page (site:gov OR site:municode.com)",
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_building_codes": {
+        "query": "Dallas, TX: Building codes adopted for Dallas TX: municipal amendments IBC IRC — ZIP 75204 | LOCALITY_LOCK Dallas, TX official city code and building permits | Dallas, TX NEC 2023 amendments | Dallas, TX upcoming building code adoption NEC NFPA 70 effective date transition council workshop — ZIP 75204 | Dallas, TX city council agenda minutes ordinance building code amendment hearing first reading — ZIP 75204 | Dallas, TX electrical subcontractor permit NEC NFPA 70 amendments utility coordination (site:gov OR site:municode.com)",
+        "results": [],
+        "fallback_used": true,
+        "fallback_query": "Dallas, TX: Building codes adopted for Dallas TX: municipal amendments IBC IRC — ZIP 75204 | LOCALITY_LOCK Dallas, TX official city code and building permits | Dallas, TX NEC 2023 amendments | Dallas, TX upcoming building code adoption NEC NFPA 70 effective date transition council workshop — ZIP 75204 | Dallas, TX city council agenda minutes ordinance building code amendment hearing first reading — ZIP 75204 | Dallas, TX electrical subcontractor permit NEC NFPA 70 amendments utility coordination city government landing page (site:gov OR site:municode.com)",
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_residential_zoning": {
+        "query": "Munger Ave, Dallas, TX 75204, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75204 | Site/job context: [Job description (voice or typed)] \"Garage conversion to ADU. Garage sits 3ft from property line. House is 2400 sq ft, garage is 600 sq ft.\" [Proactive Guide — Draft permit application] Focused scout: Deep scout: electrical permit types, online portal, plan-check requirements… (site:gov OR site:municode.com OR site:opengov.com)",
+        "results": [],
+        "fallback_used": true,
+        "fallback_query": "Munger Ave, Dallas, TX 75204, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75204 | Site/job context: [Job description (voice or typed)] \"Garage conversion to ADU. Garage sits 3ft from property line. House is 2400 sq ft, garage is 600 sq ft.\" [Proactive Guide — Draft permit application] Focused scout: Deep scout: electrical permit types, online portal, plan-check requirements… official city government landing page (site:gov OR site:municode.com OR site:opengov.com)",
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_ahj_identification": {
+        "city": "Dallas",
+        "county": "Dallas",
+        "state": "TX",
+        "mode": "city",
+        "zip": "75204",
+        "formatted_address": "Munger Ave, Dallas, TX 75204, USA",
+        "label": "Incorporated / municipal — Dallas, TX 75204 (city building department)"
+      }
+    }
   }
 }
