@@ -65,15 +65,6 @@ function permitPackageDownloadFilename(): string {
   return `RegGuard-Dallas-permit-package-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.pdf`;
 }
 
-/** Match backend ``permit_package.is_722_munger_ave`` for Dallas site-specific intel in the UI. */
-function is722MungerAve(siteAddress: string | null | undefined): boolean {
-  const s = (siteAddress || "").toLowerCase();
-  if (!s.includes("munger")) {
-    return false;
-  }
-  return /\b722\b/.test(s);
-}
-
 /** Sync with ``backend/main.py`` / permit package PDF (Dallas minimum trade permit). */
 const REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD = "167.00";
 
@@ -1632,24 +1623,31 @@ export default function App() {
 
   const handleReviewActionPlan = useCallback(() => {
     setResultsTab("plan");
+    const pulse = (el: HTMLElement) => {
+      el.classList.remove("rg-plan-panel--pulse");
+      void el.offsetWidth;
+      el.classList.add("rg-plan-panel--pulse");
+      window.setTimeout(() => el.classList.remove("rg-plan-panel--pulse"), 1400);
+    };
     const run = () => {
+      document.getElementById("rg-results-heading")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
       const panel = actionPlanPanelRef.current;
       const scrollTarget =
         document.getElementById("rg-action-plan-header") ??
         document.getElementById("contractor-action-plan");
       const pulseEl = panel ?? document.getElementById("contractor-action-plan");
-      if (scrollTarget) {
-        scrollTarget.scrollIntoView({ behavior: "smooth", block: "start" });
-      }
+      scrollTarget?.scrollIntoView({ behavior: "smooth", block: "start" });
       if (pulseEl) {
-        pulseEl.classList.remove("rg-plan-panel--pulse");
-        void pulseEl.offsetWidth;
-        pulseEl.classList.add("rg-plan-panel--pulse");
-        window.setTimeout(() => pulseEl.classList.remove("rg-plan-panel--pulse"), 1400);
+        pulse(pulseEl);
       }
     };
     window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(run);
+      window.requestAnimationFrame(() => {
+        run();
+        if (!actionPlanPanelRef.current) {
+          window.setTimeout(run, 160);
+        }
+      });
     });
   }, []);
 
@@ -1970,9 +1968,42 @@ export default function App() {
               bulletins before omitting stalls on cover sheets.
             </li>
           </ul>
+          <div
+            id="rg-munger-intel-dashboard"
+            className="rg-munger-intel rg-munger-intel--dashboard"
+            role="region"
+            aria-labelledby="rg-munger-intel-dashboard-label"
+          >
+            <div id="rg-munger-intel-dashboard-label" className="rg-munger-intel__title">
+              722 Munger Ave — intelligence panel (Dallas, TX)
+            </div>
+            <ul className="rg-munger-intel__list">
+              <li>
+                <strong>3 ft vs 5 ft setback:</strong> a <strong>3 ft</strong> rear setback read often still fails the more
+                typical <strong>5 ft</strong> rear-yard building line for many Dallas residential-style lots — verify exact
+                zoning district, Form District, and adopted yard tables before enclosure or cladding.
+              </li>
+              <li>
+                <strong>BDA variance alert:</strong> if the improvement cannot meet codified setbacks or use standards, a{" "}
+                <strong>Board of Adjustment (BDA)</strong> variance or other relief may be required before certificate of
+                occupancy or final release.
+              </li>
+              <li>
+                <strong>May 2025 parking reform:</strong> Dallas reforms exempt many small projects from legacy stall minima —{" "}
+                <strong>20 dwelling units or fewer</strong> (including typical <strong>ADU</strong> scopes) generally have{" "}
+                <strong>no minimum off-street parking</strong>. Confirm PD overlays, TIF/overlay conditions, and current Planning
+                guidance before omitting stalls.
+              </li>
+              <li>
+                <strong>Permit fee (2026 sync):</strong> plan for the Dallas{" "}
+                <strong>${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD}</strong> minimum trade permit bundle (incl. administrative fees)
+                before AHJ verification.
+              </li>
+            </ul>
+          </div>
           <p className="field-hint rg-dallas-dashboard__foot">
-            Choose <strong>722 Munger Ave, Dallas, TX</strong> in the address field to open the{" "}
-            <strong>722 Munger Ave intelligence</strong> panel under Job site with the same alerts spelled out for that parcel.
+            This reference parcel stays pinned on the Dallas dashboard. Pick <strong>722 Munger Ave, Dallas, TX</strong> under Job
+            site when you want the same context on permit PDFs and research payloads.
           </p>
         </section>
 
@@ -2050,36 +2081,6 @@ export default function App() {
                 Choose a full U.S. address from the dropdown so the backend can geocode jurisdiction.
               </p>
             )}
-            {is722MungerAve(meta?.site || selection?.formattedAddress) ? (
-              <div className="rg-munger-intel" role="region" aria-labelledby="rg-munger-intel-label">
-                <div id="rg-munger-intel-label" className="rg-munger-intel__title">
-                  722 Munger Ave — intelligence panel (Dallas, TX)
-                </div>
-                <ul className="rg-munger-intel__list">
-                  <li>
-                    <strong>3 ft vs 5 ft setback:</strong> a <strong>3 ft</strong> rear setback read often still fails the
-                    more typical <strong>5 ft</strong> rear-yard building line for many Dallas residential-style lots —
-                    verify exact zoning district, Form District, and adopted yard tables before enclosure or cladding.
-                  </li>
-                  <li>
-                    <strong>BDA variance alert:</strong> if the improvement cannot meet codified setbacks or use standards, a{" "}
-                    <strong>Board of Adjustment (BDA)</strong> variance or other relief may be required before certificate of
-                    occupancy or final release.
-                  </li>
-                  <li>
-                    <strong>May 2025 parking reform:</strong> Dallas reforms exempt many small projects from legacy stall
-                    minima — <strong>20 dwelling units or fewer</strong> (including typical <strong>ADU</strong> scopes) generally
-                    have <strong>no minimum off-street parking</strong>. Confirm PD overlays, TIF/overlay conditions, and current
-                    Planning guidance before omitting stalls.
-                  </li>
-                  <li>
-                    <strong>Permit fee (2026 sync):</strong> plan for the Dallas{" "}
-                    <strong>${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD}</strong> minimum trade permit bundle (incl. administrative
-                    fees) before AHJ verification.
-                  </li>
-                </ul>
-              </div>
-            ) : null}
           </div>
 
           <div className="rg-field">

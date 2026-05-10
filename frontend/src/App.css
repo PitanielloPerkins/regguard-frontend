@@ -786,6 +786,10 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   background: rgba(255, 107, 107, 0.1);
 }
 
+.rg-munger-intel--dashboard {
+  margin-top: 0.85rem;
+}
+
 .rg-munger-intel__title {
   font-size: 0.78rem;
   font-weight: 800;
