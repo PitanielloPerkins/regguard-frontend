@@ -15,6 +15,14 @@ from fpdf import FPDF
 
 from calculations import permit_draft_calculation_response
 
+# Long action-plan excerpts slow regex in ``permit_draft_calculation_response`` — cap input for the NEC snapshot only.
+_CALC_SCOPE_CHAR_MAX = 8192
+
+
+def _trade_is_hvac_mechanical(trade: str) -> bool:
+    t = (trade or "").lower()
+    return "hvac" in t or "mechanical" in t
+
 
 def _ascii_pdf_text(s: str) -> str:
     """fpdf core fonts are latin-1; strip/replace characters NEC strings may contain."""
@@ -66,7 +74,8 @@ def build_permit_package_pdf(
     ahj_label: str = "",
 ) -> bytes:
     jd = (scope or "").strip()
-    calc: Dict[str, Any] = permit_draft_calculation_response(jd)
+    jd_calc = jd if len(jd) <= _CALC_SCOPE_CHAR_MAX else jd[:_CALC_SCOPE_CHAR_MAX]
+    calc: Dict[str, Any] = permit_draft_calculation_response(jd_calc)
     a220: Dict[str, Any] = calc["article_220"]
     a310: Dict[str, Any] = calc["article_310"]
 
@@ -142,6 +151,16 @@ def build_permit_package_pdf(
     )
     if (fee_summary or "").strip():
         pdf.multi_cell(col_w, 5, _ascii_pdf_text(fee_summary.strip()))
+    if _trade_is_hvac_mechanical(trade):
+        pdf.multi_cell(
+            col_w,
+            5,
+            _ascii_pdf_text(
+                "HVAC / mechanical (Dallas): confirm mechanical trade permit, plan review, and IMC-related "
+                "fee line items on the official City of Dallas Development Services fee schedule. Reg Guard "
+                "still anchors to the USD $167.00 trade-permit planning floor until the AHJ itemizes mechanical adders."
+            ),
+        )
     pdf.ln(1)
 
     # V. AHJ

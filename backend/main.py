@@ -796,16 +796,11 @@ class _PermitPackagePayload(BaseModel):
     ahj_label: str = ""
 
 
-@app.post("/permit-package")
-def permit_package_pdf(body: _PermitPackagePayload) -> Response:
-    """
-    Build a Dallas Building Inspection-style permit worksheet PDF from research context (address, scope, fees, trade).
+_PERMIT_PACKAGE_BUILD_TIMEOUT_SEC = 45.0
 
-    Always includes the **USD $167.00** Dallas base building permit planning line (2026 Reg Guard sync).
-    For **722 Munger Ave**, adds **setback (3 ft vs 5 ft / BDA)**, **May 2025 parking reform (20 units / ADU)**,
-    **Oncor**, and land-use notes.
-    """
-    pdf_bytes = build_permit_package_pdf(
+
+def _permit_package_sync_build(body: _PermitPackagePayload) -> bytes:
+    return build_permit_package_pdf(
         site_address=body.site_address,
         scope=body.scope,
         fee_summary=body.fee_summary,
@@ -815,6 +810,39 @@ def permit_package_pdf(body: _PermitPackagePayload) -> Response:
         county=body.county,
         ahj_label=body.ahj_label,
     )
+
+
+@app.post("/permit-package")
+async def permit_package_pdf(body: _PermitPackagePayload) -> Response:
+    """
+    Build a Dallas Building Inspection-style permit worksheet PDF from research context (address, scope, fees, trade).
+
+    Runs the PDF builder in a thread pool so the async event loop is not blocked (avoids dev-proxy / UI stalls).
+    Returns **504** if generation exceeds ``_PERMIT_PACKAGE_BUILD_TIMEOUT_SEC``.
+    """
+    try:
+        pdf_bytes = await asyncio.wait_for(
+            run_in_threadpool(_permit_package_sync_build, body),
+            timeout=_PERMIT_PACKAGE_BUILD_TIMEOUT_SEC,
+        )
+    except asyncio.TimeoutError:
+        logger.warning(
+            "permit_package timed out after %.1fs (site=%s)",
+            _PERMIT_PACKAGE_BUILD_TIMEOUT_SEC,
+            (body.site_address or "")[:80],
+        )
+        raise HTTPException(
+            status_code=504,
+            detail=(
+                "Permit package generation timed out. Try again, or shorten the action plan excerpt sent from the UI."
+            ),
+        ) from None
+    except Exception as e:
+        logger.exception("permit_package build failed: %s", e)
+        raise HTTPException(
+            status_code=500,
+            detail="Permit package build failed. Check backend logs.",
+        ) from e
     return Response(
         content=pdf_bytes,
         media_type="application/pdf",

@@ -67,6 +67,17 @@ def _is_austin_texas(city: str, state: str) -> bool:
     return c == "austin" and s in ("TX",)
 
 
+def _is_dallas_texas(city: str, state: str) -> bool:
+    c = (city or "").strip().lower()
+    s = (state or "").strip().upper()
+    return c == "dallas" and s in ("TX",)
+
+
+DALLAS_SCOUT_MECHANICAL_HVAC_FEE_PASS = (
+    "Dallas Texas Development Services mechanical HVAC permit fee schedule trade permit administrative IMC 2026"
+)
+
+
 AUSTIN_SCOUT_DEVELOPMENT_FEES_SURCHARGE = (
     "site:austintexas.gov development services fees safety surcharge electrical permit"
 )
@@ -259,10 +270,13 @@ def _append_mep_trade_segments(
             f"{loc} plumbing permit IPC UPC adopted amendments drainage water pipe sizing inspections — {zip_tag}"
         )
     if "hvac" in trades or "hvac_mechanical" in trades:
-        chunks.append(
+        hvac_chunk = (
             f"{loc} HVAC mechanical permit IMC energy code Manual J ACCA adoption refrigerant commissioning — "
             f"{zip_tag}"
         )
+        if _is_dallas_texas(city, st):
+            hvac_chunk = f"{hvac_chunk} | {DALLAS_SCOUT_MECHANICAL_HVAC_FEE_PASS}"
+        chunks.append(hvac_chunk)
     if "zoning_planning" in trades:
         chunks.append(
             f"{loc} zoning planning board subdivision FAR lot coverage duplex setbacks side yard driveway "
