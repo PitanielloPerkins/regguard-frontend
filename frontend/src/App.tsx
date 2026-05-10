@@ -2705,7 +2705,11 @@ export default function App() {
                   type="button"
                   className="rg-btn rg-btn--primary rg-btn--compact rg-plan-action-btn rg-plan-action-btn--accept"
                   title="Copy the full Contractor Action Plan to your clipboard"
-                  onClick={() => void handleAcceptActionPlan()}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    void handleAcceptActionPlan();
+                  }}
                 >
                   Accept
                 </button>
@@ -2747,7 +2751,11 @@ export default function App() {
                   type="button"
                   className="rg-btn rg-btn--ghost rg-btn--compact rg-plan-action-btn"
                   title="Scroll to the plan and highlight this panel"
-                  onClick={handleReviewActionPlan}
+                  onClick={(e) => {
+                    e.preventDefault();
+                    e.stopPropagation();
+                    handleReviewActionPlan();
+                  }}
                 >
                   Review
                 </button>

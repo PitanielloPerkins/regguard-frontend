@@ -142,6 +142,8 @@ body {
   justify-content: space-between;
   gap: 0.65rem 1rem;
   margin-bottom: 0.5rem;
+  position: relative;
+  z-index: 4;
 }
 
 .rg-action-plan-header .rg-subheading {
@@ -153,6 +155,8 @@ body {
   flex-wrap: wrap;
   gap: 0.35rem;
   align-items: center;
+  position: relative;
+  z-index: 5;
 }
 
 /**
