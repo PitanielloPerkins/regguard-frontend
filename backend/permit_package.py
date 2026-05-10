@@ -11,7 +11,7 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from fpdf import FPDF
+from fpdf import FPDF  # fpdf2 (PyPI) exposes the legacy ``fpdf`` package name
 
 from calculations import permit_draft_calculation_response
 
