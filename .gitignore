@@ -7,4 +7,4 @@ __pycache__/
 venv/
 api_usage_log.jsonl
 .cursor/vite-dev.log
-wha
+frontend/.npm-cache/
