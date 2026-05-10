@@ -32,6 +32,7 @@ module.exports = {
       name: "reg-guard-frontend",
       cwd: frontendRoot,
       script: "node_modules/vite/bin/vite.js",
+      /** Port + strictPort come from ``frontend/vite.config.ts`` (5173 preferred; ``strictPort: false`` avoids restart loops). */
       args: "--host 127.0.0.1",
       instances: 1,
       autorestart: true,
