@@ -1713,9 +1713,13 @@ export default function App() {
     }
     const scope = scopeParts.join("\n\n").slice(0, 28_000);
     const isDallas = jobSiteLooksLikeDallas(city || null, siteAddress || null);
-    const feeSummary = isDallas
+    let feeSummary = isDallas
       ? `Reg Guard 2026 sync — Dallas base building permit (planning): USD $${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD} including administrative fee bundle; confirm final amount on the official City of Dallas Development Services / Building Inspection fee schedule.`
       : "Confirm all permit, plan review, surcharge, and impact fees with the local Authority Having Jurisdiction before payment.";
+    if (isDallas && scoutTrade === "hvac") {
+      feeSummary +=
+        ` For HVAC / mechanical scopes, verify Dallas mechanical trade permit and IMC-related plan-review line items on that same fee schedule (Reg Guard keeps the $${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD} trade-permit planning floor until the AHJ itemizes mechanical adders).`;
+    }
     void (async () => {
       if (permitPackageBlobUrlRef.current) {
         URL.revokeObjectURL(permitPackageBlobUrlRef.current);
@@ -1723,6 +1727,8 @@ export default function App() {
       }
       setPermitPackageReady(false);
       setPermitPackageDownloadUrl(null);
+      const ac = new AbortController();
+      const abortTimer = window.setTimeout(() => ac.abort(), 120_000);
       setPermitPackageBusy(true);
       try {
         const res = await fetch("/api/permit-package", {
@@ -1738,10 +1744,20 @@ export default function App() {
             county,
             ahj_label: meta?.ahjLabel ?? "",
           }),
+          signal: ac.signal,
         });
         if (!res.ok) {
-          const t = await res.text().catch(() => "");
-          throw new Error(t.trim() || `Permit package failed (HTTP ${res.status}).`);
+          const raw = await res.text().catch(() => "");
+          let detail = raw.trim();
+          try {
+            const j = JSON.parse(raw) as { detail?: string };
+            if (typeof j.detail === "string" && j.detail.trim()) {
+              detail = j.detail.trim();
+            }
+          } catch {
+            /* plain text body */
+          }
+          throw new Error(detail || `Permit package failed (HTTP ${res.status}).`);
         }
         const blob = await res.blob();
         const url = URL.createObjectURL(blob);
@@ -1751,9 +1767,19 @@ export default function App() {
         setPlanToolbarMsg("Package ready — download the Dallas permit worksheet using the link below.");
         window.setTimeout(() => setPlanToolbarMsg(null), 6000);
       } catch (e) {
-        const msg = e instanceof Error ? e.message : String(e);
-        toast.error(`Could not generate permit package: ${msg}`);
+        const isAbort =
+          (e instanceof DOMException && e.name === "AbortError") ||
+          (e instanceof Error && e.name === "AbortError");
+        if (isAbort) {
+          toast.error(
+            "Permit package request timed out after 120s. Try again, or shorten the action plan excerpt.",
+          );
+        } else {
+          const msg = e instanceof Error ? e.message : String(e);
+          toast.error(`Could not generate permit package: ${msg}`);
+        }
       } finally {
+        window.clearTimeout(abortTimer);
         setPermitPackageBusy(false);
       }
     })();
@@ -2624,7 +2650,14 @@ export default function App() {
                   disabled={pdfExportBlocked || permitPackageBusy}
                   onClick={handleGeneratePermitPackage}
                 >
-                  {permitPackageBusy ? "Generating…" : "Generate Permit Package"}
+                  {permitPackageBusy ? (
+                    <>
+                      <span className="rg-spinner rg-spinner--btn" aria-hidden />
+                      Generating…
+                    </>
+                  ) : (
+                    "Generate Permit Package"
+                  )}
                 </button>
                 <button
                   type="button"
@@ -2654,6 +2687,12 @@ export default function App() {
                 </button>
               </span>
             </div>
+            {permitPackageBusy ? (
+              <div className="rg-permit-package-loading" role="status" aria-live="polite">
+                <span className="rg-spinner rg-spinner--md" aria-hidden />
+                <span>Building Dallas permit package — waiting for PDF from the API…</span>
+              </div>
+            ) : null}
             {permitPackageReady && permitPackageDownloadUrl ? (
               <div className="rg-permit-package-ready" role="status" aria-live="polite">
                 <span className="rg-permit-package-ready__badge">Package ready</span>

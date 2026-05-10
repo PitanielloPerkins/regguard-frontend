@@ -190,6 +190,51 @@ body {
   margin: 0 0 0.5rem;
 }
 
+.rg-spinner {
+  display: inline-block;
+  border-radius: 50%;
+  border-style: solid;
+  border-color: rgba(168, 197, 232, 0.35);
+  border-top-color: var(--rg-link);
+  animation: rg-spin 0.65s linear infinite;
+  flex-shrink: 0;
+}
+
+.rg-spinner--md {
+  width: 1.05rem;
+  height: 1.05rem;
+  border-width: 2.5px;
+}
+
+.rg-spinner--btn {
+  width: 0.85rem;
+  height: 0.85rem;
+  border-width: 2px;
+  margin-right: 0.4rem;
+  vertical-align: -0.12em;
+}
+
+.rg-plan-action-btn--package {
+  display: inline-flex;
+  align-items: center;
+}
+
+@keyframes rg-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+.rg-permit-package-loading {
+  display: flex;
+  align-items: center;
+  gap: 0.55rem;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--rg-link);
+  margin: 0 0 0.55rem;
+}
+
 .rg-permit-package-ready {
   display: flex;
   flex-wrap: wrap;
