@@ -188,7 +188,7 @@
     }
   },
   "75204": {
-    "updated_at": "2026-05-09T23:33:45.600001+00:00",
+    "updated_at": "2026-05-09T23:52:22.240916+00:00",
     "raw": {
       "zip": "75204",
       "site_address": "Munger Ave, Dallas, TX 75204, USA",
@@ -239,10 +239,10 @@
         "**Intelligence tier — Residential / building vertical:** Municode / `.gov` / **OpenGov** portal discovery for **setbacks**, yard lines, and codified zoning chapters."
       ],
       "step_jurisdiction": {
-        "query": "Dallas, TX: Job site Munger Ave, Dallas, TX 75204, USA — incorporated Dallas, TX (ZIP 75204). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | Site/job context: [Job description (voice or typed)] \"Garage conversion to ADU. Garage sits 3ft from property line. House is 2400 sq ft, garage is 600 sq ft.\" [Proactive Guide — Draft permit application] Focused scout: Deep scout: electrical permit types, online p… (site:gov OR site:municode.com)",
+        "query": "Dallas, TX: Job site Munger Ave, Dallas, TX 75204, USA — incorporated Dallas, TX (ZIP 75204). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | Site/job context: [Job description (voice or typed)] \"Garage conversion to ADU. Garage sits 3ft from property line. House is 2400 sq ft, garage is 600 sq ft. Need a full Contractor Action Plan for Dallas-specific setback non-conformity, the 25% floor area ratio (F… (site:gov OR site:municode.com)",
         "results": [],
         "fallback_used": true,
-        "fallback_query": "Dallas, TX: Job site Munger Ave, Dallas, TX 75204, USA — incorporated Dallas, TX (ZIP 75204). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | Site/job context: [Job description (voice or typed)] \"Garage conversion to ADU. Garage sits 3ft from property line. House is 2400 sq ft, garage is 600 sq ft.\" [Proactive Guide — Draft permit application] Focused scout: Deep scout: electrical permit types, online p… city government landing page (site:gov OR site:municode.com)",
+        "fallback_query": "Dallas, TX: Job site Munger Ave, Dallas, TX 75204, USA — incorporated Dallas, TX (ZIP 75204). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | Site/job context: [Job description (voice or typed)] \"Garage conversion to ADU. Garage sits 3ft from property line. House is 2400 sq ft, garage is 600 sq ft. Need a full Contractor Action Plan for Dallas-specific setback non-conformity, the 25% floor area ratio (F… city government landing page (site:gov OR site:municode.com)",
         "firecrawl_mode": "search_web_serp_only",
         "firecrawl_limit": 5
       },
@@ -263,10 +263,10 @@
         "firecrawl_limit": 5
       },
       "step_residential_zoning": {
-        "query": "Munger Ave, Dallas, TX 75204, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75204 | Site/job context: [Job description (voice or typed)] \"Garage conversion to ADU. Garage sits 3ft from property line. House is 2400 sq ft, garage is 600 sq ft.\" [Proactive Guide — Draft permit application] Focused scout: Deep scout: electrical permit types, online portal, plan-check requirements… (site:gov OR site:municode.com OR site:opengov.com)",
+        "query": "Munger Ave, Dallas, TX 75204, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75204 | Site/job context: [Job description (voice or typed)] \"Garage conversion to ADU. Garage sits 3ft from property line. House is 2400 sq ft, garage is 600 sq ft. Need a full Contractor Action Plan for Dallas-specific setback non-conformity, the 25% floor area ratio (FAR) limit, and 2025 parking re… (site:gov OR site:municode.com OR site:opengov.com)",
         "results": [],
         "fallback_used": true,
-        "fallback_query": "Munger Ave, Dallas, TX 75204, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75204 | Site/job context: [Job description (voice or typed)] \"Garage conversion to ADU. Garage sits 3ft from property line. House is 2400 sq ft, garage is 600 sq ft.\" [Proactive Guide — Draft permit application] Focused scout: Deep scout: electrical permit types, online portal, plan-check requirements… official city government landing page (site:gov OR site:municode.com OR site:opengov.com)",
+        "fallback_query": "Munger Ave, Dallas, TX 75204, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75204 | Site/job context: [Job description (voice or typed)] \"Garage conversion to ADU. Garage sits 3ft from property line. House is 2400 sq ft, garage is 600 sq ft. Need a full Contractor Action Plan for Dallas-specific setback non-conformity, the 25% floor area ratio (FAR) limit, and 2025 parking re… official city government landing page (site:gov OR site:municode.com OR site:opengov.com)",
         "firecrawl_mode": "search_web_serp_only",
         "firecrawl_limit": 5
       },
