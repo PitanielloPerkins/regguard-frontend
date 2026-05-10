@@ -65,6 +65,15 @@ function permitPackageDownloadFilename(): string {
   return `RegGuard-Dallas-permit-package-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.pdf`;
 }
 
+/** Match backend ``permit_package.is_722_munger_ave`` for Dallas site-specific intel in the UI. */
+function is722MungerAve(siteAddress: string | null | undefined): boolean {
+  const s = (siteAddress || "").toLowerCase();
+  if (!s.includes("munger")) {
+    return false;
+  }
+  return /\b722\b/.test(s);
+}
+
 /** Sync with ``backend/main.py`` / permit package PDF (Dallas minimum trade permit). */
 const REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD = "167.00";
 
@@ -1705,7 +1714,7 @@ export default function App() {
     const scope = scopeParts.join("\n\n").slice(0, 28_000);
     const isDallas = jobSiteLooksLikeDallas(city || null, siteAddress || null);
     const feeSummary = isDallas
-      ? `Reg Guard fee sync (Dallas, TX): minimum trade permit USD $${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD} including administrative fees. Confirm on official City of Dallas building inspection / fee pages before payment.`
+      ? `Reg Guard 2026 sync — Dallas base building permit (planning): USD $${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD} including administrative fee bundle; confirm final amount on the official City of Dallas Development Services / Building Inspection fee schedule.`
       : "Confirm all permit, plan review, surcharge, and impact fees with the local Authority Having Jurisdiction before payment.";
     void (async () => {
       if (permitPackageBlobUrlRef.current) {
@@ -1959,6 +1968,30 @@ export default function App() {
                 Choose a full U.S. address from the dropdown so the backend can geocode jurisdiction.
               </p>
             )}
+            {is722MungerAve(meta?.site || selection?.formattedAddress) ? (
+              <div className="rg-munger-intel" role="region" aria-labelledby="rg-munger-intel-label">
+                <div id="rg-munger-intel-label" className="rg-munger-intel__title">
+                  722 Munger Ave — Dallas intelligence
+                </div>
+                <ul className="rg-munger-intel__list">
+                  <li>
+                    <strong>Setback alert:</strong> a <strong>3 ft</strong> rear setback likely conflicts with the more
+                    typical <strong>5 ft</strong> Dallas rear-yard expectation; verify your district and yard tables. A{" "}
+                    <strong>Board of Adjustment (BDA)</strong> variance may be required if you cannot comply.
+                  </li>
+                  <li>
+                    <strong>Parking reform (May 2025):</strong> projects with <strong>20 dwelling units or fewer</strong>{" "}
+                    (including many <strong>ADU</strong> scopes) often have <strong>no minimum off-street parking</strong>{" "}
+                    under adopted Dallas reform — confirm overlays and PD conditions with Planning.
+                  </li>
+                  <li>
+                    <strong>Permit fee (2026 sync):</strong> plan for the Dallas{" "}
+                    <strong>${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD}</strong> base building permit bundle (incl.
+                    administrative fees) before AHJ verification.
+                  </li>
+                </ul>
+              </div>
+            ) : null}
           </div>
 
           <div className="rg-field">
@@ -2161,9 +2194,36 @@ export default function App() {
           </div>
 
           <div className="rg-field rg-service-bridge">
-            <h3 className="rg-service-bridge__title">Service Bridge — BIM &amp; maintenance</h3>
+            <h3 className="rg-service-bridge__title">Operations hub — enterprise connectors &amp; field tools</h3>
+            <div className="rg-enterprise-lite" aria-label="Enterprise connectors (preview)">
+              <div className="rg-enterprise-lite__card">
+                <div className="rg-enterprise-lite__card-head">
+                  <span className="rg-enterprise-lite__card-title">Service Bridge</span>
+                  <span className="rg-badge rg-badge--sync-ready" title="Lite UI — no sync API wired yet">
+                    Sync Ready
+                  </span>
+                </div>
+                <p className="field-hint rg-enterprise-lite__hint">
+                  Lite placeholder for ERP / CMMS handoff. Full connector provisioning is not enabled in this build.
+                </p>
+              </div>
+              <div className="rg-enterprise-lite__card">
+                <div className="rg-enterprise-lite__card-head">
+                  <span className="rg-enterprise-lite__card-title">BIM / Digital Twin</span>
+                </div>
+                <div className="rg-enterprise-lite__upload" aria-disabled="true">
+                  <span className="rg-enterprise-lite__upload-label">Upload model for clash detection</span>
+                  <span className="field-hint rg-enterprise-lite__hint">
+                    UI-only — no file transfer. Use JSON import below for the live clash bridge, or wait for Digital Twin
+                    API.
+                  </span>
+                </div>
+              </div>
+            </div>
+
+            <h4 className="rg-service-bridge__subtitle">BIM JSON cross-reference &amp; maintenance</h4>
             <p className="field-hint">
-              <strong>BIM:</strong> paste a Revit-style JSON export. The backend cross-references your archived{" "}
+              <strong>BIM (JSON):</strong> paste a Revit-style JSON export. The backend cross-references your archived{" "}
               <strong>Universal Scout</strong> snapshot for that ZIP and flags <strong>clash zones</strong> where conduit
               encroaches on typical gas-relief / meter clearance envelopes for that area. Seed the archive by running
               compliance research once per ZIP before BIM import. Matching ZIP merges into the next research automatically.
@@ -2560,7 +2620,7 @@ export default function App() {
                 <button
                   type="button"
                   className="rg-btn rg-btn--primary rg-btn--compact rg-plan-action-btn rg-plan-action-btn--package"
-                  title="Build a Dallas Building Inspection-style permit worksheet PDF (includes Oncor / zoning notices for 722 Munger Ave)"
+                  title="POST a Dallas-formatted permit worksheet (722 Munger: setback, May 2025 parking reform, Oncor, $167.00 2026 sync)"
                   disabled={pdfExportBlocked || permitPackageBusy}
                   onClick={handleGeneratePermitPackage}
                 >

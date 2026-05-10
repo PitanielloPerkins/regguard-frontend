@@ -611,6 +611,118 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   font-weight: 700;
 }
 
+.rg-service-bridge__subtitle {
+  margin: 0.85rem 0 0.4rem;
+  font-size: 0.88rem;
+  font-weight: 700;
+  color: var(--rg-accent-dim);
+}
+
+.rg-enterprise-lite {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(240px, 1fr));
+  gap: 0.65rem;
+  margin-bottom: 0.75rem;
+}
+
+.rg-enterprise-lite__card {
+  border: 1px solid var(--rg-border);
+  border-radius: 10px;
+  padding: 0.65rem 0.75rem;
+  background: rgba(15, 33, 112, 0.35);
+}
+
+.rg-enterprise-lite__card-head {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.45rem;
+  margin-bottom: 0.35rem;
+}
+
+.rg-enterprise-lite__card-title {
+  font-weight: 800;
+  font-size: 0.82rem;
+  color: var(--rg-accent);
+  letter-spacing: 0.02em;
+}
+
+.rg-badge {
+  display: inline-flex;
+  align-items: center;
+  font-size: 0.65rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  padding: 0.2rem 0.45rem;
+  border-radius: 999px;
+  border: 1px solid transparent;
+}
+
+.rg-badge--sync-ready {
+  color: #1b5e20;
+  background: rgba(165, 214, 167, 0.95);
+  border-color: rgba(129, 199, 132, 0.9);
+}
+
+.rg-enterprise-lite__hint {
+  margin: 0;
+  font-size: 0.68rem !important;
+}
+
+.rg-enterprise-lite__upload {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.35rem;
+}
+
+.rg-enterprise-lite__upload-label {
+  display: block;
+  text-align: center;
+  font-size: 0.78rem;
+  font-weight: 700;
+  color: var(--rg-muted);
+  padding: 0.85rem 0.65rem;
+  border: 1.5px dashed var(--rg-border);
+  border-radius: 8px;
+  background: rgba(4, 15, 73, 0.25);
+}
+
+.rg-munger-intel {
+  margin-top: 0.65rem;
+  padding: 0.65rem 0.75rem;
+  border-radius: 10px;
+  border: 1px solid rgba(255, 107, 107, 0.45);
+  background: rgba(255, 107, 107, 0.1);
+}
+
+.rg-munger-intel__title {
+  font-size: 0.78rem;
+  font-weight: 800;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--rg-danger);
+  margin-bottom: 0.45rem;
+}
+
+.rg-munger-intel__list {
+  margin: 0;
+  padding-left: 1.1rem;
+  font-size: 0.78rem;
+  line-height: 1.45;
+  color: var(--rg-text);
+}
+
+.rg-munger-intel__list li {
+  margin-bottom: 0.35rem;
+}
+
+.rg-munger-intel__list li:last-child {
+  margin-bottom: 0;
+}
+
 .rg-service-bridge__row {
   display: flex;
   flex-wrap: wrap;

@@ -799,9 +799,11 @@ class _PermitPackagePayload(BaseModel):
 @app.post("/permit-package")
 def permit_package_pdf(body: _PermitPackagePayload) -> Response:
     """
-    Build a Dallas Building Inspection–style permit worksheet PDF from research context.
+    Build a Dallas Building Inspection-style permit worksheet PDF from research context (address, scope, fees, trade).
 
-    Includes **Oncor** and **zoning variance** warnings when the job site address matches **722 Munger Ave**, Dallas.
+    Always includes the **USD $167.00** Dallas base building permit planning line (2026 Reg Guard sync).
+    For **722 Munger Ave**, adds **setback (3 ft vs 5 ft / BDA)**, **May 2025 parking reform (20 units / ADU)**,
+    **Oncor**, and land-use notes.
     """
     pdf_bytes = build_permit_package_pdf(
         site_address=body.site_address,
