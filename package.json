@@ -1,7 +1,11 @@
 {
   "name": "reg-guard",
   "private": true,
+  "description": "Reg Guard — agentic compliance assistant (FastAPI backend + Vite/React frontend)",
   "scripts": {
-    "dev": "./start.sh"
+    "dev": "./start.sh",
+    "install:frontend": "npm install --prefix frontend",
+    "build:frontend": "npm run build --prefix frontend",
+    "preview:frontend": "npm run preview --prefix frontend"
   }
 }
