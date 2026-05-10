@@ -534,10 +534,11 @@ export default function App() {
     return Boolean(selection?.formattedAddress && selection.zip && !busy);
   }, [selection, busy]);
 
+  /** Dallas Munger parcel intel only when the live job-site text contains the word "munger"; cleared/empty search hides it. */
   const showMungerIntelPanel = useMemo(() => {
     const probe =
       (selection?.formattedAddress ?? "").trim() || siteAddressSearch.trim();
-    return /\bmunger\b/i.test(probe);
+    return probe.length > 0 && /\bmunger\b/i.test(probe);
   }, [selection?.formattedAddress, siteAddressSearch]);
 
   const followUpSourceText = useMemo(() => {
@@ -1342,6 +1343,11 @@ export default function App() {
   const onAddressSelection = useCallback((sel: AddressSelection | null) => {
     cancelPendingLocateApplyRef.current = true;
     setSelection(sel);
+    if (sel == null) {
+      queueMicrotask(() => {
+        setSiteAddressSearch(addressRef.current?.getInputValue() ?? "");
+      });
+    }
   }, []);
 
   const runDeviceLocate = useCallback(
