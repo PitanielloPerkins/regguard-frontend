@@ -414,6 +414,8 @@ export default function App() {
   const permitPackageBlobUrlRef = useRef<string | null>(null);
 
   const [selection, setSelection] = useState<AddressSelection | null>(null);
+  /** Places widget text — keeps Munger-specific UI in sync while typing (selection is often null mid-edit). */
+  const [siteAddressSearch, setSiteAddressSearch] = useState("");
   const [jobDescription, setJobDescription] = useState("");
   const [searchLimit, setSearchLimit] = useState(5);
   const [scoutTrade, setScoutTrade] = useState<ScoutTradeId>("electrician");
@@ -531,6 +533,12 @@ export default function App() {
   const canSubmit = useMemo(() => {
     return Boolean(selection?.formattedAddress && selection.zip && !busy);
   }, [selection, busy]);
+
+  const showMungerIntelPanel = useMemo(() => {
+    const probe =
+      (selection?.formattedAddress ?? "").trim() || siteAddressSearch.trim();
+    return /\bmunger\b/i.test(probe);
+  }, [selection?.formattedAddress, siteAddressSearch]);
 
   const followUpSourceText = useMemo(() => {
     const stream = proactiveSummaryBuffer.trim();
@@ -703,6 +711,7 @@ export default function App() {
     setLocatingMe(false);
 
     setSelection(null);
+    setSiteAddressSearch("");
     setJobDescription("");
     setImageFile(null);
     setSearchLimit(5);
@@ -729,6 +738,9 @@ export default function App() {
   }, [resetOutput]);
 
   const handleRefreshApp = useCallback(() => {
+    setSelection(null);
+    setSiteAddressSearch("");
+    addressRef.current?.clearForNewJob();
     window.location.reload();
   }, []);
 
@@ -1968,43 +1980,48 @@ export default function App() {
               bulletins before omitting stalls on cover sheets.
             </li>
           </ul>
-          <div
-            id="rg-munger-intel-dashboard"
-            className="rg-munger-intel rg-munger-intel--dashboard"
-            role="region"
-            aria-labelledby="rg-munger-intel-dashboard-label"
-          >
-            <div id="rg-munger-intel-dashboard-label" className="rg-munger-intel__title">
-              722 Munger Ave — intelligence panel (Dallas, TX)
-            </div>
-            <ul className="rg-munger-intel__list">
-              <li>
-                <strong>3 ft vs 5 ft setback:</strong> a <strong>3 ft</strong> rear setback read often still fails the more
-                typical <strong>5 ft</strong> rear-yard building line for many Dallas residential-style lots — verify exact
-                zoning district, Form District, and adopted yard tables before enclosure or cladding.
-              </li>
-              <li>
-                <strong>BDA variance alert:</strong> if the improvement cannot meet codified setbacks or use standards, a{" "}
-                <strong>Board of Adjustment (BDA)</strong> variance or other relief may be required before certificate of
-                occupancy or final release.
-              </li>
-              <li>
-                <strong>May 2025 parking reform:</strong> Dallas reforms exempt many small projects from legacy stall minima —{" "}
-                <strong>20 dwelling units or fewer</strong> (including typical <strong>ADU</strong> scopes) generally have{" "}
-                <strong>no minimum off-street parking</strong>. Confirm PD overlays, TIF/overlay conditions, and current Planning
-                guidance before omitting stalls.
-              </li>
-              <li>
-                <strong>Permit fee (2026 sync):</strong> plan for the Dallas{" "}
-                <strong>${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD}</strong> minimum trade permit bundle (incl. administrative fees)
-                before AHJ verification.
-              </li>
-            </ul>
-          </div>
-          <p className="field-hint rg-dallas-dashboard__foot">
-            This reference parcel stays pinned on the Dallas dashboard. Pick <strong>722 Munger Ave, Dallas, TX</strong> under Job
-            site when you want the same context on permit PDFs and research payloads.
-          </p>
+          {showMungerIntelPanel ? (
+            <>
+              <div
+                id="rg-munger-intel-dashboard"
+                className="rg-munger-intel rg-munger-intel--dashboard"
+                role="region"
+                aria-labelledby="rg-munger-intel-dashboard-label"
+              >
+                <div id="rg-munger-intel-dashboard-label" className="rg-munger-intel__title">
+                  722 Munger Ave — intelligence panel (Dallas, TX)
+                </div>
+                <ul className="rg-munger-intel__list">
+                  <li>
+                    <strong>3 ft vs 5 ft setback:</strong> a <strong>3 ft</strong> rear setback read often still fails the more
+                    typical <strong>5 ft</strong> rear-yard building line for many Dallas residential-style lots — verify exact
+                    zoning district, Form District, and adopted yard tables before enclosure or cladding.
+                  </li>
+                  <li>
+                    <strong>BDA variance alert:</strong> if the improvement cannot meet codified setbacks or use standards, a{" "}
+                    <strong>Board of Adjustment (BDA)</strong> variance or other relief may be required before certificate of
+                    occupancy or final release.
+                  </li>
+                  <li>
+                    <strong>May 2025 parking reform:</strong> Dallas reforms exempt many small projects from legacy stall minima —{" "}
+                    <strong>20 dwelling units or fewer</strong> (including typical <strong>ADU</strong> scopes) generally have{" "}
+                    <strong>no minimum off-street parking</strong>. Confirm PD overlays, TIF/overlay conditions, and current Planning
+                    guidance before omitting stalls.
+                  </li>
+                  <li>
+                    <strong>Permit fee (2026 sync):</strong> plan for the Dallas{" "}
+                    <strong>${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD}</strong> minimum trade permit bundle (incl. administrative fees)
+                    before AHJ verification.
+                  </li>
+                </ul>
+              </div>
+              <p className="field-hint rg-dallas-dashboard__foot">
+                This reference parcel stays pinned on the Dallas dashboard. Pick{" "}
+                <strong>722 Munger Ave, Dallas, TX</strong> under Job site when you want the same context on permit PDFs and research
+                payloads.
+              </p>
+            </>
+          ) : null}
         </section>
 
         <section className="rg-panel">
@@ -2026,6 +2043,7 @@ export default function App() {
                   ref={addressRef}
                   disabled={busy || locatingMe}
                   onSelection={onAddressSelection}
+                  onAddressSearchChange={setSiteAddressSearch}
                 />
               </div>
               <button

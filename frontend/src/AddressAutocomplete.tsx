@@ -29,6 +29,8 @@ export type AddressAutocompleteHandle = {
 type Props = {
   disabled?: boolean;
   onSelection: (sel: AddressSelection | null) => void;
+  /** Fires on widget input / selection / clear so parents can gate UI on raw search text. */
+  onAddressSearchChange?: (value: string) => void;
 };
 
 /** Loads from `frontend/.env` via Vite (`import.meta.env.VITE_GOOGLE_MAPS_API_KEY`); echoed in `index.html` preload. */
@@ -70,12 +72,14 @@ export function mapsAutocompleteEnabled(): boolean {
 }
 
 export const AddressAutocomplete = forwardRef<AddressAutocompleteHandle, Props>(
-  function AddressAutocomplete({ disabled, onSelection }, ref) {
+  function AddressAutocomplete({ disabled, onSelection, onAddressSearchChange }, ref) {
     const hostRef = useRef<HTMLDivElement>(null);
     const widgetRef = useRef<google.maps.places.PlaceAutocompleteElement | null>(null);
     const lastCommittedAddr = useRef<string | null>(null);
     const onSelRef = useRef(onSelection);
     onSelRef.current = onSelection;
+    const onAddrSearchRef = useRef(onAddressSearchChange);
+    onAddrSearchRef.current = onAddressSearchChange;
     const reactId = useId();
     const hostId = `rg-addr-host-${reactId.replace(/:/g, "")}`;
     const key = mapsKey();
@@ -88,6 +92,7 @@ export const AddressAutocomplete = forwardRef<AddressAutocompleteHandle, Props>(
         if (w && typeof w.value === "string") {
           w.value = sel.formattedAddress;
         }
+        onAddrSearchRef.current?.(sel.formattedAddress);
       },
       getInputValue() {
         const w = widgetRef.current as unknown as { value?: string } | null;
@@ -100,6 +105,7 @@ export const AddressAutocomplete = forwardRef<AddressAutocompleteHandle, Props>(
           w.value = "";
         }
         onSelRef.current(null);
+        onAddrSearchRef.current?.("");
       },
     }));
 
@@ -174,6 +180,12 @@ export const AddressAutocomplete = forwardRef<AddressAutocompleteHandle, Props>(
         el.classList.add("rg-address-autocomplete-widget");
         el.id = hostId;
 
+        const emitSearch = () => {
+          const w = el as unknown as { value?: string };
+          const raw = typeof w.value === "string" ? w.value : "";
+          onAddrSearchRef.current?.(raw);
+        };
+
         const onSelect = async (ev: Event) => {
           type SelEv = Partial<{
             placePrediction?: google.maps.places.PlacePrediction;
@@ -189,6 +201,7 @@ export const AddressAutocomplete = forwardRef<AddressAutocompleteHandle, Props>(
           if (!place) {
             lastCommittedAddr.current = null;
             onSelRef.current(null);
+            emitSearch();
             return;
           }
           try {
@@ -198,6 +211,7 @@ export const AddressAutocomplete = forwardRef<AddressAutocompleteHandle, Props>(
           } catch {
             lastCommittedAddr.current = null;
             onSelRef.current(null);
+            emitSearch();
             return;
           }
           const formatted = (place.formattedAddress || "").trim();
@@ -205,6 +219,7 @@ export const AddressAutocomplete = forwardRef<AddressAutocompleteHandle, Props>(
           if (!formatted) {
             lastCommittedAddr.current = null;
             onSelRef.current(null);
+            emitSearch();
             return;
           }
           const zip =
@@ -213,6 +228,7 @@ export const AddressAutocomplete = forwardRef<AddressAutocompleteHandle, Props>(
           if (!zip) {
             lastCommittedAddr.current = null;
             onSelRef.current(null);
+            emitSearch();
             return;
           }
           const cityFromPlace = extractLocalityFromPlaceComponents(comp);
@@ -222,18 +238,22 @@ export const AddressAutocomplete = forwardRef<AddressAutocompleteHandle, Props>(
             zip,
             ...(cityFromPlace ? { city: cityFromPlace } : {}),
           });
+          onAddrSearchRef.current?.(formatted);
         };
 
         const onInput = () => {
-          const v = el.value.trim();
+          const raw = typeof el.value === "string" ? el.value : "";
+          const v = raw.trim();
           if (
             lastCommittedAddr.current !== null &&
             v === lastCommittedAddr.current.trim()
           ) {
+            onAddrSearchRef.current?.(raw);
             return;
           }
           lastCommittedAddr.current = null;
           onSelRef.current(null);
+          onAddrSearchRef.current?.(raw);
         };
 
         el.addEventListener("gmp-select", onSelect as EventListener);
