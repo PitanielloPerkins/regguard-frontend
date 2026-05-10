@@ -8,3 +8,4 @@ anthropic
 google-generativeai
 Pillow
 fpdf2
+pypdfform

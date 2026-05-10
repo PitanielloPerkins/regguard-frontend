@@ -2006,9 +2006,10 @@ export default function App() {
                     <strong>Board of Adjustment (BDA)</strong> variance may be required if you cannot comply.
                   </li>
                   <li>
-                    <strong>Parking reform (May 2025):</strong> projects with <strong>20 dwelling units or fewer</strong>{" "}
-                    (including many <strong>ADU</strong> scopes) often have <strong>no minimum off-street parking</strong>{" "}
-                    under adopted Dallas reform — confirm overlays and PD conditions with Planning.
+                    <strong>Parking reform victory (May 2025):</strong> Dallas reforms deliver a practical win for small
+                    projects — <strong>20 dwelling units or fewer</strong> (including many <strong>ADU</strong> scopes)
+                    typically face <strong>no minimum off-street parking</strong>. Confirm overlays and PD conditions with
+                    Planning before omitting stalls.
                   </li>
                   <li>
                     <strong>Permit fee (2026 sync):</strong> plan for the Dallas{" "}
@@ -2238,7 +2239,7 @@ export default function App() {
                   <span className="rg-enterprise-lite__card-title">BIM / Digital Twin</span>
                 </div>
                 <div className="rg-enterprise-lite__upload" aria-disabled="true">
-                  <span className="rg-enterprise-lite__upload-label">Upload model for clash detection</span>
+                  <span className="rg-enterprise-lite__upload-label">Upload Model</span>
                   <span className="field-hint rg-enterprise-lite__hint">
                     UI-only — no file transfer. Use JSON import below for the live clash bridge, or wait for Digital Twin
                     API.
@@ -2747,9 +2748,9 @@ export default function App() {
             ) : (
               <>
                 <p className="field-hint rg-visual-audit-intro">
-                  Bounding boxes from Reality Capture (Gemini). ZIP 78704: automated Austin gas-meter vs electrical 36-inch
-                  clearance geometry runs only when the site ZIP is 78704 and a gas meter appears in labels.
-                  Red / green reflect heuristic clearance on gas + electrical pairs; amber when ambiguous.
+                  Bounding boxes from Reality Capture (Gemini). On supported pilot corridors, Reg Guard runs a
+                  gas-meter versus electrical clearance heuristic when labels include a gas meter; red / green reflect
+                  spacing heuristics on paired equipment, amber when ambiguous.
                 </p>
                 <div className="rg-visual-audit-frame">
                   <img src={photoObjectUrl} alt="Job-site photo for visual audit" className="rg-visual-audit-img" />
@@ -2791,7 +2792,7 @@ export default function App() {
                 </div>
                 {visualAudit?.austin_clearance?.applies ? (
                   <div className="rg-visual-audit-clearance" role="status">
-                    <strong>Austin 78704 gas clearance</strong>
+                    <strong>Gas-meter clearance (pilot corridor)</strong>
                     {visualAudit.austin_clearance.edge_distance_px != null ? (
                       <span>
                         {" "}
@@ -2817,7 +2818,7 @@ export default function App() {
                   </div>
                 ) : visualAudit ? (
                   <p className="field-hint">
-                    No Austin 78704 gas-meter clearance block for this run (different ZIP, no gas meter label, or
+                    No pilot gas-meter clearance readout for this run (ZIP outside pilot corridor, no gas meter label, or
                     incomplete geometry).
                   </p>
                 ) : (
@@ -2883,7 +2884,7 @@ export default function App() {
               rows={4}
               maxLength={2000}
               value={inspectorNoteDraft}
-              placeholder='e.g. "Inspector Smith in Austin is strict on torque marks"'
+              placeholder='e.g. "Inspector Smith is strict on torque marks"'
               onChange={(e) => setInspectorNoteDraft(e.target.value)}
               disabled={inspectorNoteSaving}
             />

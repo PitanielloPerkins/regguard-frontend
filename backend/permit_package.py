@@ -199,16 +199,16 @@ def build_permit_package_pdf(
         pdf.ln(1)
 
         pdf.set_font("Helvetica", "B", 9)
-        pdf.multi_cell(col_w, 5, "Parking reform (May 2025) - small projects / ADU")
+        pdf.multi_cell(col_w, 5, "Parking reform victory (May 2025) - small projects / ADU")
         pdf.set_font("Helvetica", "", 9)
         pdf.multi_cell(
             col_w,
             5,
             _ascii_pdf_text(
-                "Per Dallas parking reform adopted May 2025, developments with 20 dwelling units or fewer "
-                "(including typical accessory dwelling unit / ADU scenarios) generally have no minimum off-street "
-                "parking requirement. Confirm applicability against your specific zoning, PD overlays, and any "
-                "TIF/overlay conditions with Dallas Planning before omitting stalls on cover sheets."
+                "Parking reform victory (May 2025): Dallas reforms exempt many small projects from legacy stall minima — "
+                "developments with 20 dwelling units or fewer (including typical ADU scenarios) generally have no minimum "
+                "off-street parking. Confirm applicability against zoning, PD overlays, and TIF/overlay conditions with "
+                "Dallas Planning before omitting stalls on cover sheets."
             ),
         )
         pdf.ln(1)
