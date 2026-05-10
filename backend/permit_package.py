@@ -16,6 +16,7 @@ from fpdf import FPDF  # fpdf2 on PyPI — ``import fpdf`` is the supported entr
 from calculations import permit_draft_calculation_response
 
 # Dallas Building Inspection — minimum trade permit (incl. admin); rendered via fpdf2 below.
+# Kept in sync with ``frontend/src/App.tsx`` (REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD) and ``main`` digest prompts.
 DALLAS_MIN_TRADE_PERMIT_USD = 167.00
 
 # Long action-plan excerpts slow regex in ``permit_draft_calculation_response`` — cap input for the NEC snapshot only.
