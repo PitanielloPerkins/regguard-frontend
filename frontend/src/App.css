@@ -711,6 +711,49 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   border-color: rgba(129, 199, 132, 0.9);
 }
 
+.rg-badge--lite {
+  color: #1a0f00;
+  background: var(--rg-value-badge);
+  border-color: rgba(212, 148, 0, 0.95);
+}
+
+.rg-dallas-dashboard {
+  border-color: rgba(139, 162, 255, 0.45);
+  background: linear-gradient(
+    145deg,
+    rgba(15, 33, 112, 0.72) 0%,
+    rgba(10, 24, 82, 0.94) 55%,
+    rgba(7, 18, 70, 0.98) 100%
+  );
+}
+
+.rg-dallas-dashboard__lead {
+  margin: 0 0 0.75rem;
+  font-size: 0.82rem;
+  color: var(--rg-muted);
+  line-height: 1.45;
+}
+
+.rg-dallas-dashboard__list {
+  margin: 0;
+  padding-left: 1.15rem;
+  font-size: 0.8rem;
+  line-height: 1.5;
+  color: var(--rg-text);
+}
+
+.rg-dallas-dashboard__list li {
+  margin-bottom: 0.42rem;
+}
+
+.rg-dallas-dashboard__list li:last-child {
+  margin-bottom: 0;
+}
+
+.rg-dallas-dashboard__foot {
+  margin: 0.85rem 0 0 !important;
+}
+
 .rg-enterprise-lite__hint {
   margin: 0;
   font-size: 0.68rem !important;

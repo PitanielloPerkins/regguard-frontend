@@ -61,7 +61,7 @@ from scraper import (
     normalize_us_zip,
 )
 from bim_sync import run_bim_sync_bridge
-from permit_package import build_permit_package_pdf
+from permit_package import DALLAS_MIN_TRADE_PERMIT_USD, build_permit_package_pdf
 from calculations import permit_draft_calculation_response
 from community_gotchas import append_note, list_notes_for_zip
 from cost_tracking import log_api_usage
@@ -115,7 +115,7 @@ def _ensure_bottom_line_section(summary_md: str, *, ahj_hint: str = "") -> str:
     return f"{text}\n\n### The Bottom Line\n\n{sentences}\n"
 
 # Sync reference: Dallas Building Inspection — minimum trade permit (incl. admin) used in digest/fallback prompts.
-_DALLAS_TX_MIN_TRADE_PERMIT_USD = 167.00
+_DALLAS_TX_MIN_TRADE_PERMIT_USD = float(DALLAS_MIN_TRADE_PERMIT_USD)
 
 _BACKEND_DIR = Path(__file__).resolve().parent
 _BACKEND_BOOT_ID = uuid.uuid4().hex[:10]
@@ -816,6 +816,9 @@ def _permit_package_sync_build(body: _PermitPackagePayload) -> bytes:
 async def permit_package_pdf(body: _PermitPackagePayload) -> Response:
     """
     Build a Dallas Building Inspection-style permit worksheet PDF from research context (address, scope, fees, trade).
+
+    Rendered with **fpdf2** (``fpdf.FPDF``) via ``permit_package.build_permit_package_pdf``; fee text follows
+    ``permit_package.DALLAS_MIN_TRADE_PERMIT_USD`` (minimum trade permit incl. admin — Reg Guard planning sync).
 
     Runs the PDF builder in a thread pool so the async event loop is not blocked (avoids dev-proxy / UI stalls).
     Returns **504** if generation exceeds ``_PERMIT_PACKAGE_BUILD_TIMEOUT_SEC``.

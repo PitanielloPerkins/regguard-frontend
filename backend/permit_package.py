@@ -3,7 +3,7 @@ Reg Guard — Dallas Building Inspection–style permit application worksheet (P
 
 Maps research context (address, scope, fees, trade) into a structured intake document.
 For **722 Munger Ave**, adds **setback**, **May 2025 parking reform**, **Oncor**, and **BDA / zoning** notices.
-All Dallas worksheets include the **USD $167.00** base building permit planning line (2026 Reg Guard sync).
+All Dallas worksheets include the **USD $167.00** minimum trade permit planning line (2026 Reg Guard sync, incl. admin).
 """
 from __future__ import annotations
 
@@ -11,9 +11,12 @@ import re
 from datetime import datetime, timezone
 from typing import Any, Dict
 
-from fpdf import FPDF  # fpdf2 (PyPI) exposes the legacy ``fpdf`` package name
+from fpdf import FPDF  # fpdf2 on PyPI — ``import fpdf`` is the supported entry point
 
 from calculations import permit_draft_calculation_response
+
+# Dallas Building Inspection — minimum trade permit (incl. admin); rendered via fpdf2 below.
+DALLAS_MIN_TRADE_PERMIT_USD = 167.00
 
 # Long action-plan excerpts slow regex in ``permit_draft_calculation_response`` — cap input for the NEC snapshot only.
 _CALC_SCOPE_CHAR_MAX = 8192
@@ -139,16 +142,13 @@ def build_permit_package_pdf(
     pdf.set_font("Helvetica", "B", 10)
     pdf.multi_cell(col_w, 5, "IV. PERMIT FEES (planning figures - confirm with AHJ)")
     pdf.set_font("Helvetica", "", 9)
-    pdf.multi_cell(
-        col_w,
-        5,
-        _ascii_pdf_text(
-            "City of Dallas base building permit (Reg Guard 2026 planning sync): USD $167.00. "
-            "This is the standard minimum trade permit bundle including administrative fees used in Reg Guard runbooks; "
-            "confirm line items, tiers, and surcharges on the official City of Dallas Development Services / "
-            "Building Inspection fee schedule before posting payment."
-        ),
+    fee_line = (
+        f"City of Dallas minimum trade permit (Reg Guard 2026 planning sync): USD ${DALLAS_MIN_TRADE_PERMIT_USD:.2f}. "
+        "This is the standard minimum trade permit bundle including administrative fees used in Reg Guard runbooks; "
+        "confirm line items, tiers, and surcharges on the official City of Dallas Development Services / "
+        "Building Inspection fee schedule before posting payment."
     )
+    pdf.multi_cell(col_w, 5, _ascii_pdf_text(fee_line))
     if (fee_summary or "").strip():
         pdf.multi_cell(col_w, 5, _ascii_pdf_text(fee_summary.strip()))
     if _trade_is_hvac_mechanical(trade):
@@ -158,7 +158,8 @@ def build_permit_package_pdf(
             _ascii_pdf_text(
                 "HVAC / mechanical (Dallas): confirm mechanical trade permit, plan review, and IMC-related "
                 "fee line items on the official City of Dallas Development Services fee schedule. Reg Guard "
-                "still anchors to the USD $167.00 trade-permit planning floor until the AHJ itemizes mechanical adders."
+                f"still anchors to the USD ${DALLAS_MIN_TRADE_PERMIT_USD:.2f} "
+                "trade-permit planning floor until the AHJ itemizes mechanical adders."
             ),
         )
     pdf.ln(1)

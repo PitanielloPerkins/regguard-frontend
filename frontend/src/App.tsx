@@ -1920,6 +1920,51 @@ export default function App() {
       </header>
 
       <div className="app-grid">
+        <section
+          className="rg-panel rg-dallas-dashboard"
+          style={{ gridColumn: "1 / -1" }}
+          aria-label="Dallas building dashboard"
+        >
+          <h2>Dallas dashboard</h2>
+          <p className="rg-dallas-dashboard__lead">
+            City of Dallas workflow defaults: electrical / trade permits, Oncor utility sequencing, and zoning overlays
+            that matter on tight infill parcels (including Deep Ellum and downtown-edge lots).
+          </p>
+          <ul className="rg-dallas-dashboard__list">
+            <li>
+              <strong>Permit fee (2026 sync):</strong> plan for the Dallas{" "}
+              <strong>${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD}</strong> minimum <strong>trade</strong> permit bundle including{" "}
+              <strong>administrative fees</strong> — confirm line items on the official City of Dallas Development Services /
+              Building Inspection fee schedule.
+            </li>
+            <li>
+              <strong>Oncor coordination:</strong> mandatory scheduling / notification for{" "}
+              <strong>service disconnect</strong>, <strong>meter seal</strong> release, pulls, and other utility-side work
+              before energized work — a city permit does not replace Oncor field rules.
+            </li>
+            <li>
+              <strong>3 ft vs 5 ft setbacks:</strong> crews often anchor on a ~<strong>3 ft</strong> rear setback read that
+              still fails the more typical <strong>5 ft</strong> rear-yard building-line expectation in many districts — stake,
+              survey, and verify yard tables before masonry or foundation.
+            </li>
+            <li>
+              <strong>BDA variance alert:</strong> when yard, height, or use standards do not clear codified tables, a{" "}
+              <strong>Board of Adjustment</strong> variance or other zoning relief may be required before certificate of
+              occupancy — integrate Planning with Building milestones early.
+            </li>
+            <li>
+              <strong>May 2025 parking reform:</strong> reforms exempt many small projects from legacy stall minima — for
+              example, developments with <strong>20 dwelling units or fewer</strong> (including common <strong>ADU</strong>{" "}
+              paths) may have <strong>no minimum off-street parking</strong>. Confirm PD overlays, TIF districts, and Planning
+              bulletins before omitting stalls on cover sheets.
+            </li>
+          </ul>
+          <p className="field-hint rg-dallas-dashboard__foot">
+            Choose <strong>722 Munger Ave, Dallas, TX</strong> in the address field to open the{" "}
+            <strong>722 Munger Ave intelligence</strong> panel under Job site with the same alerts spelled out for that parcel.
+          </p>
+        </section>
+
         <section className="rg-panel">
           <h2>Job site</h2>
           {!mapsOk ? (
@@ -1997,24 +2042,29 @@ export default function App() {
             {is722MungerAve(meta?.site || selection?.formattedAddress) ? (
               <div className="rg-munger-intel" role="region" aria-labelledby="rg-munger-intel-label">
                 <div id="rg-munger-intel-label" className="rg-munger-intel__title">
-                  722 Munger Ave — Dallas intelligence
+                  722 Munger Ave — intelligence panel (Dallas, TX)
                 </div>
                 <ul className="rg-munger-intel__list">
                   <li>
-                    <strong>Setback alert:</strong> a <strong>3 ft</strong> rear setback likely conflicts with the more
-                    typical <strong>5 ft</strong> Dallas rear-yard expectation; verify your district and yard tables. A{" "}
-                    <strong>Board of Adjustment (BDA)</strong> variance may be required if you cannot comply.
+                    <strong>3 ft vs 5 ft setback:</strong> a <strong>3 ft</strong> rear setback read often still fails the
+                    more typical <strong>5 ft</strong> rear-yard building line for many Dallas residential-style lots —
+                    verify exact zoning district, Form District, and adopted yard tables before enclosure or cladding.
                   </li>
                   <li>
-                    <strong>Parking reform victory (May 2025):</strong> Dallas reforms deliver a practical win for small
-                    projects — <strong>20 dwelling units or fewer</strong> (including many <strong>ADU</strong> scopes)
-                    typically face <strong>no minimum off-street parking</strong>. Confirm overlays and PD conditions with
-                    Planning before omitting stalls.
+                    <strong>BDA variance alert:</strong> if the improvement cannot meet codified setbacks or use standards, a{" "}
+                    <strong>Board of Adjustment (BDA)</strong> variance or other relief may be required before certificate of
+                    occupancy or final release.
+                  </li>
+                  <li>
+                    <strong>May 2025 parking reform:</strong> Dallas reforms exempt many small projects from legacy stall
+                    minima — <strong>20 dwelling units or fewer</strong> (including typical <strong>ADU</strong> scopes) generally
+                    have <strong>no minimum off-street parking</strong>. Confirm PD overlays, TIF/overlay conditions, and current
+                    Planning guidance before omitting stalls.
                   </li>
                   <li>
                     <strong>Permit fee (2026 sync):</strong> plan for the Dallas{" "}
-                    <strong>${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD}</strong> base building permit bundle (incl.
-                    administrative fees) before AHJ verification.
+                    <strong>${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD}</strong> minimum trade permit bundle (incl. administrative
+                    fees) before AHJ verification.
                   </li>
                 </ul>
               </div>
@@ -2226,8 +2276,8 @@ export default function App() {
               <div className="rg-enterprise-lite__card">
                 <div className="rg-enterprise-lite__card-head">
                   <span className="rg-enterprise-lite__card-title">Service Bridge</span>
-                  <span className="rg-badge rg-badge--sync-ready" title="Lite UI — no sync API wired yet">
-                    Sync Ready
+                  <span className="rg-badge rg-badge--lite" title="Lite — connector API not wired in this build">
+                    Lite
                   </span>
                 </div>
                 <p className="field-hint rg-enterprise-lite__hint">
@@ -2237,6 +2287,9 @@ export default function App() {
               <div className="rg-enterprise-lite__card">
                 <div className="rg-enterprise-lite__card-head">
                   <span className="rg-enterprise-lite__card-title">BIM / Digital Twin</span>
+                  <span className="rg-badge rg-badge--lite" title="Lite — model upload is UI-only; use JSON import below">
+                    Lite
+                  </span>
                 </div>
                 <div className="rg-enterprise-lite__upload" aria-disabled="true">
                   <span className="rg-enterprise-lite__upload-label">Upload Model</span>
