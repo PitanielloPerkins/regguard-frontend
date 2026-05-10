@@ -14,8 +14,8 @@ export default defineConfig({
   server: {
     /** IPv4 loopback — avoids ::1 / dual-stack blank-screen issues in some setups. */
     host: '127.0.0.1',
-    port: 5173,
-    strictPort: false,
+    port: 5175,
+    strictPort: true,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',

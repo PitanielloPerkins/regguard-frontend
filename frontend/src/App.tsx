@@ -1631,15 +1631,26 @@ export default function App() {
   }, [backendStale]);
 
   const handleReviewActionPlan = useCallback(() => {
-    const el = actionPlanPanelRef.current;
-    if (!el) {
-      return;
-    }
-    el.scrollIntoView({ behavior: "smooth", block: "start" });
-    el.classList.remove("rg-plan-panel--pulse");
-    void el.offsetWidth;
-    el.classList.add("rg-plan-panel--pulse");
-    window.setTimeout(() => el.classList.remove("rg-plan-panel--pulse"), 1400);
+    setResultsTab("plan");
+    const run = () => {
+      const panel = actionPlanPanelRef.current;
+      const scrollTarget =
+        document.getElementById("rg-action-plan-header") ??
+        document.getElementById("contractor-action-plan");
+      const pulseEl = panel ?? document.getElementById("contractor-action-plan");
+      if (scrollTarget) {
+        scrollTarget.scrollIntoView({ behavior: "smooth", block: "start" });
+      }
+      if (pulseEl) {
+        pulseEl.classList.remove("rg-plan-panel--pulse");
+        void pulseEl.offsetWidth;
+        pulseEl.classList.add("rg-plan-panel--pulse");
+        window.setTimeout(() => pulseEl.classList.remove("rg-plan-panel--pulse"), 1400);
+      }
+    };
+    window.requestAnimationFrame(() => {
+      window.requestAnimationFrame(run);
+    });
   }, []);
 
   const handleAcceptActionPlan = useCallback(async () => {
@@ -2685,7 +2696,7 @@ export default function App() {
                 </span>
               </label>
             ) : null}
-            <div className="rg-action-plan-header">
+            <div id="rg-action-plan-header" className="rg-action-plan-header">
               <strong className="rg-subheading">Contractor action plan</strong>
               <span className="rg-plan-actions">
                 <button

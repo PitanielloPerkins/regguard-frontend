@@ -230,6 +230,8 @@ app.add_middleware(
         "http://localhost:5173",
         "http://127.0.0.1:5174",
         "http://localhost:5174",
+        "http://127.0.0.1:5175",
+        "http://localhost:5175",
     ],
     allow_origin_regex=r"https?://(127\.0\.0\.1|localhost)(:\d+)?$",
     allow_credentials=True,
@@ -248,7 +250,7 @@ app.add_middleware(
 def _research_sse_cors_headers(request: Request) -> Dict[str, str]:
     """Explicit CORS for the streaming body (middleware also applies; this duplicates Allow-Origin)."""
     origin = (request.headers.get("origin") or "").strip()
-    allow = origin if origin and _ORIGIN_RE.match(origin) else "http://127.0.0.1:5173"
+    allow = origin if origin and _ORIGIN_RE.match(origin) else "http://127.0.0.1:5175"
     return {
         "Access-Control-Allow-Origin": allow,
         "Access-Control-Allow-Credentials": "true",
