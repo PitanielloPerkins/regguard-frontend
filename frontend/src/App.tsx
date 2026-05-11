@@ -75,7 +75,7 @@ function permitPackageDownloadFilename(): string {
   return `RegGuard-Dallas-permit-package-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.pdf`;
 }
 
-/** Sync with ``backend/main.py`` / permit package PDF (Dallas minimum trade permit). */
+/** Moat / handshake: minimum Dallas trade permit bundle — must match ``backend/permit_package.py`` (USD string). */
 const REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD = "167.00";
 
 /** Permit PDF build can exceed the default JSON probe timeout. */
@@ -533,7 +533,7 @@ export default function App() {
   useEffect(() => {
     const prev = prevBackendReachableRef.current;
     if (backendReachable === false && prev !== false) {
-      toast.warning("Backend offline — connect the API on port 8000 (check VITE_BACKEND_ORIGIN).", {
+      toast.warning("Backend offline — start the API at http://127.0.0.1:8000 (Vite proxies /api there).", {
         autoClose: 4500,
         hideProgressBar: true,
       });
@@ -961,13 +961,6 @@ export default function App() {
     /** Skip clearing the results pane (used when repainting from localStorage then refreshing in background). */
     preserveUi?: boolean;
   }) => {
-    if (backendReachable === false) {
-      toast.warning("Backend offline — research is paused.", {
-        autoClose: 3500,
-        hideProgressBar: true,
-      });
-      return;
-    }
     if (!launchOpts?.preserveUi) {
       resetOutput();
     } else {
@@ -1459,14 +1452,13 @@ export default function App() {
     imageFile,
     resetOutput,
     bimBridgeReport,
-    backendReachable,
   ]);
 
   const runResearchRef = useRef(runResearch);
   runResearchRef.current = runResearch;
 
   useEffect(() => {
-    if (backendReachable !== true || !pendingCacheRefreshRef.current) {
+    if (backendReachable === false || !pendingCacheRefreshRef.current) {
       return;
     }
     pendingCacheRefreshRef.current = false;
@@ -1621,13 +1613,6 @@ export default function App() {
 
   const handleFollowUpChip = useCallback(
     (chip: FollowUpChip) => {
-      if (backendReachable === false) {
-        toast.warning("Backend offline — research is paused.", {
-          autoClose: 3500,
-          hideProgressBar: true,
-        });
-        return;
-      }
       if (!selection?.formattedAddress || !selection.zip) {
         toast.error("Select a job site first.");
         return;

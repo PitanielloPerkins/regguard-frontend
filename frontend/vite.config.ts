@@ -7,8 +7,9 @@ import { defineConfig, loadEnv } from 'vite';
 const frontendRoot = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig(({ mode }) => {
-  const env = loadEnv(mode, frontendRoot, '');
-  const backendOrigin = (env.VITE_BACKEND_ORIGIN || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+  loadEnv(mode, frontendRoot, '');
+  /** Handshake: Vite dev proxy must target the local Flask API only. */
+  const backendOrigin = 'http://127.0.0.1:8000';
 
   return {
     root: frontendRoot,

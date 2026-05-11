@@ -1,16 +1,11 @@
 /**
- * Vite-exposed configuration (``import.meta.env``).
- *
- * - ``VITE_BACKEND_ORIGIN``: API host used for absolute URLs (e.g. Dallas ``/run-research``) and Vite dev proxy target.
- *   Default ``http://127.0.0.1:8000``.
+ * Reg Guard handshake: all browser-originated backend calls use this origin (Dallas ``/run-research``, etc.).
+ * Intentionally fixed to the local Flask API — do not read ``VITE_BACKEND_ORIGIN`` (avoids proxy drift).
  */
+export const REG_GUARD_BACKEND_ORIGIN_HANDSHAKE = "http://127.0.0.1:8000";
 
 export function getBackendOrigin(): string {
-  const v = import.meta.env.VITE_BACKEND_ORIGIN;
-  if (typeof v === "string" && v.trim()) {
-    return v.replace(/\/+$/, "");
-  }
-  return "http://127.0.0.1:8000";
+  return REG_GUARD_BACKEND_ORIGIN_HANDSHAKE;
 }
 
 /** Absolute Dallas permits fixture endpoint (Flask or merged FastAPI). */
