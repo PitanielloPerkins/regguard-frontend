@@ -18,6 +18,14 @@ import {
   mapsAutocompleteEnabled,
   type AddressSelection,
 } from "./AddressAutocomplete";
+import { DashboardErrorBoundary } from "./DashboardErrorBoundary";
+import {
+  loadResearchCache,
+  normalizeResearchCacheKey,
+  REG_GUARD_SESSION_CACHE_HYDRATE_KEY,
+  saveResearchCache,
+  type ResearchCacheV1,
+} from "./researchCache";
 import {
   clearDictationSilenceTimer,
   DICTATION_SILENCE_MS,
@@ -491,6 +499,8 @@ export default function App() {
     source?: string;
     fetchError?: string;
   } | null>(null);
+  /** True after hydrating last-run cache on cold load until fresh SSE ``complete`` clears it. */
+  const [showHydratedCacheBanner, setShowHydratedCacheBanner] = useState(false);
 
   const refreshMaintenanceSubs = useCallback(async () => {
     setMaintenanceLoading(true);
@@ -738,6 +748,7 @@ export default function App() {
     setScoutVertical("building");
     setLocateMessage(null);
     setBusy(false);
+    setShowHydratedCacheBanner(false);
     resetOutput();
     addressRef.current?.clearForNewJob();
     setFileInputKey((k) => k + 1);
@@ -906,8 +917,14 @@ export default function App() {
     tradeBoost?: FollowUpChip["tradeBoost"];
     vertical?: FollowUpChip["vertical"];
     missionCritical?: FollowUpChip["missionCritical"];
+    /** Skip clearing the results pane (used when repainting from localStorage then refreshing in background). */
+    preserveUi?: boolean;
   }) => {
-    resetOutput();
+    if (!launchOpts?.preserveUi) {
+      resetOutput();
+    } else {
+      setError(null);
+    }
     setStreamBroken(false);
     researchSawChunkRef.current = false;
     researchCompleteRef.current = false;
@@ -1292,6 +1309,7 @@ export default function App() {
                 const msParsed = parseMoratoriumStateAlertPayload(msRaw);
                 setMoratoriumStateAlert(msParsed);
               }
+              setShowHydratedCacheBanner(false);
               break;
             }
             case "error": {
@@ -1390,6 +1408,159 @@ export default function App() {
     imageFile,
     resetOutput,
     bimBridgeReport,
+  ]);
+
+  const runResearchRef = useRef(runResearch);
+  runResearchRef.current = runResearch;
+
+  useEffect(() => {
+    try {
+      const parsed = loadResearchCache();
+      if (!parsed) {
+        return;
+      }
+
+      setSelection({
+        formattedAddress: parsed.formattedAddress,
+        zip: parsed.zip,
+        ...(parsed.city ? { city: parsed.city } : {}),
+      });
+      setSiteAddressSearch(parsed.formattedAddress);
+      setJobDescription(parsed.jobDescription ?? "");
+      setPhase(parsed.phase || "Complete");
+      setSteps(Array.isArray(parsed.steps) ? [...parsed.steps] : []);
+      setVisionText(parsed.visionText ?? "");
+      setActionPlan(parsed.actionPlan ?? "");
+      setSourceUrls(Array.isArray(parsed.sourceUrls) ? [...parsed.sourceUrls] : []);
+      setMeta({
+        site: parsed.formattedAddress,
+        zip: parsed.zip,
+        city: parsed.city ?? null,
+        county: parsed.county ?? null,
+        ahjLabel: parsed.ahjLabel ?? null,
+      });
+      setVisualAudit(parseVisualAuditPayload(parsed.visualAudit));
+      setProjectValueMetrics(parsed.projectValueMetrics);
+      setMoratoriumStateAlert(parsed.moratoriumStateAlert);
+      setFutureRiskAlert(parseFutureRiskPayload(parsed.futureRiskAlert));
+      const cfb = parsed.communityInspectorFeedback;
+      setCommunityInspectorFeedback(
+        cfb != null && typeof cfb === "object" ? (cfb as CommunityInspectorFeedbackPayload) : null,
+      );
+      setProactiveSummaryBuffer(parsed.proactiveSummaryBuffer ?? "");
+      setDallasPermitsFixture(parsed.dallasPermitsFixture ?? null);
+      setPdfFrictionAck(false);
+      setStreamBroken(false);
+      setReasoningStep(null);
+
+      if (Object.prototype.hasOwnProperty.call(SCOUT_TRADE_LABELS, parsed.scoutTrade)) {
+        setScoutTrade(parsed.scoutTrade as ScoutTradeId);
+      }
+      const vertical = parsed.scoutVertical;
+      if (vertical === "building" || vertical === "infrastructure" || vertical === "data_center") {
+        setScoutVertical(vertical);
+      }
+      setMissionCriticalDc(parsed.missionCriticalDc ?? true);
+      setSearchLimit(typeof parsed.searchLimit === "number" && parsed.searchLimit > 0 ? parsed.searchLimit : 5);
+
+      setShowHydratedCacheBanner(true);
+
+      queueMicrotask(() => {
+        addressRef.current?.setLocatedAddress({
+          formattedAddress: parsed.formattedAddress,
+          zip: parsed.zip,
+          ...(parsed.city ? { city: parsed.city } : {}),
+        });
+      });
+
+      if (typeof sessionStorage === "undefined") {
+        toast.info("Showing saved research — refreshing from the server…", {
+          autoClose: 4200,
+          hideProgressBar: true,
+        });
+        queueMicrotask(() => {
+          runResearchRef.current({ preserveUi: true });
+        });
+        return;
+      }
+
+      const bgKey = REG_GUARD_SESSION_CACHE_HYDRATE_KEY;
+      if (!sessionStorage.getItem(bgKey)) {
+        sessionStorage.setItem(bgKey, "1");
+        toast.info("Showing saved research — refreshing from the server…", {
+          autoClose: 4200,
+          hideProgressBar: true,
+        });
+        queueMicrotask(() => {
+          runResearchRef.current({ preserveUi: true });
+        });
+      }
+    } catch (e) {
+      console.warn("[RegGuard] research cache hydrate failed", e);
+    }
+  }, []);
+
+  useEffect(() => {
+    if (phase !== "Complete") {
+      return;
+    }
+    const site = (meta?.site ?? selection?.formattedAddress ?? "").trim();
+    const zip = (meta?.zip ?? selection?.zip ?? "").trim();
+    if (!site || !zip || actionPlan.trim().length < 60) {
+      return;
+    }
+    try {
+      const entry: ResearchCacheV1 = {
+        version: 1,
+        cacheKey: normalizeResearchCacheKey(site, zip),
+        savedAt: new Date().toISOString(),
+        formattedAddress: site,
+        zip,
+        city: meta?.city ?? selection?.city ?? null,
+        county: meta?.county ?? null,
+        ahjLabel: meta?.ahjLabel ?? null,
+        phase: "Complete",
+        actionPlan,
+        steps: [...steps],
+        visionText,
+        sourceUrls: [...sourceUrls],
+        visualAudit,
+        projectValueMetrics,
+        moratoriumStateAlert,
+        futureRiskAlert,
+        communityInspectorFeedback,
+        proactiveSummaryBuffer,
+        jobDescription,
+        dallasPermitsFixture,
+        scoutTrade,
+        scoutVertical,
+        missionCriticalDc,
+        searchLimit,
+      };
+      saveResearchCache(entry);
+    } catch (e) {
+      console.warn("[RegGuard] research cache persist failed", e);
+    }
+  }, [
+    phase,
+    actionPlan,
+    meta,
+    selection,
+    steps,
+    visionText,
+    sourceUrls,
+    visualAudit,
+    projectValueMetrics,
+    moratoriumStateAlert,
+    futureRiskAlert,
+    communityInspectorFeedback,
+    proactiveSummaryBuffer,
+    jobDescription,
+    dallasPermitsFixture,
+    scoutTrade,
+    scoutVertical,
+    missionCriticalDc,
+    searchLimit,
   ]);
 
   const handleFollowUpChip = useCallback(
@@ -2028,6 +2199,7 @@ export default function App() {
         </div>
       </header>
 
+      <DashboardErrorBoundary>
       <div className="app-grid">
         <section
           className="rg-panel rg-dallas-dashboard"
@@ -2552,6 +2724,21 @@ export default function App() {
           <header className="rg-results-panel__header">
             <h2 id="rg-results-heading">Results</h2>
           </header>
+
+          {showHydratedCacheBanner ? (
+            <div className="rg-banner rg-banner--muted" role="status" aria-live="polite">
+              <strong>Cached research</strong>
+              {busy ? (
+                <span> — showing your last saved results while Reg Guard reconnects to the API.</span>
+              ) : (
+                <span>
+                  {" "}
+                  — last saved session for this address is shown above. Tap <strong>Run compliance research</strong> to pull a
+                  fresh stream if the automatic refresh did not finish.
+                </span>
+              )}
+            </div>
+          ) : null}
 
           {dallasPermitsFixture ? (
             <div
@@ -3112,6 +3299,7 @@ export default function App() {
           </div>
         </div>
       ) : null}
+      </DashboardErrorBoundary>
       <ToastContainer
         position="top-right"
         theme="dark"
