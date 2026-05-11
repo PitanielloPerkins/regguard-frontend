@@ -1,6 +1,7 @@
 fastapi
 uvicorn[standard]
 flask
+flask-cors
 firecrawl-py
 python-dotenv
 pydantic
