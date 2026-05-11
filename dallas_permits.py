@@ -12,18 +12,30 @@ import requests
 from flask import Flask, jsonify, request
 from flask_cors import CORS
 from requests.exceptions import RequestException
+from werkzeug.exceptions import HTTPException
 
 app = Flask(__name__)
 # Broad CORS for local dashboard + tooling (Vite on another port, curl, etc.).
 CORS(
     app,
-    resources={r"/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS", "HEAD"], "allow_headers": "*"}},
+    resources={
+        r"/*": {
+            "origins": "*",
+            "methods": ["GET", "POST", "OPTIONS", "HEAD"],
+            "allow_headers": "*",
+            "expose_headers": "*",
+        }
+    },
 )
 
 
 @app.errorhandler(Exception)
 def _unhandled_error(exc: Exception) -> Tuple[Any, int]:
-    """Never return an HTML stack trace to API clients; keeps dashboards from blanking on parse errors."""
+    """JSON errors for API-style clients; avoids HTML stack traces that break dashboards."""
+    if isinstance(exc, HTTPException):
+        code = exc.code if isinstance(exc.code, int) else 500
+        msg = exc.description if isinstance(exc.description, str) else str(exc)
+        return jsonify({"error": exc.name, "message": msg}), code
     traceback.print_exc()
     return jsonify({"error": "internal_server_error", "message": str(exc)}), 500
 
@@ -42,7 +54,7 @@ def run_research() -> Any:
         df = _mock_commercial_permits_dataframe()
         permits: List[Dict[str, Any]] = json.loads(df.to_json(orient="records"))
         return jsonify({"permits": permits, "source": "mock_722_munger"})
-    except Exception as exc:  # noqa: BLE001 — defensive; surfaced as JSON for clients
+    except Exception as exc:
         traceback.print_exc()
         return jsonify({"error": "run_research_failed", "message": str(exc), "permits": []}), 500
 

@@ -1022,22 +1022,38 @@ export default function App() {
         openWhenHidden: true,
         cache: "no-store",
         async onopen(response) {
-          if (!response.ok) {
-            const detail = await detailFromBadResponse(response);
-            toast.error(
-              `Research failed to start (HTTP ${response.status}). ${detail.length > 220 ? `${detail.slice(0, 220)}…` : detail}`,
-            );
-            console.error("[RegGuard research] HTTP error", response.status, detail);
-            throw new Error(detail);
-          }
-          setSseConnectionLive(true);
-          toast.success("Connection active", {
-            autoClose: 2000,
-            hideProgressBar: true,
-          });
-          const ct = response.headers.get("content-type") ?? "";
-          if (!ct.toLowerCase().includes("text/event-stream")) {
-            console.warn("[RegGuard research] expected text/event-stream; got:", ct);
+          try {
+            if (!response.ok) {
+              let detail = "";
+              try {
+                detail = await detailFromBadResponse(response);
+              } catch (parseErr) {
+                console.warn("[RegGuard research] could not parse error body", parseErr);
+                detail = `HTTP ${response.status}`;
+              }
+              toast.error(
+                `Research failed to start (HTTP ${response.status}). ${detail.length > 220 ? `${detail.slice(0, 220)}…` : detail}`,
+              );
+              console.error("[RegGuard research] HTTP error", response.status, detail);
+              throw new Error(detail);
+            }
+            setSseConnectionLive(true);
+            toast.success("Connection active", {
+              autoClose: 2000,
+              hideProgressBar: true,
+            });
+            const ct = response.headers.get("content-type") ?? "";
+            if (!ct.toLowerCase().includes("text/event-stream")) {
+              console.warn("[RegGuard research] expected text/event-stream; got:", ct);
+            }
+          } catch (openErr) {
+            console.error("[RegGuard research] onopen handler error", openErr);
+            if (response.ok) {
+              toast.error(
+                openErr instanceof Error ? openErr.message.slice(0, 180) : "Could not finalize research stream open.",
+              );
+            }
+            throw openErr;
           }
         },
         onmessage(ev) {
@@ -2517,6 +2533,7 @@ export default function App() {
               type="button"
               className="rg-btn rg-btn--primary"
               aria-label="Run compliance research"
+              title={RUN_RESEARCH_FLASK_URL}
               onClick={() => void runResearch()}
             >
               {busy ? "Researching…" : "Run compliance research"}
