@@ -2221,6 +2221,9 @@ export default function App() {
             add a photo, then stream jurisdiction and a Contractor Action Plan (SSE) from the API on port
             8000 (proxied via <code>/api</code>).
           </p>
+          <p className="field-hint rg-regulatory-shield" style={{ marginTop: 8 }} role="status">
+            <strong>Regulatory Shield</strong> active — API handshake <code>{getBackendOrigin()}</code>
+          </p>
         </div>
         <div className="app-header-actions">
           <button
