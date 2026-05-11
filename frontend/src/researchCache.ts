@@ -1,5 +1,6 @@
 /**
  * Browser persistence for last successful research (instant paint on slow backends).
+ * API origin is fixed in ``frontend/src/env.ts`` (handshake); this module stays URL-agnostic.
  */
 export const REG_GUARD_RESEARCH_CACHE_KEY = "reg_guard_research_cache_v1";
 

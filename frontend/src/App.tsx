@@ -503,7 +503,7 @@ export default function App() {
   } | null>(null);
   /** True after hydrating last-run cache on cold load until fresh SSE ``complete`` clears it. */
   const [showHydratedCacheBanner, setShowHydratedCacheBanner] = useState(false);
-  /** ``null`` until first ``/api/health`` probe; Research stays disabled until ``true``. */
+  /** ``null`` until first ``/api/health`` probe (toasts only — research is not gated on this). */
   const [backendReachable, setBackendReachable] = useState<boolean | null>(null);
   const pendingCacheRefreshRef = useRef(false);
   const prevBackendReachableRef = useRef<boolean | null>(null);
@@ -1628,7 +1628,7 @@ export default function App() {
         missionCritical: chip.missionCritical,
       });
     },
-    [selection, runResearch, backendReachable],
+    [selection, runResearch],
   );
 
   const geolocationReadOptions = useMemo<PositionOptions>(
@@ -2283,10 +2283,11 @@ export default function App() {
               occupancy — integrate Planning with Building milestones early.
             </li>
             <li>
-              <strong>May 2025 parking reform:</strong> reforms exempt many small projects from legacy stall minima — for
-              example, developments with <strong>20 dwelling units or fewer</strong> (including common <strong>ADU</strong>{" "}
-              paths) may have <strong>no minimum off-street parking</strong>. Confirm PD overlays, TIF districts, and Planning
-              bulletins before omitting stalls on cover sheets.
+              <strong>May 2025 Dallas Parking Reform</strong> (city-adopted parking standards update — effective{" "}
+              <strong>May 2025</strong>): reforms exempt many small projects from legacy stall minima — for example, developments
+              with <strong>20 dwelling units or fewer</strong> (including common <strong>ADU</strong> paths) may have{" "}
+              <strong>no minimum off-street parking</strong>. Confirm PD overlays, TIF districts, and Planning bulletins before
+              omitting stalls on cover sheets.
             </li>
           </ul>
           {showMungerIntelPanel ? (
@@ -2312,10 +2313,11 @@ export default function App() {
                     occupancy or final release.
                   </li>
                   <li>
-                    <strong>May 2025 parking reform:</strong> Dallas reforms exempt many small projects from legacy stall minima —{" "}
+                    <strong>May 2025 Dallas Parking Reform</strong> (city parking standards — adopted{" "}
+                    <strong>May 2025</strong>): Dallas reforms exempt many small projects from legacy stall minima —{" "}
                     <strong>20 dwelling units or fewer</strong> (including typical <strong>ADU</strong> scopes) generally have{" "}
-                    <strong>no minimum off-street parking</strong>. Confirm PD overlays, TIF/overlay conditions, and current Planning
-                    guidance before omitting stalls.
+                    <strong>no minimum off-street parking</strong>. Confirm PD overlays, TIF/overlay conditions, and current
+                    Planning guidance before omitting stalls.
                   </li>
                   <li>
                     <strong>Permit fee (2026 sync):</strong> plan for the Dallas{" "}
@@ -2757,7 +2759,7 @@ export default function App() {
               title={`${getBackendOrigin()} · ${getRunResearchAbsoluteUrl()}`}
               onClick={() => void runResearch()}
             >
-              {busy ? "Researching…" : "Run compliance research"}
+              Run compliance research
             </button>
             <button
               type="button"
