@@ -1,5 +1,6 @@
 fastapi
 uvicorn[standard]
+flask
 firecrawl-py
 python-dotenv
 pydantic

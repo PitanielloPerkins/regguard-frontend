@@ -1,13 +1,35 @@
 """
 Reg Guard — City of Dallas commercial permit queries (Socrata API).
+HTTP: ``python dallas_permits.py`` serves ``GET /run-research`` on port 8000 (722 Munger mock for the dashboard).
 """
 import json
 import os
-from typing import Optional
+from typing import Any, Dict, List, Optional
 
 import pandas as pd
 import requests
+from flask import Flask, jsonify, request
 from requests.exceptions import RequestException
+
+app = Flask(__name__)
+
+
+@app.after_request
+def _cors(response: Any) -> Any:
+    response.headers["Access-Control-Allow-Origin"] = "*"
+    response.headers["Access-Control-Allow-Methods"] = "GET, OPTIONS"
+    response.headers["Access-Control-Allow-Headers"] = "Content-Type"
+    return response
+
+
+@app.route("/run-research", methods=["GET", "OPTIONS"])
+def run_research() -> Any:
+    """Return 722 Munger Ave fixture (3 ft rear setback, $167.00 fee) for dashboard consumption."""
+    if request.method == "OPTIONS":
+        return "", 204
+    df = _mock_commercial_permits_dataframe()
+    permits: List[Dict[str, Any]] = json.loads(df.to_json(orient="records"))
+    return jsonify({"permits": permits, "source": "mock_722_munger"})
 
 # City of Dallas Open Data (Socrata). App token: https://data.dallascityhall.com/profile/edit/developer_settings
 DALLAS_API_URL = "https://www.dallascityhall.com/resource/7vsc-id2i.json"
@@ -82,9 +104,4 @@ def get_commercial_permits(keyword: str = "Data Center") -> Optional[pd.DataFram
 
 
 if __name__ == "__main__":
-    results = get_commercial_permits()
-    if results is None:
-        raise SystemExit(1)
-    out = "high_value_projects.csv"
-    results.to_csv(out, index=False)
-    print(f"Wrote {len(results)} rows to {out}")
+    app.run(host="0.0.0.0", port=8000, debug=False)
