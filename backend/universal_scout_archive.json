@@ -282,7 +282,7 @@
     }
   },
   "75202": {
-    "updated_at": "2026-05-10T00:17:21.577054+00:00",
+    "updated_at": "2026-05-11T01:16:43.230594+00:00",
     "raw": {
       "zip": "75202",
       "site_address": "722 Munger Ave, Dallas, TX 75202, USA",
@@ -299,7 +299,7 @@
       },
       "scout_profile": {
         "trades": [
-          "hvac"
+          "general_contractor"
         ],
         "vertical": "building",
         "mission_critical_dc": true
@@ -329,38 +329,38 @@
         "Universal Scout 1 — Jurisdiction: city/county AHJ hints (trusted hosts).",
         "Universal Scout 2 — Permits: **city** or **county** building department (steered from address).",
         "Universal Scout 3 — Building codes: **city-specific** (incorporated) or **county-specific** (unincorporated) adopted codes and amendments, plus **Code-Change Monitoring** cues (upcoming adoptions / council minutes keywords).",
-        "Scout profile — **Trades**: hvac; **vertical**: building; **mission-critical DC scout**: on.",
+        "Scout profile — **Trades**: general_contractor; **vertical**: building; **mission-critical DC scout**: on.",
         "**Intelligence tier — Residential / building vertical:** Municode / `.gov` / **OpenGov** portal discovery for **setbacks**, yard lines, and codified zoning chapters."
       ],
       "step_jurisdiction": {
-        "query": "Dallas, TX: Job site 722 Munger Ave, Dallas, TX 75202, USA — incorporated Dallas, TX (ZIP 75202). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | Site/job context: [Job description (voice or typed)] Garage conversion to ADU. Detached 600 sq ft garage sits 3ft from property line. Primary house is 2400 sq ft. Verify setback compliance, parking requirements, and FAR limits for Dallas, TX.\" [Proactive Guide… (site:gov OR site:municode.com)",
+        "query": "Dallas, TX: Job site 722 Munger Ave, Dallas, TX 75202, USA — incorporated Dallas, TX (ZIP 75202). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | Site/job context: [Job description (voice or typed)] \"Constructing a detached 450 sq. ft. Accessory Dwelling Unit (ADU) at the rear of the property. The rear wall is anchored at 3 feet from the property line. Scope includes new electrical and plumbing. No new … (site:gov OR site:municode.com)",
         "results": [],
         "fallback_used": true,
-        "fallback_query": "Dallas, TX: Job site 722 Munger Ave, Dallas, TX 75202, USA — incorporated Dallas, TX (ZIP 75202). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | Site/job context: [Job description (voice or typed)] Garage conversion to ADU. Detached 600 sq ft garage sits 3ft from property line. Primary house is 2400 sq ft. Verify setback compliance, parking requirements, and FAR limits for Dallas, TX.\" [Proactive Guide… city government landing page (site:gov OR site:municode.com)",
+        "fallback_query": "Dallas, TX: Job site 722 Munger Ave, Dallas, TX 75202, USA — incorporated Dallas, TX (ZIP 75202). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | Site/job context: [Job description (voice or typed)] \"Constructing a detached 450 sq. ft. Accessory Dwelling Unit (ADU) at the rear of the property. The rear wall is anchored at 3 feet from the property line. Scope includes new electrical and plumbing. No new … city government landing page (site:gov OR site:municode.com)",
         "firecrawl_mode": "search_web_serp_only",
         "firecrawl_limit": 5
       },
       "step_building_permits": {
-        "query": "Dallas, TX: Dallas TX building department permits plan check electrical official — ZIP 75202 | LOCALITY_LOCK Dallas, TX official city code and building permits | Dallas, TX official building permit fees 2026 | Dallas, TX mechanical HVAC permit IMC energy code load calculation ACCA Manual J adoption — ZIP 75202 | Dallas, TX data center Tier III Tier IV redundancy 2N N+1 concurrent maintainability mission critical facility code adopted amendments — ZIP 75202 | Dallas, TX liquid cooling containment (site:gov OR site:municode.com)",
+        "query": "Dallas, TX: Dallas TX building department permits plan check electrical official — ZIP 75202 | LOCALITY_LOCK Dallas, TX official city code and building permits | Dallas, TX official building permit fees 2026 | Dallas, TX general contractor superintendent IBC OSHA multi-trade permit sequencing inspection hold points — ZIP 75202 | Dallas, TX data center Tier III Tier IV redundancy 2N N+1 concurrent maintainability mission critical facility code adopted amendments — ZIP 75202 | Dallas, TX liquid co (site:gov OR site:municode.com)",
         "results": [],
         "fallback_used": true,
-        "fallback_query": "Dallas, TX: Dallas TX building department permits plan check electrical official — ZIP 75202 | LOCALITY_LOCK Dallas, TX official city code and building permits | Dallas, TX official building permit fees 2026 | Dallas, TX mechanical HVAC permit IMC energy code load calculation ACCA Manual J adoption — ZIP 75202 | Dallas, TX data center Tier III Tier IV redundancy 2N N+1 concurrent maintainability mission critical facility code adopted amendments — ZIP 75202 | Dallas, TX liquid cooling containment city government landing page (site:gov OR site:municode.com)",
+        "fallback_query": "Dallas, TX: Dallas TX building department permits plan check electrical official — ZIP 75202 | LOCALITY_LOCK Dallas, TX official city code and building permits | Dallas, TX official building permit fees 2026 | Dallas, TX general contractor superintendent IBC OSHA multi-trade permit sequencing inspection hold points — ZIP 75202 | Dallas, TX data center Tier III Tier IV redundancy 2N N+1 concurrent maintainability mission critical facility code adopted amendments — ZIP 75202 | Dallas, TX liquid co city government landing page (site:gov OR site:municode.com)",
         "firecrawl_mode": "search_web_serp_only",
         "firecrawl_limit": 5
       },
       "step_building_codes": {
-        "query": "Dallas, TX: Building codes adopted for Dallas TX: municipal amendments IBC IRC — ZIP 75202 | LOCALITY_LOCK Dallas, TX official city code and building permits | Dallas, TX NEC 2023 amendments | Dallas, TX upcoming building code adoption NEC NFPA 70 effective date transition council workshop — ZIP 75202 | Dallas, TX city council agenda minutes ordinance building code amendment hearing first reading — ZIP 75202 | Dallas, TX mechanical HVAC permit IMC energy code load calculation ACCA Manual J adopt (site:gov OR site:municode.com)",
+        "query": "Dallas, TX: Building codes adopted for Dallas TX: municipal amendments IBC IRC — ZIP 75202 | LOCALITY_LOCK Dallas, TX official city code and building permits | Dallas, TX NEC 2023 amendments | Dallas, TX upcoming building code adoption NEC NFPA 70 effective date transition council workshop — ZIP 75202 | Dallas, TX city council agenda minutes ordinance building code amendment hearing first reading — ZIP 75202 | Dallas, TX general contractor superintendent IBC OSHA multi-trade permit sequencing in (site:gov OR site:municode.com)",
         "results": [],
         "fallback_used": true,
-        "fallback_query": "Dallas, TX: Building codes adopted for Dallas TX: municipal amendments IBC IRC — ZIP 75202 | LOCALITY_LOCK Dallas, TX official city code and building permits | Dallas, TX NEC 2023 amendments | Dallas, TX upcoming building code adoption NEC NFPA 70 effective date transition council workshop — ZIP 75202 | Dallas, TX city council agenda minutes ordinance building code amendment hearing first reading — ZIP 75202 | Dallas, TX mechanical HVAC permit IMC energy code load calculation ACCA Manual J adopt city government landing page (site:gov OR site:municode.com)",
+        "fallback_query": "Dallas, TX: Building codes adopted for Dallas TX: municipal amendments IBC IRC — ZIP 75202 | LOCALITY_LOCK Dallas, TX official city code and building permits | Dallas, TX NEC 2023 amendments | Dallas, TX upcoming building code adoption NEC NFPA 70 effective date transition council workshop — ZIP 75202 | Dallas, TX city council agenda minutes ordinance building code amendment hearing first reading — ZIP 75202 | Dallas, TX general contractor superintendent IBC OSHA multi-trade permit sequencing in city government landing page (site:gov OR site:municode.com)",
         "firecrawl_mode": "search_web_serp_only",
         "firecrawl_limit": 5
       },
       "step_residential_zoning": {
-        "query": "722 Munger Ave, Dallas, TX 75202, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75202 | Site/job context: [Job description (voice or typed)] Garage conversion to ADU. Detached 600 sq ft garage sits 3ft from property line. Primary house is 2400 sq ft. Verify setback compliance, parking requirements, and FAR limits for Dallas, TX.\" [Proactive Guide — Generate HVAC load calc] Fo… (site:gov OR site:municode.com OR site:opengov.com)",
+        "query": "722 Munger Ave, Dallas, TX 75202, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75202 | Site/job context: [Job description (voice or typed)] \"Constructing a detached 450 sq. ft. Accessory Dwelling Unit (ADU) at the rear of the property. The rear wall is anchored at 3 feet from the property line. Scope includes new electrical and plumbing. No new parking stalls are planned.\" (site:gov OR site:municode.com OR site:opengov.com)",
         "results": [],
         "fallback_used": true,
-        "fallback_query": "722 Munger Ave, Dallas, TX 75202, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75202 | Site/job context: [Job description (voice or typed)] Garage conversion to ADU. Detached 600 sq ft garage sits 3ft from property line. Primary house is 2400 sq ft. Verify setback compliance, parking requirements, and FAR limits for Dallas, TX.\" [Proactive Guide — Generate HVAC load calc] Fo… official city government landing page (site:gov OR site:municode.com OR site:opengov.com)",
+        "fallback_query": "722 Munger Ave, Dallas, TX 75202, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75202 | Site/job context: [Job description (voice or typed)] \"Constructing a detached 450 sq. ft. Accessory Dwelling Unit (ADU) at the rear of the property. The rear wall is anchored at 3 feet from the property line. Scope includes new electrical and plumbing. No new parking stalls are planned.\" official city government landing page (site:gov OR site:municode.com OR site:opengov.com)",
         "firecrawl_mode": "search_web_serp_only",
         "firecrawl_limit": 5
       },
