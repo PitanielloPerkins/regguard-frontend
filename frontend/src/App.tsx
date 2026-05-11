@@ -2446,6 +2446,7 @@ export default function App() {
             <button
               type="button"
               className="rg-btn rg-btn--primary"
+              aria-label="Run compliance research"
               onClick={() => void runResearch()}
             >
               {busy ? "Researching…" : "Run compliance research"}
