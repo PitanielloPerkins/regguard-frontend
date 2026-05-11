@@ -773,7 +773,11 @@ def root() -> Dict[str, str]:
     }
 
 
-@app.get("/permit-draft-calculations")
+@app.get("/health")
+def health() -> Dict[str, Any]:
+    """Lightweight probe for dashboards (frontend gate + load balancers)."""
+    return {"ok": True, "service": "reg-guard-api"}
+
 def permit_draft_calculations(job_description: str = "") -> Dict[str, Any]:
     """
     NEC Article 220 / 310 illustrative snapshot for **200 A upgrade** permit drafts.

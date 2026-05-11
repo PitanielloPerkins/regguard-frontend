@@ -19,6 +19,8 @@ import {
   type AddressSelection,
 } from "./AddressAutocomplete";
 import { DashboardErrorBoundary } from "./DashboardErrorBoundary";
+import { getBackendOrigin, getRunResearchAbsoluteUrl } from "./env";
+import { fetchWithTimeout } from "./fetchWithTimeout";
 import {
   loadResearchCache,
   normalizeResearchCacheKey,
@@ -76,8 +78,8 @@ function permitPackageDownloadFilename(): string {
 /** Sync with ``backend/main.py`` / permit package PDF (Dallas minimum trade permit). */
 const REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD = "167.00";
 
-/** Local Dallas permits Flask server output (``python dallas_permits.py``). */
-const RUN_RESEARCH_FLASK_URL = "http://127.0.0.1:8000/run-research";
+/** Permit PDF build can exceed the default JSON probe timeout. */
+const PERMIT_PACKAGE_FETCH_TIMEOUT_MS = 120_000;
 
 /** Flat fee model — matches backend ``base_search_value`` ($5.00 customer-facing research value). */
 const BASE_SEARCH_VALUE_USD = 5;
@@ -493,7 +495,7 @@ export default function App() {
   const [permitPackageBusy, setPermitPackageBusy] = useState(false);
   const [permitPackageReady, setPermitPackageReady] = useState(false);
   const [permitPackageDownloadUrl, setPermitPackageDownloadUrl] = useState<string | null>(null);
-  /** Response from ``RUN_RESEARCH_FLASK_URL`` (722 Munger mock / permits array). */
+  /** Response from ``getRunResearchAbsoluteUrl()`` (722 Munger mock / permits array). */
   const [dallasPermitsFixture, setDallasPermitsFixture] = useState<{
     permits: Record<string, unknown>[];
     source?: string;
@@ -501,11 +503,50 @@ export default function App() {
   } | null>(null);
   /** True after hydrating last-run cache on cold load until fresh SSE ``complete`` clears it. */
   const [showHydratedCacheBanner, setShowHydratedCacheBanner] = useState(false);
+  /** ``null`` until first ``/api/health`` probe; Research stays disabled until ``true``. */
+  const [backendReachable, setBackendReachable] = useState<boolean | null>(null);
+  const pendingCacheRefreshRef = useRef(false);
+  const prevBackendReachableRef = useRef<boolean | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    const probe = async () => {
+      try {
+        const r = await fetchWithTimeout("/api/health", { cache: "no-store" });
+        if (!cancelled) {
+          setBackendReachable(r.ok);
+        }
+      } catch {
+        if (!cancelled) {
+          setBackendReachable(false);
+        }
+      }
+    };
+    void probe();
+    const id = window.setInterval(() => void probe(), 12_000);
+    return () => {
+      cancelled = true;
+      window.clearInterval(id);
+    };
+  }, []);
+
+  useEffect(() => {
+    const prev = prevBackendReachableRef.current;
+    if (backendReachable === false && prev !== false) {
+      toast.warning("Backend offline — connect the API on port 8000 (check VITE_BACKEND_ORIGIN).", {
+        autoClose: 4500,
+        hideProgressBar: true,
+      });
+    }
+    if (backendReachable !== null) {
+      prevBackendReachableRef.current = backendReachable;
+    }
+  }, [backendReachable]);
 
   const refreshMaintenanceSubs = useCallback(async () => {
     setMaintenanceLoading(true);
     try {
-      const r = await fetch("/api/maintenance/subscriptions");
+      const r = await fetchWithTimeout("/api/maintenance/subscriptions");
       if (!r.ok) {
         return;
       }
@@ -524,7 +565,7 @@ export default function App() {
   }, [refreshMaintenanceSubs]);
 
   useEffect(() => {
-    fetch("/api/finops-cache", { cache: "no-store" })
+    fetchWithTimeout("/api/finops-cache", { cache: "no-store" })
       .then(async (r) => {
         if (!r.ok) {
           return null;
@@ -788,7 +829,7 @@ export default function App() {
       const form = new FormData();
       form.append("zip_code", selection.zip);
       form.append("text", t);
-      const res = await fetch("/api/community-gotchas", { method: "POST", body: form });
+      const res = await fetchWithTimeout("/api/community-gotchas", { method: "POST", body: form });
       if (!res.ok) {
         const detail = await detailFromBadResponse(res);
         toast.error(detail.length > 220 ? `${detail.slice(0, 220)}…` : detail);
@@ -826,7 +867,7 @@ export default function App() {
       form.append("sensor_profile", maintSensorProfile);
       form.append("alert_threshold_note", maintAlertNote.trim());
       form.append("maintenance_mode_enabled", "true");
-      const res = await fetch("/api/maintenance/subscriptions", { method: "POST", body: form });
+      const res = await fetchWithTimeout("/api/maintenance/subscriptions", { method: "POST", body: form });
       if (!res.ok) {
         const detail = await detailFromBadResponse(res);
         toast.error(detail.length > 200 ? `${detail.slice(0, 200)}…` : detail);
@@ -853,7 +894,7 @@ export default function App() {
   const handleToggleMaintenanceMode = useCallback(
     async (id: string, enabled: boolean) => {
       try {
-        const res = await fetch(`/api/maintenance/subscriptions/${encodeURIComponent(id)}`, {
+        const res = await fetchWithTimeout(`/api/maintenance/subscriptions/${encodeURIComponent(id)}`, {
           method: "PATCH",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({ maintenance_mode_enabled: enabled }),
@@ -885,7 +926,7 @@ export default function App() {
     }
     setBimImportBusy(true);
     try {
-      const res = await fetch("/api/bim/import", {
+      const res = await fetchWithTimeout("/api/bim/import", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(parsed),
@@ -920,6 +961,13 @@ export default function App() {
     /** Skip clearing the results pane (used when repainting from localStorage then refreshing in background). */
     preserveUi?: boolean;
   }) => {
+    if (backendReachable === false) {
+      toast.warning("Backend offline — research is paused.", {
+        autoClose: 3500,
+        hideProgressBar: true,
+      });
+      return;
+    }
     if (!launchOpts?.preserveUi) {
       resetOutput();
     } else {
@@ -930,12 +978,15 @@ export default function App() {
     researchCompleteRef.current = false;
     const epochAtStart = researchEpochRef.current;
     sseErrorToastedRef.current = false;
-    setProactiveSummaryBuffer("");
+    if (!launchOpts?.preserveUi) {
+      setProactiveSummaryBuffer("");
+    }
     setBusy(true);
     setPhase("Connecting…");
 
     try {
-      const frRes = await fetch(RUN_RESEARCH_FLASK_URL, {
+      const runResearchUrl = getRunResearchAbsoluteUrl();
+      const frRes = await fetchWithTimeout(runResearchUrl, {
         method: "GET",
         mode: "cors",
         cache: "no-store",
@@ -969,7 +1020,7 @@ export default function App() {
     } catch (e) {
       const msg = e instanceof Error ? e.message : String(e);
       setDallasPermitsFixture({ permits: [], fetchError: msg });
-      toast.warning(`Dallas permits (${RUN_RESEARCH_FLASK_URL}): ${msg}`, { autoClose: 5200 });
+      toast.warning(`Dallas permits (${getRunResearchAbsoluteUrl()}): ${msg}`, { autoClose: 5200 });
     }
 
     const form = new FormData();
@@ -1408,10 +1459,19 @@ export default function App() {
     imageFile,
     resetOutput,
     bimBridgeReport,
+    backendReachable,
   ]);
 
   const runResearchRef = useRef(runResearch);
   runResearchRef.current = runResearch;
+
+  useEffect(() => {
+    if (backendReachable !== true || !pendingCacheRefreshRef.current) {
+      return;
+    }
+    pendingCacheRefreshRef.current = false;
+    void runResearchRef.current({ preserveUi: true });
+  }, [backendReachable]);
 
   useEffect(() => {
     try {
@@ -1478,9 +1538,7 @@ export default function App() {
           autoClose: 4200,
           hideProgressBar: true,
         });
-        queueMicrotask(() => {
-          runResearchRef.current({ preserveUi: true });
-        });
+        pendingCacheRefreshRef.current = true;
         return;
       }
 
@@ -1491,9 +1549,7 @@ export default function App() {
           autoClose: 4200,
           hideProgressBar: true,
         });
-        queueMicrotask(() => {
-          runResearchRef.current({ preserveUi: true });
-        });
+        pendingCacheRefreshRef.current = true;
       }
     } catch (e) {
       console.warn("[RegGuard] research cache hydrate failed", e);
@@ -1565,6 +1621,13 @@ export default function App() {
 
   const handleFollowUpChip = useCallback(
     (chip: FollowUpChip) => {
+      if (backendReachable === false) {
+        toast.warning("Backend offline — research is paused.", {
+          autoClose: 3500,
+          hideProgressBar: true,
+        });
+        return;
+      }
       if (!selection?.formattedAddress || !selection.zip) {
         toast.error("Select a job site first.");
         return;
@@ -1580,7 +1643,7 @@ export default function App() {
         missionCritical: chip.missionCritical,
       });
     },
-    [selection, runResearch],
+    [selection, runResearch, backendReachable],
   );
 
   const geolocationReadOptions = useMemo<PositionOptions>(
@@ -1637,7 +1700,7 @@ export default function App() {
             if (recenter) {
               q.set("_", String(Date.now()));
             }
-            const res = await fetch(`/api/reverse-geocode-address?${q}`, {
+            const res = await fetchWithTimeout(`/api/reverse-geocode-address?${q}`, {
               method: "GET",
               cache: "no-store",
             });
@@ -1842,7 +1905,7 @@ export default function App() {
     let alive = true;
     const poll = async () => {
       try {
-        const r = await fetch("/api/dashboard-revision", { cache: "no-store" });
+        const r = await fetchWithTimeout("/api/dashboard-revision", { cache: "no-store" });
         if (!alive || !r.ok) {
           return;
         }
@@ -2011,7 +2074,7 @@ export default function App() {
       const abortTimer = window.setTimeout(() => ac.abort(), 120_000);
       setPermitPackageBusy(true);
       try {
-        const res = await fetch("/api/permit-package", {
+        const res = await fetchWithTimeout("/api/permit-package", {
           method: "POST",
           headers: { "Content-Type": "application/json" },
           body: JSON.stringify({
@@ -2025,6 +2088,7 @@ export default function App() {
             ahj_label: meta?.ahjLabel ?? "",
           }),
           signal: ac.signal,
+          timeoutMs: PERMIT_PACKAGE_FETCH_TIMEOUT_MS,
         });
         if (!res.ok) {
           const raw = await res.text().catch(() => "");
@@ -2705,7 +2769,7 @@ export default function App() {
               type="button"
               className="rg-btn rg-btn--primary"
               aria-label="Run compliance research"
-              title={RUN_RESEARCH_FLASK_URL}
+              title={`${getBackendOrigin()} · ${getRunResearchAbsoluteUrl()}`}
               onClick={() => void runResearch()}
             >
               {busy ? "Researching…" : "Run compliance research"}
@@ -2747,7 +2811,10 @@ export default function App() {
               aria-label="Dallas permits fixture from local Flask"
             >
               <strong>Dallas permits (local Flask)</strong>
-              <span className="field-hint"> — {RUN_RESEARCH_FLASK_URL}</span>
+              <span className="field-hint">
+                {" "}
+                — API {getBackendOrigin()} · permits {getRunResearchAbsoluteUrl()}
+              </span>
               {dallasPermitsFixture.fetchError ? (
                 <p style={{ marginTop: 8 }}>{dallasPermitsFixture.fetchError}</p>
               ) : (

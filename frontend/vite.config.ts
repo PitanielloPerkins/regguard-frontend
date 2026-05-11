@@ -2,26 +2,31 @@ import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 
 import react from '@vitejs/plugin-react';
-import { defineConfig } from 'vite';
+import { defineConfig, loadEnv } from 'vite';
 
 const frontendRoot = path.dirname(fileURLToPath(import.meta.url));
 
-export default defineConfig({
-  root: frontendRoot,
-  envDir: frontendRoot,
-  plugins: [react()],
-  server: {
-    host: '127.0.0.1',
-    port: 5173,
-    strictPort: false,
-    proxy: {
-      '/api': {
-        target: 'http://127.0.0.1:8000',
-        changeOrigin: true,
-        rewrite: (reqPath) => reqPath.replace(/^\/api/, ''),
-        timeout: 600_000,
-        proxyTimeout: 600_000,
+export default defineConfig(({ mode }) => {
+  const env = loadEnv(mode, frontendRoot, '');
+  const backendOrigin = (env.VITE_BACKEND_ORIGIN || 'http://127.0.0.1:8000').replace(/\/+$/, '');
+
+  return {
+    root: frontendRoot,
+    envDir: frontendRoot,
+    plugins: [react()],
+    server: {
+      host: '127.0.0.1',
+      port: 5173,
+      strictPort: false,
+      proxy: {
+        '/api': {
+          target: backendOrigin,
+          changeOrigin: true,
+          rewrite: (reqPath) => reqPath.replace(/^\/api/, ''),
+          timeout: 600_000,
+          proxyTimeout: 600_000,
+        },
       },
     },
-  },
+  };
 });

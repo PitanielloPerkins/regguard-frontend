@@ -6,6 +6,8 @@
  */
 import { jsPDF } from "jspdf";
 
+import { fetchWithTimeout } from "./fetchWithTimeout";
+
 /** Standard PDF sans — aligns with Inter/Roboto styling intent. */
 const PDF_SANS = "helvetica";
 
@@ -223,7 +225,7 @@ export async function fetchPermitDraftCalculations(jobDescription: string): Prom
   if (jobDescription.trim()) {
     q.set("job_description", jobDescription.trim());
   }
-  const res = await fetch(`/api/permit-draft-calculations?${q}`, { cache: "no-store" });
+  const res = await fetchWithTimeout(`/api/permit-draft-calculations?${q}`, { cache: "no-store" });
   if (!res.ok) {
     const t = await res.text().catch(() => "");
     throw new Error(t.trim() || `Permit calculations failed (HTTP ${res.status}).`);
