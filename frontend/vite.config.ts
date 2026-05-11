@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import react from '@vitejs/plugin-react';
 import { defineConfig } from 'vite';
 
-/** Frontend root (same folder as this file) so cwd does not shadow `index.html` / `.env`. */
 const frontendRoot = path.dirname(fileURLToPath(import.meta.url));
 
 export default defineConfig({
@@ -12,17 +11,14 @@ export default defineConfig({
   envDir: frontendRoot,
   plugins: [react()],
   server: {
-    /** IPv4 loopback — avoids ::1 / dual-stack blank-screen issues in some setups. */
     host: '127.0.0.1',
     port: 5173,
-    /** Prefer 5173 but do not hard-fail when the port is busy (falls back to the next free port). */
     strictPort: false,
     proxy: {
       '/api': {
         target: 'http://127.0.0.1:8000',
         changeOrigin: true,
-        rewrite: (path) => path.replace(/^\/api/, ''),
-        /** Long-running SSE stream from POST /research — avoid dev-proxy idle timeouts. */
+        rewrite: (reqPath) => reqPath.replace(/^\/api/, ''),
         timeout: 600_000,
         proxyTimeout: 600_000,
       },
