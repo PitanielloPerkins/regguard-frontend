@@ -2208,6 +2208,7 @@ export default function App() {
   }, [jobDescription, speechCtor]);
 
   return (
+    <DashboardErrorBoundary>
     <div className="app-shell">
       <header
         className="app-header"
@@ -2248,7 +2249,6 @@ export default function App() {
         </div>
       </header>
 
-      <DashboardErrorBoundary>
       <div className="app-grid">
         <section
           className="rg-panel rg-dallas-dashboard"
@@ -3353,7 +3353,6 @@ export default function App() {
           </div>
         </div>
       ) : null}
-      </DashboardErrorBoundary>
       <ToastContainer
         position="top-right"
         theme="dark"
@@ -3364,5 +3363,6 @@ export default function App() {
         limit={5}
       />
     </div>
+    </DashboardErrorBoundary>
   );
 }
