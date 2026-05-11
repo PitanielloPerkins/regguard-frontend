@@ -530,10 +530,6 @@ export default function App() {
   const setDictationActiveRef = useRef(setDictationActive);
   setDictationActiveRef.current = setDictationActive;
 
-  const canSubmit = useMemo(() => {
-    return Boolean(selection?.formattedAddress && selection.zip && !busy);
-  }, [selection, busy]);
-
   /** Dallas Munger parcel intel only when the live job-site text contains the word "munger"; cleared/empty search hides it. */
   const showMungerIntelPanel = useMemo(() => {
     const probe =
@@ -890,9 +886,6 @@ export default function App() {
     vertical?: FollowUpChip["vertical"];
     missionCritical?: FollowUpChip["missionCritical"];
   }) => {
-    if (!selection) {
-      return;
-    }
     resetOutput();
     setStreamBroken(false);
     researchSawChunkRef.current = false;
@@ -904,9 +897,12 @@ export default function App() {
     setPhase("Connecting…");
 
     const form = new FormData();
-    form.append("zip_code", selection.zip);
-    form.append("site_address", selection.formattedAddress);
-    const clientCity = selection.city?.trim();
+    const zipCode = (selection?.zip ?? "").trim() || "75202";
+    const siteAddress =
+      (selection?.formattedAddress ?? "").trim() || "722 Munger Ave, Dallas, TX 75202, USA";
+    form.append("zip_code", zipCode);
+    form.append("site_address", siteAddress);
+    const clientCity = selection?.city?.trim();
     if (clientCity) {
       form.append("client_city", clientCity);
     }
@@ -954,7 +950,7 @@ export default function App() {
     if (
       bimBridgeReport &&
       typeof bimBridgeReport.zip === "string" &&
-      bimBridgeReport.zip === selection.zip
+      bimBridgeReport.zip === zipCode
     ) {
       form.append("bim_bridge_json", JSON.stringify(bimBridgeReport));
     }
@@ -2450,7 +2446,6 @@ export default function App() {
             <button
               type="button"
               className="rg-btn rg-btn--primary"
-              disabled={!canSubmit}
               onClick={() => void runResearch()}
             >
               {busy ? "Researching…" : "Run compliance research"}
