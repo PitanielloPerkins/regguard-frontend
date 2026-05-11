@@ -4,7 +4,8 @@ HTTP: ``python dallas_permits.py`` serves ``GET /run-research`` on port 8000 (72
 """
 import json
 import os
-from typing import Any, Dict, List, Optional
+import traceback
+from typing import Any, Dict, List, Optional, Tuple
 
 import pandas as pd
 import requests
@@ -13,7 +14,23 @@ from flask_cors import CORS
 from requests.exceptions import RequestException
 
 app = Flask(__name__)
-CORS(app)
+# Broad CORS for local dashboard + tooling (Vite on another port, curl, etc.).
+CORS(
+    app,
+    resources={r"/*": {"origins": "*", "methods": ["GET", "POST", "OPTIONS", "HEAD"], "allow_headers": "*"}},
+)
+
+
+@app.errorhandler(Exception)
+def _unhandled_error(exc: Exception) -> Tuple[Any, int]:
+    """Never return an HTML stack trace to API clients; keeps dashboards from blanking on parse errors."""
+    traceback.print_exc()
+    return jsonify({"error": "internal_server_error", "message": str(exc)}), 500
+
+
+@app.get("/health")
+def health() -> Any:
+    return jsonify({"ok": True, "service": "dallas_permits"})
 
 
 @app.route("/run-research", methods=["GET", "OPTIONS"])
@@ -21,10 +38,14 @@ def run_research() -> Any:
     """Return 722 Munger Ave fixture (3 ft rear setback, $167.00 fee) for dashboard consumption."""
     if request.method == "OPTIONS":
         return "", 204
-    df = _mock_commercial_permits_dataframe()
-    permits: List[Dict[str, Any]] = json.loads(df.to_json(orient="records"))
-    # Dashboard expects a JSON object with a top-level "permits" array.
-    return jsonify({"permits": permits, "source": "mock_722_munger"})
+    try:
+        df = _mock_commercial_permits_dataframe()
+        permits: List[Dict[str, Any]] = json.loads(df.to_json(orient="records"))
+        return jsonify({"permits": permits, "source": "mock_722_munger"})
+    except Exception as exc:  # noqa: BLE001 — defensive; surfaced as JSON for clients
+        traceback.print_exc()
+        return jsonify({"error": "run_research_failed", "message": str(exc), "permits": []}), 500
+
 
 # City of Dallas Open Data (Socrata). App token: https://data.dallascityhall.com/profile/edit/developer_settings
 DALLAS_API_URL = "https://www.dallascityhall.com/resource/7vsc-id2i.json"
@@ -99,4 +120,5 @@ def get_commercial_permits(keyword: str = "Data Center") -> Optional[pd.DataFram
 
 
 if __name__ == "__main__":
-    app.run(host="0.0.0.0", port=8000, debug=False)
+    # threaded=True: tolerate concurrent dashboard + health probes during dev.
+    app.run(host="0.0.0.0", port=8000, debug=False, threaded=True)

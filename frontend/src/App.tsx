@@ -68,6 +68,9 @@ function permitPackageDownloadFilename(): string {
 /** Sync with ``backend/main.py`` / permit package PDF (Dallas minimum trade permit). */
 const REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD = "167.00";
 
+/** Local Dallas permits Flask server output (``python dallas_permits.py``). */
+const RUN_RESEARCH_FLASK_URL = "http://127.0.0.1:8000/run-research";
+
 /** Flat fee model — matches backend ``base_search_value`` ($5.00 customer-facing research value). */
 const BASE_SEARCH_VALUE_USD = 5;
 
@@ -482,6 +485,12 @@ export default function App() {
   const [permitPackageBusy, setPermitPackageBusy] = useState(false);
   const [permitPackageReady, setPermitPackageReady] = useState(false);
   const [permitPackageDownloadUrl, setPermitPackageDownloadUrl] = useState<string | null>(null);
+  /** Response from ``RUN_RESEARCH_FLASK_URL`` (722 Munger mock / permits array). */
+  const [dallasPermitsFixture, setDallasPermitsFixture] = useState<{
+    permits: Record<string, unknown>[];
+    source?: string;
+    fetchError?: string;
+  } | null>(null);
 
   const refreshMaintenanceSubs = useCallback(async () => {
     setMaintenanceLoading(true);
@@ -493,6 +502,8 @@ export default function App() {
       const j = (await r.json()) as { subscriptions?: unknown };
       const raw = j.subscriptions;
       setMaintenanceSubs(Array.isArray(raw) ? (raw as MaintenanceSubscription[]) : []);
+    } catch (e) {
+      console.warn("[RegGuard] maintenance subscriptions refresh failed", e);
     } finally {
       setMaintenanceLoading(false);
     }
@@ -504,7 +515,16 @@ export default function App() {
 
   useEffect(() => {
     fetch("/api/finops-cache", { cache: "no-store" })
-      .then((r) => (r.ok ? r.json() : null))
+      .then(async (r) => {
+        if (!r.ok) {
+          return null;
+        }
+        try {
+          return await r.json();
+        } catch {
+          return null;
+        }
+      })
       .then((j) => {
         if (j && typeof j === "object") {
           console.info("[RegGuard FinOps — caches]", j);
@@ -681,6 +701,7 @@ export default function App() {
     setInspectorNoteSaving(false);
     setResultsTab("plan");
     setProactiveSummaryBuffer("");
+    setDallasPermitsFixture(null);
   }, []);
 
   const handleNewJob = useCallback(() => {
@@ -896,6 +917,44 @@ export default function App() {
     setBusy(true);
     setPhase("Connecting…");
 
+    try {
+      const frRes = await fetch(RUN_RESEARCH_FLASK_URL, {
+        method: "GET",
+        mode: "cors",
+        cache: "no-store",
+      });
+      let frJson: unknown;
+      try {
+        frJson = await frRes.json();
+      } catch {
+        throw new Error(`Invalid JSON from Dallas permits server (HTTP ${frRes.status}).`);
+      }
+      if (!frRes.ok) {
+        const msg =
+          frJson && typeof frJson === "object" && typeof (frJson as { message?: unknown }).message === "string"
+            ? (frJson as { message: string }).message
+            : `HTTP ${frRes.status}`;
+        throw new Error(msg);
+      }
+      const permits =
+        frJson && typeof frJson === "object" && Array.isArray((frJson as { permits?: unknown }).permits)
+          ? (frJson as { permits: Record<string, unknown>[] }).permits
+          : [];
+      const source =
+        frJson && typeof frJson === "object" && typeof (frJson as { source?: unknown }).source === "string"
+          ? (frJson as { source: string }).source
+          : undefined;
+      setDallasPermitsFixture({ permits, source });
+      toast.success(`Dallas permits loaded (${permits.length}).`, {
+        autoClose: 2400,
+        hideProgressBar: true,
+      });
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      setDallasPermitsFixture({ permits: [], fetchError: msg });
+      toast.warning(`Dallas permits (${RUN_RESEARCH_FLASK_URL}): ${msg}`, { autoClose: 5200 });
+    }
+
     const form = new FormData();
     const zipCode = (selection?.zip ?? "").trim() || "75202";
     const siteAddress =
@@ -982,7 +1041,8 @@ export default function App() {
           }
         },
         onmessage(ev) {
-          console.log("Stream chunk:", ev.data);
+          const handleChunk = (): void => {
+            console.log("Stream chunk:", ev.data);
           const raw = typeof ev.data === "string" ? ev.data : "";
           if (!raw.trim()) {
             return;
@@ -1227,6 +1287,19 @@ export default function App() {
               console.warn("[RegGuard research] unknown SSE event shape", payload);
               break;
           }
+          };
+          try {
+            handleChunk();
+          } catch (handlerErr) {
+            console.error("[RegGuard research] onmessage handler error", handlerErr);
+            toast.error(
+              handlerErr instanceof Error
+                ? handlerErr.message.length > 160
+                  ? `${handlerErr.message.slice(0, 160)}…`
+                  : handlerErr.message
+                : "Stream chunk handler failed.",
+            );
+          }
         },
         onclose() {
           setSseConnectionLive(false);
@@ -1309,9 +1382,6 @@ export default function App() {
         toast.error("Select a job site first.");
         return;
       }
-      if (busy) {
-        return;
-      }
       toast.success(`RegGuard just saved you ${chip.minutesSaved} minutes of manual research.`, {
         autoClose: 3800,
         hideProgressBar: true,
@@ -1323,7 +1393,7 @@ export default function App() {
         missionCritical: chip.missionCritical,
       });
     },
-    [selection, busy, runResearch],
+    [selection, runResearch],
   );
 
   const geolocationReadOptions = useMemo<PositionOptions>(
@@ -2454,7 +2524,6 @@ export default function App() {
             <button
               type="button"
               className="rg-btn rg-btn--ghost"
-              disabled={busy}
               onClick={resetOutput}
             >
               Clear results
@@ -2466,6 +2535,27 @@ export default function App() {
           <header className="rg-results-panel__header">
             <h2 id="rg-results-heading">Results</h2>
           </header>
+
+          {dallasPermitsFixture ? (
+            <div
+              className="rg-banner rg-banner--muted"
+              role="region"
+              aria-label="Dallas permits fixture from local Flask"
+            >
+              <strong>Dallas permits (local Flask)</strong>
+              <span className="field-hint"> — {RUN_RESEARCH_FLASK_URL}</span>
+              {dallasPermitsFixture.fetchError ? (
+                <p style={{ marginTop: 8 }}>{dallasPermitsFixture.fetchError}</p>
+              ) : (
+                <pre className="vision-snippet" style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
+                  {JSON.stringify(dallasPermitsFixture.permits, null, 2)}
+                </pre>
+              )}
+              {!dallasPermitsFixture.fetchError && dallasPermitsFixture.source ? (
+                <p className="field-hint">source: {dallasPermitsFixture.source}</p>
+              ) : null}
+            </div>
+          ) : null}
 
           {phase === "Complete" && projectValueMetrics ? (
             <div className="rg-project-value-card" aria-labelledby="rg-project-value-heading">
@@ -2574,7 +2664,6 @@ export default function App() {
               <button
                 type="button"
                 className="rg-btn rg-btn--primary rg-btn--compact"
-                disabled={!selection?.formattedAddress || !selection.zip}
                 onClick={() => void runResearch()}
               >
                 Resume Research
