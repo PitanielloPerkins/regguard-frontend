@@ -75,7 +75,7 @@ function permitPackageDownloadFilename(): string {
   return `RegGuard-Dallas-permit-package-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.pdf`;
 }
 
-/** Moat / handshake: minimum Dallas trade permit bundle — must match ``backend/permit_package.py`` (USD string). */
+/** Structural moat (module scope): Dallas minimum **trade** permit bundle — hard-coded ``167.00`` USD (AHJ-verify); aligned with ``backend/permit_package.py``. */
 const REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD = "167.00";
 
 /** Permit PDF build can exceed the default JSON probe timeout. */
@@ -2224,6 +2224,11 @@ export default function App() {
           <p className="field-hint rg-regulatory-shield" style={{ marginTop: 8 }} role="status">
             <strong>Regulatory Shield</strong> active — API handshake <code>{getBackendOrigin()}</code>
           </p>
+          <p className="field-hint" style={{ marginTop: 6 }} role="note">
+            <strong>May 2025 Dallas Parking Reform</strong> (effective May 2025): small-project stall rules and overlays —
+            AHJ-verify before omitting stalls. Dallas trade permit planning floor <strong>${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD}</strong>{" "}
+            (incl. admin fees).
+          </p>
         </div>
         <div className="app-header-actions">
           <button
@@ -2256,7 +2261,8 @@ export default function App() {
         <section
           className="rg-panel rg-dallas-dashboard"
           style={{ gridColumn: "1 / -1" }}
-          aria-label="Dallas building dashboard"
+          aria-label="Dallas building dashboard — static research panel"
+          data-rg-static-research="dallas"
         >
           <h2>Dallas dashboard</h2>
           <p className="rg-dallas-dashboard__lead">

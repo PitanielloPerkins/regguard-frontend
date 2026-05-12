@@ -1,6 +1,6 @@
 """
 Reg Guard — City of Dallas commercial permit queries (Socrata API).
-HTTP: ``python dallas_permits.py`` serves ``GET /run-research`` on port 8000 (722 Munger mock for the dashboard).
+HTTP: ``cd backend && python3 dallas_permits.py`` serves ``GET /run-research`` on port 8000 (722 Munger mock for the dashboard).
 """
 import json
 import os
