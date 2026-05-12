@@ -15,9 +15,15 @@ export default defineConfig(({ mode }) => {
     root: frontendRoot,
     envDir: frontendRoot,
     plugins: [react()],
+    /** `jspdf` → `fast-png`; a bad/empty `PngDecoder.js.map` can crash esbuild during dep scan. */
+    optimizeDeps: {
+      exclude: ['jspdf'],
+    },
     server: {
-      host: '127.0.0.1',
+      /** Bind all interfaces; avoids some local port/firewall edge cases when 127.0.0.1 stalls. */
+      host: true,
       port: 5173,
+      /** If 5173 is busy, Vite picks the next free port instead of failing. */
       strictPort: false,
       proxy: {
         '/api': {
