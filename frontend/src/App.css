@@ -721,7 +721,7 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   border-color: rgba(212, 148, 0, 0.95);
 }
 
-.rg-dallas-dashboard {
+.rg-live-ahj-stream {
   border-color: rgba(139, 162, 255, 0.45);
   background: linear-gradient(
     145deg,
@@ -731,14 +731,14 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   );
 }
 
-.rg-dallas-dashboard__lead {
+.rg-live-ahj-stream__lead {
   margin: 0 0 0.75rem;
   font-size: 0.82rem;
   color: var(--rg-muted);
   line-height: 1.45;
 }
 
-.rg-dallas-dashboard__list {
+.rg-live-ahj-stream__list {
   margin: 0;
   padding-left: 1.15rem;
   font-size: 0.8rem;
@@ -746,15 +746,15 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   color: var(--rg-text);
 }
 
-.rg-dallas-dashboard__list li {
+.rg-live-ahj-stream__list li {
   margin-bottom: 0.42rem;
 }
 
-.rg-dallas-dashboard__list li:last-child {
+.rg-live-ahj-stream__list li:last-child {
   margin-bottom: 0;
 }
 
-.rg-dallas-dashboard__foot {
+.rg-live-ahj-stream__foot {
   margin: 0.85rem 0 0 !important;
 }
 

@@ -16,37 +16,15 @@ from anthropic import Anthropic
 from dotenv import load_dotenv
 
 from data_center_intel import MORATORIUM_BOTTOM_RED_WARNING_TEXT, build_digest_intel_block
+from fast41_eligibility import detect_fast41_eligibility_from_job_description
 from scraper import SCOUT_SOURCE_STEP_KEYS, future_risk_alerts_from_raw
 
 _ROOT = Path(__file__).resolve().parent.parent
 load_dotenv(_ROOT / ".env")
 
-# Hard-coded field sync — Dallas / Plano fee floors (intentional product constants).
-REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD: float = 167.0
+# Hard-coded field sync — Plano fee floor (AHJ confirms on official schedule).
 REG_GUARD_PLANO_ELECTRICAL_PERMIT_TOTAL_USD: float = 75.0
 
-# Dallas entitlement / zoning — digest **Field Intel** strings (AHJ-verify; scout supports, does not statute-parse).
-REG_GUARD_DALLAS_FIELD_INTEL_3FT_SETBACK: str = (
-    "FIELD INTEL (Dallas, TX — **three-foot setback / side-yard line** regimes): Emit **FIELD INTEL:** under "
-    "**### Technical Punch List** with `- [ ]` tasks confirming **measuring methodology** "
-    "(**side / rear / interior side / corner lots**), **lot lines vs alleys**, and **district-specific** setbacks before "
-    "foundations/masonry/impervious cover assumptions — crews often cite a **three-foot-class** clearance that still fails "
-    "subdivision / form-based checks (**verify codified setbacks + GIS tie-outs with Planning / Building**)."
-)
-
-REG_GUARD_DALLAS_FIELD_INTEL_FAR_DUPLEX_25PCT: str = (
-    "FIELD INTEL (Dallas, TX — **≈25% FAR duplex envelope risk**): Add `- [ ]` lines flagging duplex / **two-unit** reuse "
-    "where **combined floor-area ratio** and **lot coverage** math trips **planned / by-right FAR caps** differently than "
-    "single-family calculators show — reconcile **Accessory Dwelling Unit** vs duplex classification, attic/basement ratios, "
-    "and mechanical voids (**verify zoning district + worksheet with Planning** — spreadsheet trap)."
-)
-
-REG_GUARD_DALLAS_FIELD_INTEL_PARKING_2025: str = (
-    "FIELD INTEL (Dallas, TX — **2025 parking reform / bike parking overlays**): Add `- [ ]` tasks to confirm **effective "
-    "date**, **district option / transit / affordability** overlays, revised **minimum stall** counts, bicycle parking tier, "
-    "and curb-cut / stacking assumptions for this use — entitlement packages filed pre-reform versus post-reform can "
-    "re-open site plans (**pull current adopted parking ordinance + staff bulletin**)."
-)
 
 # City of Austin — Development Services fee page (safety surcharges, permit calculators).
 REG_GUARD_AUSTIN_DEVELOPMENT_SERVICES_FEES_URL: str = "https://www.austintexas.gov/development-services/fees"
@@ -202,6 +180,7 @@ def _build_inspector_digest_directive(
     raw: Dict[str, Any],
     *,
     data_center_intel: Optional[Dict[str, Any]] = None,
+    job_fast41_eligible: bool = False,
 ) -> Dict[str, Any]:
     ju = raw.get("jurisdiction") if isinstance(raw.get("jurisdiction"), dict) else {}
     city = str(ju.get("city") or "").strip()
@@ -225,12 +204,10 @@ def _build_inspector_digest_directive(
             loc_focus = "this jurisdiction (see `jurisdiction` and `site_address` in this digest)"
 
     is_plano_tx = city.lower() == "plano" and (state or "").strip().upper() in ("TX",)
-    is_dallas_tx = city.lower() == "dallas" and (state or "").strip().upper() in ("TX",)
     is_austin_tx = city.lower() == "austin" and (state or "").strip().upper() in ("TX",)
     zip_project = str(raw.get("zip") or ju.get("zip") or "").strip()
     empty_scout = scout_has_no_trusted_results(raw)
     _pf_amt = f"${REG_GUARD_PLANO_ELECTRICAL_PERMIT_TOTAL_USD:.2f}"
-    _df_amt = f"${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD:.2f}"
 
     consultant_role = (
         f"Act as a Master Electrician for **{loc_focus}** (the specific city or county for this job). "
@@ -250,13 +227,6 @@ def _build_inspector_digest_directive(
             " For **Austin, Texas** service upgrades (including **78704** and broader **787** Austin ZIPs), apply **City of Austin Design Criteria** "
             "and **Electrical Service Requirements** — not generic NEC-only narratives for clearances or bus/main sizing."
             f"{ztxt}: treat as **Austin AHJ** scope for **Design Criteria** punch-list items."
-        )
-    if is_dallas_tx:
-        consultant_role += (
-            " **Dallas, Texas:** Translate digest **`dallas_field_intel_*`** strings into **`FIELD INTEL:`** clusters under "
-            "**### Technical Punch List** (**three‑foot setback discipline**, **~25% FAR duplex worksheet trap**, **2025 parking reform overlays**) "
-            "while retaining **MANDATORY GOTCHA: Oncor coordination** and **`dallas_minimum_trade_permit_usd`** — verify every zoning claim "
-            "against `.gov` / Municode rows present in this digest."
         )
     if empty_scout:
         consultant_role += (
@@ -283,12 +253,29 @@ def _build_inspector_digest_directive(
             " **Mission-critical data center scout:** add checklist items for **Tier III/IV redundancy** themes, **concurrent maintainability**, "
             "and **liquid cooling / containment** (CDU, data-hall mechanical-electrical interfaces) when sources in the digest support them."
         )
-    if vert_sp in ("data_center", "infrastructure"):
+    if vert_sp in ("data_center", "infrastructure") or bool(sp.get("job_fast41_eligible")):
         consultant_role += (
-            " **Project vertical (data center / infrastructure):** if `step_federal_fast41` hits reference **FAST-41** or **Title 41 Permitting Council**, "
+            " **Project vertical (data center / infrastructure / FAST-41 gate):** if `step_federal_fast41` hits reference **FAST-41** or **Title 41 Permitting Council**, "
             "include federal permitting coordination `- [ ]` tasks; otherwise note counsel / program verification. "
             "If `step_data_center_water` hits reference **NPDES**, **water withdrawal**, or state **environmental quality** / **utility commission** proceedings, "
             "add checklist lines for cooling-water compliance and permit coupling — verify against live agency dockets."
+        )
+    job_ff = bool(job_fast41_eligible) or bool(sp.get("job_fast41_eligible"))
+    if job_ff:
+        consultant_role += (
+            " **FAST-41 job gate:** Digest sets **`job_fast41_eligibility: true`** from the scoped brief (**data center** + "
+            "**>100 MW** or **>$500 M** cues). Emit **### Federal FAST-41 Eligibility** with `- [ ]` diligence lines mapping to FAST-41 / Federal Permitting "
+            "Council program materials counsel would expect — **no** asserted federal designation unless a `.gov` source in the digest states it plainly."
+        )
+    if isinstance(raw.get("step_refrigerant_aim_act"), dict):
+        consultant_role += (
+            " When `step_refrigerant_aim_act` is populated, Mechanical/MEP lines should reflect **EPA AIM Act** / "
+            "**HFC SNAP phasedown** applicability only where trusted `.gov` rows support it."
+        )
+    if isinstance(raw.get("step_water_usage_effectiveness"), dict):
+        consultant_role += (
+            " When `step_water_usage_effectiveness` is populated, add **WUE** / reclaimed-water / conservation ordinance checkpoints "
+            "for large cooling footprints — locality claims strictly from scout hits."
         )
 
     dc_intel = data_center_intel if isinstance(data_center_intel, dict) else {}
@@ -340,34 +327,6 @@ def _build_inspector_digest_directive(
             "per **Reg Guard 2026 sync**, with AHJ confirmation on the official fee schedule.\n"
             "Identify other **City of Plano** local amendments that **differ from** or **add to** the adopted NEC only when "
             "the digest text supports them."
-        )
-    elif is_dallas_tx:
-        trade_set = frozenset([str(x).strip().lower() for x in (sp.get("trades") or []) if str(x).strip()])
-        _fi_extra = ""
-        if trade_set.intersection(
-            frozenset({"general_contractor", "zoning_planning", "owner_builder", "electrician", "hvac_mechanical", "hvac"})
-        ):
-            _fi_extra = (
-                "**Anchor Field Intel aggressively** — these entitlement traps bankrupt schedules when projects are assumed "
-                "too residential-simple.**\n\n"
-            )
-        gotchas_guidance = (
-            "**MANDATORY — Dallas / Oncor:** Under **Technical Punch List**, include **MANDATORY GOTCHA: Oncor coordination** "
-            "with `- [ ]` tasks requiring **mandatory Oncor notification / coordination** before **service disconnect**, **meter seal**, "
-            "or **utility-side** work; confirm current Oncor contractor rules and scheduled outage / reconnect steps.\n\n"
-            + _fi_extra
-            + "**FIELD INTEL — Dallas Development Code checkpoints (verify every line with AHJ GIS + published ordinance):**\n"
-            "- **Three-foot setback / side-yard regimes:** crews often mis-measure versus **district / form-based yard lines** / "
-            "**~3-ft-class** setbacks — reconcile **corner / interior side**, **measuring points**, and alleys (**do not fabricate ordinance citations**).\n"
-            "- **Duplex FAR \"25%\" spreadsheet trap:** two-unit redevelopment can trip **combined FAR/lot‑coverage caps** versus "
-            "single-family calculators; reconcile **classification**, basements/mezzanine treatment, worksheet rows.\n"
-            "- **Post‑2025 parking reform overlays:** reconcile **effective date**, stall minima reductions, bicycle parking tiers, "
-            "and stacking / alley access assumptions — entitlement packages drafted pre-reform can miss adopted parking language.\n"
-            "**Emit checklist voice:** Prefix each actionable cluster with **`FIELD INTEL:`** (bold) then `- [ ]` lines — still no long prose paragraphs.\n\n"
-            f"**Permit Costs — Dallas:** include an explicit `- [ ]` line for the **{_df_amt}** total minimum **trade** permit "
-            "(incl. **administrative fees**) per **Reg Guard sync**, with confirmation on official Dallas permit / fee pages.\n\n"
-            "Consult digest JSON **`dallas_field_intel_*`** verbatim strings — merge them under **Technical Punch List** "
-            "(not **The Bottom Line**)."
         )
     elif is_austin_tx:
         gotchas_guidance = (
@@ -461,14 +420,13 @@ def _build_inspector_digest_directive(
                 "**Solar-Ready** pattern where Austin requires it (confirm **78704** / **787** projects against current **Design Criteria**)."
             ),
         )
-    if is_dallas_tx:
+    if job_ff:
         logic_steps.insert(
             2,
             (
-                "Step 2b — **Technical Punch List (Dallas Field Intel + Oncor):** Under **### Technical Punch List**, emit **FIELD INTEL:** headings "
-                "and `- [ ]` tasks synthesized from **`dallas_field_intel_three_ft_setback`**, **`dallas_field_intel_far_duplex_25pct`**, "
-                "**`dallas_field_intel_parking_reform_2025`** (verbatim AHJ‑verify cues), separately from "
-                "**MANDATORY GOTCHA: Oncor coordination** — do **not** move Field Intel into **### The Bottom Line**."
+                "Step 2c — **Federal FAST-41 Eligibility:** Under **### Federal FAST-41 Eligibility**, add `- [ ]` lines for FAST-41 / "
+                "Federal Permitting Council diligence, lead-agency coordination, and counsel review when `job_fast41_eligibility` is **true** in the digest JSON. "
+                "Do **not** assert a final federal designation without a controlling `.gov` statement in `scout_steps` or cited URLs."
             ),
         )
 
@@ -478,11 +436,6 @@ def _build_inspector_digest_directive(
             f" **Reg Guard 2026 sync (Plano, TX):** Electrical permit **{_pf_amt}** total (**$65.00** base + **$10.00** laborer) — "
             "confirm on the official City of Plano fee schedule. Tie to **Ordinance 250.50** (**20-foot** rod spacing, **2/0 AWG** between rods)."
         )
-    elif is_dallas_tx:
-        fee_extra = (
-            f" **Reg Guard sync (Dallas, TX):** Minimum **trade** permit **{_df_amt}** total including **administrative fees** "
-            "(confirm on official Dallas permit / fee pages). **Oncor** utility coordination is **mandatory** for **disconnects** / meter work."
-        )
     elif is_austin_tx:
         fee_extra = (
             f" **Reg Guard sync (Austin, TX):** Under **Permit Costs**, use **City of Austin Development Services** fee documentation, including **Safety Surcharges** at "
@@ -491,14 +444,23 @@ def _build_inspector_digest_directive(
     else:
         fee_extra = " Base technical items on the NEC/adoption language in the digest."
 
+    headings_list = [
+        "### Permit Costs",
+        "### Technical Punch List",
+        "### Inspection Must-Haves",
+    ]
+    if job_ff:
+        headings_list = [
+            "### Permit Costs",
+            "### Federal FAST-41 Eligibility",
+            "### Technical Punch List",
+            "### Inspection Must-Haves",
+        ]
+
     return {
         "consultant_role": consultant_role,
         "logic_steps": logic_steps,
-        "required_checklist_headings": [
-            "### Permit Costs",
-            "### Technical Punch List",
-            "### Inspection Must-Haves",
-        ],
+        "required_checklist_headings": headings_list,
         "output_format": (
             "Technical punch list only: every actionable line is `- [ ] ` (Markdown checkbox + space) under the headings in "
             "`required_checklist_headings`, in order. Optional single-line **MANDATORY GOTCHA:** immediately before related "
@@ -587,7 +549,17 @@ def build_research_digest(
     fr = future_risk if future_risk is not None else future_risk_alerts_from_raw(raw)
 
     dc_intel_snap = compute_data_center_intel_snapshot(raw, job_description, enhanced_query)
-    directive = dict(_build_inspector_digest_directive(raw, data_center_intel=dc_intel_snap))
+    sp_snap = raw.get("scout_profile") if isinstance(raw.get("scout_profile"), dict) else {}
+    jd_ff = detect_fast41_eligibility_from_job_description(job_description) or bool(
+        sp_snap.get("job_fast41_eligible")
+    )
+    directive = dict(
+        _build_inspector_digest_directive(
+            raw,
+            data_center_intel=dc_intel_snap,
+            job_fast41_eligible=jd_ff,
+        )
+    )
     if fr.get("active"):
         directive["future_risk_watchdog"] = (
             "The digest includes `future_code_change_watchdog` with active=true. Open the Contractor Action Plan with "
@@ -663,20 +635,8 @@ def build_research_digest(
         payload["data_center_intelligence"] = dc_intel_snap
     if scout_has_no_trusted_results(raw):
         payload["empty_scout_nec_2023_fallback"] = True
-    if city_guess.lower() == "dallas" and (state_guess or "").strip().upper() in ("TX",):
-        payload["dallas_minimum_trade_permit_usd"] = REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD
-        df = f"${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD:.2f}"
-        payload["dallas_minimum_trade_permit_note"] = (
-            f"Reg Guard sync: Dallas, TX minimum **trade** permit **{df}** total including administrative fees (confirm on official city pages)."
-        )
-        payload["dallas_oncor_disconnect_coordination"] = (
-            "HARD REQUIREMENT (Dallas, TX): Include **MANDATORY GOTCHA: Oncor coordination** under **Technical Punch List** — "
-            "**mandatory Oncor** notification and coordination for **service disconnect**, **meter**, and **utility-side** sequences "
-            "before energizing or cutting service."
-        )
-        payload["dallas_field_intel_three_ft_setback"] = REG_GUARD_DALLAS_FIELD_INTEL_3FT_SETBACK
-        payload["dallas_field_intel_far_duplex_25pct"] = REG_GUARD_DALLAS_FIELD_INTEL_FAR_DUPLEX_25PCT
-        payload["dallas_field_intel_parking_reform_2025"] = REG_GUARD_DALLAS_FIELD_INTEL_PARKING_2025
+    if jd_ff:
+        payload["job_fast41_eligibility"] = True
     if city_guess.lower() == "plano" and (state_guess or "").strip().upper() in ("TX",):
         payload["plano_electrical_permit_fee_sync_usd"] = REG_GUARD_PLANO_ELECTRICAL_PERMIT_TOTAL_USD
         pf = f"${REG_GUARD_PLANO_ELECTRICAL_PERMIT_TOTAL_USD:.2f}"
@@ -722,15 +682,14 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                     "role": "user",
                     "content": (
                         "Read `inspector_digest_directive` first (`consultant_role`, `logic_steps`, `fee_and_code_guidance`, "
-                        "`gotchas_guidance`, `output_format`, `community_inspector_moat`, `bim_clash_zone_moat`, and `bim_integration_crossref` if present), then `plano_ord_250_50_requirement`, "
+                        "`gotchas_guidance`, `output_format`, `community_inspector_moat`, `bim_clash_zone_moat`, and `bim_integration_crossref` if present), then "
+                        "`plano_ord_250_50_requirement`, "
                         "`plano_electrical_permit_fee_sync_usd` / `plano_electrical_permit_fee_2026_note`, "
-                        "`dallas_minimum_trade_permit_usd` / `dallas_minimum_trade_permit_note`, `dallas_oncor_disconnect_coordination`, "
-                        "`dallas_field_intel_three_ft_setback`, `dallas_field_intel_far_duplex_25pct`, "
-                        "`dallas_field_intel_parking_reform_2025`, "
                         "`austin_design_criteria_requirement`, `austin_development_services_fees_url`, `austin_safety_surcharge_note`, "
                         "`austin_central_zip_service_upgrade`, "
                         "`data_center_intelligence` (when present — **May 2026 rescission** posture, **FAST-41 Transparency Project** >100 MW gate, "
                         "**Virginia HB 1515** / **Ohio ballot** flags, **`infrastructure_surcharge_estimate_usd`**, permit conflict, moratorium High Alert), "
+                        "`job_fast41_eligibility` when true (follow **### Federal FAST-41 Eligibility** headings in `required_checklist_headings`), "
                         "and `empty_scout_nec_2023_fallback` if present, then "
                         "`community_scout_inspector_notes` (when non-empty you MUST satisfy `community_inspector_moat` under **### Technical Punch List**), "
                         "`bim_clash_zones` / `bim_scout_cross_reference` when present (satisfy `bim_clash_zone_moat` and/or `bim_integration_crossref`), "
@@ -740,10 +699,6 @@ def iter_contractor_action_plan_stream(system_prompt: str, user_digest: str) -> 
                         f"and include the **${REG_GUARD_PLANO_ELECTRICAL_PERMIT_TOTAL_USD:.2f}** permit-cost line from `plano_electrical_permit_fee_2026_note`. "
                         "When `empty_scout_nec_2023_fallback` is true, apply the system prompt: fill Technical + Inspection "
                         "using NEC 2023 training knowledge for 200A scope. "
-                        f"When Dallas fee fields are set, include the **${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD:.2f}** floor in **Permit Costs**. "
-                        "When `dallas_oncor_disconnect_coordination` is set, include **Oncor coordination** gotchas under **Technical Punch List**. "
-                        "When **`dallas_field_intel_*`** strings are present, emit separate **`FIELD INTEL:`** headings for **three-foot setback**, "
-                        "**duplex FAR / 25% worksheet trap**, and **2025 parking reform** overlays as `- [ ]` tasks (Planning/GIS verification labels). "
                         "When `data_center_intelligence` is present, satisfy **Conflict Intelligence Engine** tasks in `consultant_role` "
                         "(**no EO 14141** reliance — cite **`federal_permitting_may_2026_note`**; **FAST-41 Transparency** checkbox when "
                         "`fast41_transparency_project_candidate`; **`bill_specific_flags`** for VA/OH; surcharge band; moratorium mining). "

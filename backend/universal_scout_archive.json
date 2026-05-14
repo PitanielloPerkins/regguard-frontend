@@ -374,5 +374,110 @@
         "label": "Incorporated / municipal — Dallas, TX 75202 (city building department)"
       }
     }
+  },
+  "75207": {
+    "updated_at": "2026-05-13T00:57:06.358242+00:00",
+    "raw": {
+      "zip": "75207",
+      "site_address": "1900 N Stemmons Fwy, Dallas, TX 75207, USA",
+      "jurisdiction": {
+        "mode": "city",
+        "zip": "75207",
+        "street_line": "1900 North Stemmons Freeway",
+        "city": "Dallas",
+        "county": "Dallas",
+        "state": "TX",
+        "state_long": "Texas",
+        "formatted_address": "1900 N Stemmons Fwy, Dallas, TX 75207, USA",
+        "label": "Incorporated / municipal — Dallas, TX 75207 (city building department)"
+      },
+      "scout_profile": {
+        "trades": [],
+        "vertical": "building",
+        "mission_critical_dc": false,
+        "job_fast41_eligible": false
+      },
+      "scout": {
+        "mode": "search_web",
+        "search_domain_scope": "(site:gov OR site:municode.com)",
+        "search_domain_scope_zoning_residential": "(site:gov OR site:municode.com OR site:opengov.com)",
+        "trust_policy": "hostname ends with .gov, hostname contains municode, or hostname under .opengov.com (SERP scoped per step)",
+        "sources": [
+          "web"
+        ],
+        "scrape_options": null,
+        "max_depth_note": "N/A — Universal Scout does not call Firecrawl crawl/map; depth 1 crawl would use max_discovery_depth on /v2/crawl, not used here.",
+        "exclude_external_links_note": "N/A for SERP-only search. For crawl, omit following off-domain links via allow_external_links=False.",
+        "page_limit_per_search": {
+          "min": 3,
+          "max": 5
+        },
+        "bundled_single_page_scrape_options": "disabled — SERP snippets only; see SEARCH_BUNDLED_SCRAPE_OPTIONS if re-enabled (markdown only, fast_mode, no links format, exclude_tags strips media/CSS).",
+        "fallback": "If a scoped step returns zero trusted URLs, Universal Scout runs a follow-up search that still appends (site:gov OR site:municode.com) and biases keywords toward *official* / *city government* (no fully unscoped web search)."
+      },
+      "enhanced_context_used": true,
+      "agentic_workflow": [
+        "AHJ identification — **City**: Dallas; **County**: Dallas (municipal/city building-code steering, ZIP 75207).",
+        "Fallback — If a scoped step returns no trusted URLs: follow-up search **retains** the step’s **site:** scope (see ``scout.search_domain_scope`` / zoning ``OPENGOV`` extension) and adds *official* / *city government landing page*.",
+        "Universal Scout 1 — Jurisdiction: city/county AHJ hints (trusted hosts).",
+        "Universal Scout 2 — Permits: **city** or **county** building department (steered from address).",
+        "Universal Scout 3 — Building codes: **city-specific** (incorporated) or **county-specific** (unincorporated) adopted codes and amendments, plus **Code-Change Monitoring** cues (upcoming adoptions / council minutes keywords).",
+        "Scout profile — **Trades**: none selected; **vertical**: building; **mission-critical DC scout**: off; **job FAST-41 gate**: off.",
+        "**Intelligence tier — Residential / building vertical:** Municode / `.gov` / **OpenGov** portal discovery for **setbacks**, yard lines, and codified zoning chapters."
+      ],
+      "step_jurisdiction": {
+        "query": "Dallas, TX: Job site 1900 N Stemmons Fwy, Dallas, TX 75207, USA — incorporated Dallas, TX (ZIP 75207). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | LOCALITY_STRICT City of Dallas Dallas County Texas NOT Lake Dallas Denton County municipal boundary | Stemmons Freeway Dallas 752xx official city permits NOT Lake Dallas | Site/job context: [Job description (voice or typed)] 250 MW AI Data Center. Investm… (site:gov OR site:municode.com)",
+        "results": [
+          {
+            "url": "https://records.wylietexas.gov/WebLink/DocView.aspx?id=1031505&dbid=0&repo=City-of-Wylie",
+            "title": "02-08-2022 (City Council) Agenda Packet - IIS Windows Server",
+            "description": "Press Alt + R to read the document text or Alt + P to download or print. Laserfiche WebLink. My WebLink. More. Help; About; Sign Out. City-of-Wylie."
+          }
+        ],
+        "fallback_used": false,
+        "fallback_query": null,
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_building_permits": {
+        "query": "Dallas, TX: Dallas TX building department permits plan check electrical official — ZIP 75207 | LOCALITY_LOCK Dallas, TX official city code and building permits | LOCALITY_STRICT City of Dallas Dallas County Texas NOT Lake Dallas Denton County municipal boundary | Stemmons Freeway Dallas 752xx official city permits NOT Lake Dallas | Dallas, TX official building permit fees 2026 Context from web: 02-08-2022 (City Council) Agenda Packet - IIS Windows Server (site:gov OR site:municode.com)",
+        "results": [],
+        "fallback_used": true,
+        "fallback_query": "Dallas, TX: Dallas TX building department permits plan check electrical official — ZIP 75207 | LOCALITY_LOCK Dallas, TX official city code and building permits | LOCALITY_STRICT City of Dallas Dallas County Texas NOT Lake Dallas Denton County municipal boundary | Stemmons Freeway Dallas 752xx official city permits NOT Lake Dallas | Dallas, TX official building permit fees 2026 Context from web: 02-08-2022 (City Council) Agenda Packet - IIS Windows Server city government landing page (site:gov OR site:municode.com)",
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_building_codes": {
+        "query": "Dallas, TX: Building codes adopted for Dallas TX: municipal amendments IBC IRC — ZIP 75207 | LOCALITY_LOCK Dallas, TX official city code and building permits | LOCALITY_STRICT City of Dallas Dallas County Texas NOT Lake Dallas Denton County municipal boundary | Stemmons Freeway Dallas 752xx official city permits NOT Lake Dallas | Dallas, TX NEC 2023 amendments | Dallas, TX upcoming building code adoption NEC NFPA 70 effective date transition council workshop — ZIP 75207 | Dallas, TX city council (site:gov OR site:municode.com)",
+        "results": [],
+        "fallback_used": true,
+        "fallback_query": "Dallas, TX: Building codes adopted for Dallas TX: municipal amendments IBC IRC — ZIP 75207 | LOCALITY_LOCK Dallas, TX official city code and building permits | LOCALITY_STRICT City of Dallas Dallas County Texas NOT Lake Dallas Denton County municipal boundary | Stemmons Freeway Dallas 752xx official city permits NOT Lake Dallas | Dallas, TX NEC 2023 amendments | Dallas, TX upcoming building code adoption NEC NFPA 70 effective date transition council workshop — ZIP 75207 | Dallas, TX city council city government landing page (site:gov OR site:municode.com)",
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_residential_zoning": {
+        "query": "1900 N Stemmons Fwy, Dallas, TX 75207, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75207 | Site/job context: [Job description (voice or typed)] 250 MW AI Data Center. Investment: $850M. Industrial substation + liquid cooling. (site:gov OR site:municode.com OR site:opengov.com)",
+        "results": [
+          {
+            "url": "https://library.municode.com/tx/lake_dallas",
+            "title": "Code of Ordinances | Lake Dallas, TX - Municode Library",
+            "description": "The listing below includes all legislation received by Municipal Code since the last update (printed or electronic) to the Code of Ordinances."
+          }
+        ],
+        "fallback_used": true,
+        "fallback_query": "1900 N Stemmons Fwy, Dallas, TX 75207, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75207 | Site/job context: [Job description (voice or typed)] 250 MW AI Data Center. Investment: $850M. Industrial substation + liquid cooling. official city government landing page (site:gov OR site:municode.com OR site:opengov.com)",
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_ahj_identification": {
+        "city": "Dallas",
+        "county": "Dallas",
+        "state": "TX",
+        "mode": "city",
+        "zip": "75207",
+        "formatted_address": "1900 N Stemmons Fwy, Dallas, TX 75207, USA",
+        "label": "Incorporated / municipal — Dallas, TX 75207 (city building department)"
+      }
+    }
   }
 }
