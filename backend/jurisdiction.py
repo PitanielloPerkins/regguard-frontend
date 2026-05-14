@@ -107,6 +107,15 @@ def build_profile_from_components(
     if not city_like and neighborhood and not locality:
         city_like = neighborhood.strip()
 
+    # **City of Dallas** (Dallas County, 752xx — e.g. Stemmons / IH-35E) is often mis-labeled
+    # **Lake Dallas** (Denton County). Anchor Dallas proper ZIPs to the **Dallas** municipal AHJ.
+    if (
+        state_short == "TX"
+        and city_like.strip().lower() == "lake dallas"
+        and z.startswith("752")
+    ):
+        city_like = "Dallas"
+
     if city_like:
         mode = "city"
         city = city_like

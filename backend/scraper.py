@@ -46,6 +46,8 @@ SCOUT_SOURCE_STEP_KEYS: Tuple[str, ...] = (
     "step_residential_zoning",
     "step_federal_fast41",
     "step_data_center_water",
+    "step_refrigerant_aim_act",
+    "step_water_usage_effectiveness",
     "step_dc_state_energy",
     "step_dc_local_moratorium",
 )
@@ -71,11 +73,6 @@ def _is_dallas_texas(city: str, state: str) -> bool:
     c = (city or "").strip().lower()
     s = (state or "").strip().upper()
     return c == "dallas" and s in ("TX",)
-
-
-DALLAS_SCOUT_MECHANICAL_HVAC_FEE_PASS = (
-    "Dallas Texas Development Services mechanical HVAC permit fee schedule trade permit administrative IMC 2026"
-)
 
 
 AUSTIN_SCOUT_DEVELOPMENT_FEES_SURCHARGE = (
@@ -126,10 +123,21 @@ def _append_code_change_monitor_queries(
     return f"{codes_line} | {extra}"
 
 
-def _locality_data_fence(city: str, county: str, st: str, mode: str) -> str:
+def _locality_data_fence(
+    city: str,
+    county: str,
+    st: str,
+    mode: str,
+    *,
+    zip5: str = "",
+    site_address: Optional[str] = None,
+) -> str:
     """
     Append a **looser** locality cue on every scout line (still names City, ST or County, ST) so queries read like
     official permit/code discovery—not a harsh ``ONLY …`` filter that can zero-out SERP. Documented from ``main``.
+
+    **Dallas vs Lake Dallas:** for Dallas County / Stemmons / ``752xx`` corridors, append **LOCALITY_STRICT** so SERP
+    targets **City of Dallas**, not **Lake Dallas** (Denton County).
     """
     stx = (st or "").strip()
     if not stx:
@@ -141,11 +149,44 @@ def _locality_data_fence(city: str, county: str, st: str, mode: str) -> str:
     else:
         county_disp = ""
     m = (mode or "").strip().lower()
+    base = ""
     if county_disp and (m == "county" or not c):
-        return f" | LOCALITY_LOCK {county_disp}, {stx} official county building permits and adopted code"
-    if c:
-        return f" | LOCALITY_LOCK {c}, {stx} official city code and building permits"
-    return ""
+        base = f" | LOCALITY_LOCK {county_disp}, {stx} official county building permits and adopted code"
+    elif c:
+        base = f" | LOCALITY_LOCK {c}, {stx} official city code and building permits"
+
+    zd = "".join(ch for ch in (zip5 or "") if ch.isdigit())[:5]
+    site_l = (site_address or "").lower()
+    stemmons = any(
+        x in site_l
+        for x in (
+            "stemmons",
+            "n. stemmons",
+            "north stemmons",
+            "stemmons fwy",
+            "stemmons freeway",
+        )
+    )
+    ih_corridor = "ih-35" in site_l or "i-35" in site_l
+    dallas_strict = ""
+    if stx.upper() == "TX":
+        co_l = co.lower()
+        dallas_corridor = (
+            _is_dallas_texas(c, stx)
+            or (zd.startswith("752") and "dallas" in co_l)
+            or zd == "75207"
+            or stemmons
+            or (ih_corridor and zd.startswith("752") and "dallas" in co_l)
+        )
+        if dallas_corridor:
+            dallas_strict = (
+                " | LOCALITY_STRICT City of Dallas Dallas County Texas "
+                "NOT Lake Dallas Denton County municipal boundary"
+            )
+            if stemmons or zd == "75207":
+                dallas_strict += " | Stemmons Freeway Dallas 752xx official city permits NOT Lake Dallas"
+
+    return f"{base}{dallas_strict}"
 
 
 def _normalize_scout_vertical(v: Optional[str]) -> str:
@@ -270,13 +311,10 @@ def _append_mep_trade_segments(
             f"{loc} plumbing permit IPC UPC adopted amendments drainage water pipe sizing inspections — {zip_tag}"
         )
     if "hvac" in trades or "hvac_mechanical" in trades:
-        hvac_chunk = (
+        chunks.append(
             f"{loc} HVAC mechanical permit IMC energy code Manual J ACCA adoption refrigerant commissioning — "
             f"{zip_tag}"
         )
-        if _is_dallas_texas(city, st):
-            hvac_chunk = f"{hvac_chunk} | {DALLAS_SCOUT_MECHANICAL_HVAC_FEE_PASS}"
-        chunks.append(hvac_chunk)
     if "zoning_planning" in trades:
         chunks.append(
             f"{loc} zoning planning board subdivision FAR lot coverage duplex setbacks side yard driveway "
@@ -349,7 +387,7 @@ def _fast41_query_line(
     loc = " ".join(loc_bits).strip()
     vlabel = "infrastructure" if vertical == "infrastructure" else "data center"
     core = (
-        f"FAST-41 federal permitting Title 41 Permitting Council covered project status "
+        f"FAST-41 federal eligibility permitting Title 41 Permitting Council covered project status "
         f"{vlabel} environmental review milestone dashboard {loc} — {zip_tag}"
     )
     if vertical == "data_center":
@@ -357,6 +395,11 @@ def _fast41_query_line(
             " May 5 2026 presidential action rescinds EO 14141 FAST-41 Transparency Project "
             "Permitting Council transparency dashboard greater than 100 MW facility gate "
             "Virginia HB 1515 interconnection Ohio 2026 ballot initiative greater than 25 MW ban data center"
+        )
+    if (st or "").strip().upper() == "TX":
+        core += (
+            " ERCOT 2026 Batch Zero industrial substation transmission performance milestone "
+            "large electric load interconnection agreement PUCT"
         )
     return core
 
@@ -434,11 +477,17 @@ def _dc_state_energy_query_line(
     stx = (st or "").strip().upper()
     cues = _dc_state_energy_law_cues(stx)
     cue_seg = (" ".join(cues[:2]) + " ") if cues else ""
+    ercot_tx = ""
+    if stx == "TX":
+        ercot_tx = (
+            " ERCOT 2026 Batch Zero industrial substation performance milestone transmission "
+            "TDSP schedule large load PUCT"
+        )
     return (
         f"{loc} data center {cue_seg}"
         f"ratepayer protection pledge utility commission tariff rider transmission allocation "
         f"large electric load interconnect deposit infrastructure surcharge network upgrade cost sharing "
-        f"hyperscale facility — {zip_tag}"
+        f"hyperscale facility — {zip_tag}{ercot_tx}"
     )
 
 
@@ -509,13 +558,67 @@ def _data_center_utility_water_query_line(
     )
 
 
+def _refrigerant_aim_act_query_line(
+    *,
+    zip_tag: str,
+    city: str,
+    county: str,
+    st: str,
+    mode: str,
+    site_address: Optional[str],
+) -> str:
+    """MEP / mechanical — AIM Act phasedown / HFC SNAP-class signals (trusted-domain SERP)."""
+    loc = _scout_geo_phrase(
+        zip_tag=zip_tag,
+        city=city,
+        county=county,
+        st=st,
+        mode=mode,
+        site_address=site_address,
+    )
+    return (
+        f"{loc} AIM Act hydrofluorocarbon refrigerant phasedown SNAP EPA rule HVAC mechanical chiller chilled water "
+        f"facility code enforcement commissioning — {zip_tag}"
+    )
+
+
+def _water_usage_effectiveness_query_line(
+    *,
+    zip_tag: str,
+    city: str,
+    county: str,
+    st: str,
+    mode: str,
+    site_address: Optional[str],
+) -> str:
+    """Data-center / infra — AHJ-facing Water Usage Effectiveness (WUE) and reclaimed-water overlays."""
+    loc = _scout_geo_phrase(
+        zip_tag=zip_tag,
+        city=city,
+        county=county,
+        st=st,
+        mode=mode,
+        site_address=site_address,
+    )
+    return (
+        f"{loc} data center Water Usage Effectiveness WUE municipal water ordinance conservation reuse "
+        f"cooling tower blowdown reclaimed water discharge permit AHJ mandate — {zip_tag}"
+    )
+
+
 def _coerce_scout_profile(raw: Optional[Mapping[str, Any]]) -> Dict[str, Any]:
     r = dict(raw or {})
     trades = _normalize_trade_tokens(r.get("trades"))
     vert = _normalize_scout_vertical(str(r.get("vertical") or "building"))
     mc = r.get("mission_critical_dc")
     mc_bool = mc is True or (isinstance(mc, str) and mc.strip().lower() in ("1", "true", "yes", "on"))
-    return {"trades": trades, "vertical": vert, "mission_critical_dc": mc_bool}
+    jf = r.get("job_fast41_eligible")
+    job_fast41 = jf is True or (
+        isinstance(jf, str)
+        and jf.strip() != ""
+        and jf.strip().lower() in ("1", "true", "yes", "on")
+    )
+    return {"trades": trades, "vertical": vert, "mission_critical_dc": mc_bool, "job_fast41_eligible": job_fast41}
 
 
 def _reject_serp_for_project_state(blob: str, project_state: Optional[str]) -> bool:
@@ -610,7 +713,7 @@ def _scout_queries_for_location(
             f"{prefix}Building codes adopted for {county_disp} {st}: county code amendments "
             f"IBC IRC — {zip_tag}"
         )
-        fence = _locality_data_fence(city, county, st, mode)
+        fence = _locality_data_fence(city, county, st, mode, zip5=z, site_address=addr)
         juris, permits, codes = juris + fence, permits + fence, codes + fence
         fee_nec = (
             f"{county_disp}, {st} official building permit fees 2026",
@@ -654,7 +757,7 @@ def _scout_queries_for_location(
     codes = (
         f"{prefix}Building codes adopted for {city_disp} {st}: municipal amendments IBC IRC — {zip_tag}"
     )
-    fence = _locality_data_fence(city, county, st, mode)
+    fence = _locality_data_fence(city, county, st, mode, zip5=z, site_address=addr)
     juris, permits, codes = juris + fence, permits + fence, codes + fence
     fee_nec = (
         f"{city_disp}, {st} official building permit fees 2026",
@@ -1076,6 +1179,10 @@ def _final_scout_response(
     zoning_meta: Optional[Dict[str, Any]] = None,
     water_hits: Optional[List[Dict[str, Optional[str]]]] = None,
     water_meta: Optional[Dict[str, Any]] = None,
+    aim_hits: Optional[List[Dict[str, Optional[str]]]] = None,
+    aim_meta: Optional[Dict[str, Any]] = None,
+    wue_hits: Optional[List[Dict[str, Optional[str]]]] = None,
+    wue_meta: Optional[Dict[str, Any]] = None,
     dc_energy_hits: Optional[List[Dict[str, Optional[str]]]] = None,
     dc_energy_meta: Optional[Dict[str, Any]] = None,
     moratorium_hits: Optional[List[Dict[str, Optional[str]]]] = None,
@@ -1114,7 +1221,8 @@ def _final_scout_response(
     trades_nice = ", ".join(prof_snap["trades"]) if prof_snap["trades"] else "none selected"
     wf.append(
         f"Scout profile — **Trades**: {trades_nice}; **vertical**: {prof_snap['vertical']}; "
-        f"**mission-critical DC scout**: {'on' if prof_snap['mission_critical_dc'] else 'off'}."
+        f"**mission-critical DC scout**: {'on' if prof_snap['mission_critical_dc'] else 'off'}; "
+        f"**job FAST-41 gate**: {'on' if prof_snap.get('job_fast41_eligible') else 'off'}."
     )
     if zoning_meta is not None:
         wf.append(
@@ -1135,6 +1243,16 @@ def _final_scout_response(
         wf.append(
             "**Intelligence tier — Utility-scale water:** cooling-water **withdrawal**, **NPDES** / discharge, "
             "and state **environmental quality** or **utility commission** signals (cross-reference with FAST-41 context)."
+        )
+    if aim_meta is not None:
+        wf.append(
+            "**MEP / refrigerant scout — AIM Act phasedown:** trusted-domain cues for EPA **AIM Act**, **SNAP**, "
+            "and HFC **phasedown** applicability to chillers / mechanical changeouts (**AHJ-enforceability verify**)."
+        )
+    if wue_meta is not None:
+        wf.append(
+            "**Water performance overlays:** municipal **Water Usage Effectiveness (WUE)** mandates, reclaimed-water "
+            "/ discharge expectations for hyperscale cooling — **local rule verify**."
         )
     if dc_energy_meta is not None:
         wf.append(
@@ -1192,6 +1310,10 @@ def _final_scout_response(
         out["step_residential_zoning"] = _step_result_dict(zoning_hits or [], zoning_meta)
     if water_meta is not None:
         out["step_data_center_water"] = _step_result_dict(water_hits or [], water_meta)
+    if aim_meta is not None:
+        out["step_refrigerant_aim_act"] = _step_result_dict(aim_hits or [], aim_meta)
+    if wue_meta is not None:
+        out["step_water_usage_effectiveness"] = _step_result_dict(wue_hits or [], wue_meta)
     if dc_energy_meta is not None:
         out["step_dc_state_energy"] = _step_result_dict(dc_energy_hits or [], dc_energy_meta)
     if moratorium_meta is not None:
@@ -1357,8 +1479,10 @@ def iter_universal_scout(
     ``ahj_identification`` is echoed into the final payload for the memo.
 
     ``scout_profile`` enables **Full MEP** trade scoping, **mission-critical data-center** code
-    discovery, project **vertical**, **residential zoning** (building), and for **infrastructure** /
-    **data_center** the **FAST-41** and **utility-scale water** passes.
+    discovery, project **vertical**, **residential zoning** (building vertical), optional **FAST-41** tier
+    when vertical is infra/DC **or** ``job_fast41_eligible`` is true (**>**100 MW / **>**$500 M data-center cues),
+    **utility-scale water**, **EPA AIM Act phasedown** refrigerant scout, **WUE / water-use** overlays, plus
+    (data_center vertical only) state energy rider and moratorium passes.
     """
     z = normalize_us_zip(zip_code)
     ctx = (enhanced_context or "").strip() or None
@@ -1367,6 +1491,7 @@ def iter_universal_scout(
     ju: Optional[Mapping[str, Any]] = jurisdiction if jurisdiction else None
     ahj_snap: Optional[Mapping[str, Any]] = ahj_identification if ahj_identification else None
     prof = _coerce_scout_profile(scout_profile)
+    infra_tier = prof["vertical"] in ("infrastructure", "data_center") or bool(prof.get("job_fast41_eligible"))
 
     st_for_filter: Optional[str] = None
     if ju:
@@ -1420,7 +1545,11 @@ def iter_universal_scout(
     fast41_meta: Optional[Dict[str, Any]] = None
     water_hits: Optional[List[Dict[str, Optional[str]]]] = None
     water_meta: Optional[Dict[str, Any]] = None
-    if prof["vertical"] in ("infrastructure", "data_center"):
+    aim_hits: Optional[List[Dict[str, Optional[str]]]] = None
+    aim_meta: Optional[Dict[str, Any]] = None
+    wue_hits: Optional[List[Dict[str, Optional[str]]]] = None
+    wue_meta: Optional[Dict[str, Any]] = None
+    if infra_tier:
         q4_core = _fast41_query_line(
             zip_tag=zip_tag,
             city=city_j,
@@ -1450,6 +1579,30 @@ def iter_universal_scout(
             fc, qw, user_limit=search_limit, project_state=st_for_filter
         )
         yield {"event": "step", "step": "step_data_center_water", "data": _step_result_dict(water_hits, water_meta)}
+
+        qa_core = _refrigerant_aim_act_query_line(
+            zip_tag=zip_tag,
+            city=city_j,
+            county=county_j,
+            st=st_j,
+            mode=mode_j,
+            site_address=addr,
+        )
+        qa = _with_context(qa_core, ctx)
+        aim_hits, aim_meta = _scout_search(fc, qa, user_limit=search_limit, project_state=st_for_filter)
+        yield {"event": "step", "step": "step_refrigerant_aim_act", "data": _step_result_dict(aim_hits, aim_meta)}
+
+        qwue_core = _water_usage_effectiveness_query_line(
+            zip_tag=zip_tag,
+            city=city_j,
+            county=county_j,
+            st=st_j,
+            mode=mode_j,
+            site_address=addr,
+        )
+        qwue = _with_context(qwue_core, ctx)
+        wue_hits, wue_meta = _scout_search(fc, qwue, user_limit=search_limit, project_state=st_for_filter)
+        yield {"event": "step", "step": "step_water_usage_effectiveness", "data": _step_result_dict(wue_hits, wue_meta)}
 
     dc_energy_hits: Optional[List[Dict[str, Optional[str]]]] = None
     dc_energy_meta: Optional[Dict[str, Any]] = None
@@ -1503,6 +1656,10 @@ def iter_universal_scout(
         zoning_meta=zoning_meta,
         water_hits=water_hits,
         water_meta=water_meta,
+        aim_hits=aim_hits,
+        aim_meta=aim_meta,
+        wue_hits=wue_hits,
+        wue_meta=wue_meta,
         dc_energy_hits=dc_energy_hits,
         dc_energy_meta=dc_energy_meta,
         moratorium_hits=moratorium_hits,

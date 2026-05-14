@@ -1,3377 +1,765 @@
-/**
- * Reg Guard — Expert Brain UI: SSE research → Contractor Action Plan, Accept (copy), PDF punch list export.
- * **Hard-sync:** Universal Scout **data fence** (City, ST on every query) + WA-state SERP drop live in `backend/scraper.py`;
- * digest + system prompt enforce **Plano Ord. 250.50** (two 8 ft grounding rods, 20 ft apart, 2/0 AWG between rods — not 6 ft NEC narrative).
- */
-import { fetchEventSource } from "@microsoft/fetch-event-source";
-import { useCallback, useEffect, useMemo, useRef, useState } from "react";
-import ReactMarkdown from "react-markdown";
-import remarkGfm from "remark-gfm";
-import { ToastContainer, toast } from "react-toastify";
-
-import "react-toastify/dist/ReactToastify.css";
-import "./App.css";
-
+import { fetchEventSource } from '@microsoft/fetch-event-source';
+import axios from 'axios';
 import {
-  AddressAutocomplete,
-  type AddressAutocompleteHandle,
-  mapsAutocompleteEnabled,
-  type AddressSelection,
-} from "./AddressAutocomplete";
-import { DashboardErrorBoundary } from "./DashboardErrorBoundary";
-import { getBackendOrigin, getRunResearchAbsoluteUrl } from "./env";
-import { fetchWithTimeout } from "./fetchWithTimeout";
-import {
-  loadResearchCache,
-  normalizeResearchCacheKey,
-  REG_GUARD_SESSION_CACHE_HYDRATE_KEY,
-  saveResearchCache,
-  type ResearchCacheV1,
-} from "./researchCache";
-import {
-  clearDictationSilenceTimer,
-  DICTATION_SILENCE_MS,
-  scheduleDictationSilenceStop,
-} from "./speech-recognition";
-import { downloadActionPlanPdf } from "./downloadActionPlanPdf";
-import {
-  deriveProactiveFollowUps,
-  FollowUpActions,
-  type FollowUpChip,
-} from "./FollowUpActions";
+  AlertTriangle,
+  CheckCircle2,
+  ChevronDown,
+  ChevronRight,
+  Download,
+  Loader2,
+  MapPin,
+  Radar,
+  Shield,
+  Sparkles,
+} from 'lucide-react';
+import { useCallback, useMemo, useRef, useState } from 'react';
+import ReactMarkdown from 'react-markdown';
+import remarkGfm from 'remark-gfm';
+import { toast } from 'react-toastify';
+import { ToastContainer } from 'react-toastify';
 
-/** Universal Scout trade buttons (single-select in UI; maps to ``scout_trades`` API tokens). */
-type ScoutTradeId =
-  | "general_contractor"
-  | "electrician"
-  | "plumber"
-  | "hvac"
-  | "zoning_planning"
-  | "owner_builder";
+/* ─── Google Places (loaded via index.html) ───────────────────────────────── */
 
-const SCOUT_TRADE_LABELS: Record<ScoutTradeId, string> = {
-  general_contractor: "General contractor",
-  electrician: "Electrician / electrical",
-  plumber: "Plumber / plumbing",
-  hvac: "HVAC / mechanical",
-  zoning_planning: "Zoning & planning",
-  owner_builder: "Owner-builder",
-};
-
-function jobSiteLooksLikeDallas(
-  city: string | null | undefined,
-  siteAddress: string | null | undefined,
-): boolean {
-  if ((city || "").trim().toLowerCase() === "dallas") {
-    return true;
+declare global {
+  interface Window {
+    google?: typeof google;
   }
-  const a = (siteAddress || "").toLowerCase();
-  return /\bdallas\b/.test(a) && /\b(tx|texas)\b/.test(a);
 }
 
-function permitPackageDownloadFilename(): string {
-  const d = new Date();
-  const p = (n: number) => String(n).padStart(2, "0");
-  return `RegGuard-Dallas-permit-package-${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}.pdf`;
-}
+type ScoutVertical = 'building' | 'infrastructure' | 'data_center';
 
-/** Structural moat (module scope): Dallas minimum **trade** permit bundle — hard-coded ``167.00`` USD (AHJ-verify); aligned with ``backend/permit_package.py``. */
-const REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD = "167.00";
+type TradeToken =
+  | 'general_contractor'
+  | 'electrician'
+  | 'plumber'
+  | 'hvac'
+  | 'zoning_planning'
+  | 'owner_builder';
 
-/** Permit PDF build can exceed the default JSON probe timeout. */
-const PERMIT_PACKAGE_FETCH_TIMEOUT_MS = 120_000;
+const TRADE_OPTIONS: { id: TradeToken; label: string }[] = [
+  { id: 'general_contractor', label: 'General contractor' },
+  { id: 'electrician', label: 'Electrician' },
+  { id: 'plumber', label: 'Plumber' },
+  { id: 'hvac', label: 'HVAC / mechanical' },
+  { id: 'zoning_planning', label: 'Zoning & planning' },
+  { id: 'owner_builder', label: 'Owner-builder' },
+];
 
-/** Flat fee model — matches backend ``base_search_value`` ($5.00 customer-facing research value). */
-const BASE_SEARCH_VALUE_USD = 5;
-
-/** Gemini Reality Capture Audit payload (SSE ``visual_audit`` / ``complete``). */
-export type VisualDetection = {
-  label: string;
-  box_2d: [number, number, number, number];
-  status?: "ok" | "violation" | "unknown";
-  /** Sequence-level Reality Capture confidence from Gemini token log-probabilities (when returned). */
-  match_confidence_pct?: number;
-};
-
-export type VisualAuditPayload = {
-  image_width: number;
-  image_height: number;
-  detections: VisualDetection[];
-  model_id?: string;
-  /** Plain-English two-sentence summary from Reality Capture (Gemini). */
-  bottom_line?: string | null;
-  cost_usd?: number | null;
-  input_tokens?: number | null;
-  output_tokens?: number | null;
-  sequence_confidence_pct?: number | null;
-  township_rule_matches?: Array<{
-    rule_id: string;
-    summary: string;
-    confidence_pct?: number;
-  }>;
-  austin_clearance?: {
-    applies?: boolean;
-    edge_distance_px?: number | null;
-    estimated_clearance_inches?: number | null;
-    violates_36_in_rule?: boolean | null;
-    notes?: string;
-    trigger_zip?: string | null;
-    gas_meter_detected_for_trigger?: boolean;
-  };
-};
-
-function parseVisualAuditPayload(v: unknown): VisualAuditPayload | null {
-  if (v == null || typeof v !== "object") {
-    return null;
-  }
-  const o = v as Record<string, unknown>;
-  const w = o.image_width;
-  const h = o.image_height;
-  const dets = o.detections;
-  if (typeof w !== "number" || typeof h !== "number" || !Array.isArray(dets)) {
-    return null;
-  }
-  const rest = { ...o };
-  delete rest.cost_usd;
-  delete rest.input_tokens;
-  delete rest.output_tokens;
-  return rest as VisualAuditPayload;
-}
-
-type FutureRiskHit = {
+type SseEnvelope = {
+  event?: string;
+  message?: string;
+  text?: string;
   step?: string;
-  title?: string;
-  url?: string;
-  snippet?: string;
-};
-
-type FutureRiskAlertPayload = {
-  active: boolean;
-  banner?: string;
-  severity?: string;
-  hits?: FutureRiskHit[];
-  notes?: string;
-};
-
-/** Data-center moratorium jurisdiction warning (SSE ``complete.moratorium_state_alert``). */
-type MoratoriumStateAlertPayload = {
-  active: boolean;
-  text: string;
-};
-
-function parseMoratoriumStateAlertPayload(v: unknown): MoratoriumStateAlertPayload | null {
-  if (v == null || typeof v !== "object") {
-    return null;
-  }
-  const o = v as Record<string, unknown>;
-  if (o.active !== true) {
-    return null;
-  }
-  const t = typeof o.text === "string" ? o.text.trim() : "";
-  if (!t) {
-    return null;
-  }
-  return { active: true, text: t };
-}
-
-function parseFutureRiskPayload(v: unknown): FutureRiskAlertPayload | null {
-  if (v == null || typeof v !== "object") {
-    return null;
-  }
-  const o = v as Record<string, unknown>;
-  if (o.active === false) {
-    return { active: false, hits: [] };
-  }
-  if (o.active !== true) {
-    return null;
-  }
-  const hitsRaw = o.hits;
-  const hits: FutureRiskHit[] = [];
-  if (Array.isArray(hitsRaw)) {
-    for (const h of hitsRaw) {
-      if (h != null && typeof h === "object") {
-        const hr = h as Record<string, unknown>;
-        hits.push({
-          step: typeof hr.step === "string" ? hr.step : undefined,
-          title: typeof hr.title === "string" ? hr.title : undefined,
-          url: typeof hr.url === "string" ? hr.url : undefined,
-          snippet: typeof hr.snippet === "string" ? hr.snippet : undefined,
-        });
-      }
-    }
-  }
-  return {
-    active: true,
-    banner: typeof o.banner === "string" ? o.banner : "FUTURE RISK ALERT",
-    severity: typeof o.severity === "string" ? o.severity : undefined,
-    hits,
-    notes: typeof o.notes === "string" ? o.notes : undefined,
-  };
-}
-
-/** Split memo markdown so the Bottom Line + first checklist item render before the technical body. */
-const RE_BOTTOM_LINE_SECTION = /^#{2,3}\s*the\s+bottom\s+line\s*$/im;
-
-function partitionContractorActionPlan(md: string): {
-  bottomLine: string | null;
-  proceedPreview: string | null;
-  bodyMarkdown: string;
-} {
-  const raw = (md || "").trim();
-  if (!raw) {
-    return { bottomLine: null, proceedPreview: null, bodyMarkdown: "" };
-  }
-  const m = raw.match(RE_BOTTOM_LINE_SECTION);
-  let bottomLine: string | null = null;
-  let withoutBottom = raw;
-  if (m && m.index !== undefined) {
-    const start = m.index + m[0].length;
-    const restFromBl = raw.slice(start).replace(/^\s*\n/, "");
-    const nextHdr = restFromBl.search(/^#{2,3}\s+/m);
-    const cut = nextHdr === -1 ? restFromBl.length : nextHdr;
-    const blBody = restFromBl.slice(0, cut).trim();
-    bottomLine = blBody || null;
-    const afterBl = restFromBl.slice(cut).trim();
-    const before = raw.slice(0, m.index).trim();
-    withoutBottom = [before, afterBl].filter(Boolean).join("\n\n").trim();
-  }
-  const checklistMatch = withoutBottom.match(/(?:^|\n)(- \[[ xX]\]\s*.+)/);
-  const proceedPreview = checklistMatch ? checklistMatch[1].trim() : null;
-  const bodyMarkdown = m && m.index !== undefined ? withoutBottom : raw;
-  return { bottomLine, proceedPreview, bodyMarkdown };
-}
-
-type CommunityInspectorNote = { text: string; created_at?: string };
-
-type CommunityInspectorFeedbackPayload = { zip: string; notes: CommunityInspectorNote[] };
-
-function parseCommunityInspectorNotesPayload(
-  zip: string,
-  notesUnknown: unknown,
-): CommunityInspectorFeedbackPayload | null {
-  const z = zip.trim();
-  if (!z || !Array.isArray(notesUnknown)) {
-    return null;
-  }
-  const notes: CommunityInspectorNote[] = [];
-  for (const n of notesUnknown) {
-    if (n == null || typeof n !== "object") {
-      continue;
-    }
-    const rec = n as Record<string, unknown>;
-    const text = typeof rec.text === "string" ? rec.text.trim() : "";
-    if (!text) {
-      continue;
-    }
-    notes.push({
-      text,
-      created_at: typeof rec.created_at === "string" ? rec.created_at : undefined,
-    });
-  }
-  if (!notes.length) {
-    return null;
-  }
-  return { zip: z, notes };
-}
-
-type MaintenanceSubscription = {
-  id: string;
-  project_name: string;
-  zip: string;
+  data?: unknown;
+  phase?: string;
   site_address?: string;
-  sensor_profile?: string;
-  alert_threshold_note?: string;
-  maintenance_mode_enabled?: boolean;
-  created_at?: string;
-  ai_evaluation_note?: string;
+  profile?: Record<string, unknown>;
+  zip?: string;
+  summary?: string;
+  source_urls?: string[];
+  enhanced_query?: string;
+  job_description?: string;
+  photo_analysis?: string | null;
+  jurisdiction?: Record<string, unknown>;
+  city?: string | null;
+  county?: string | null;
+  ahj_label?: string | null;
+  payload?: unknown;
+  notes?: unknown[];
+  value_metrics?: { research_value_usd?: number; estimated_liability_avoided_usd?: number };
+  moratorium_state_alert?: { active?: boolean; text?: string };
+  visual_audit?: unknown;
 };
 
-/** Markdown slice for live Universal Scout step payloads shown in the Contractor Action Plan panel. */
-function scoutStepDataToMarkdown(stepKey: string, data: unknown): string {
-  if (data == null || typeof data !== "object") {
-    return "";
+type Hit = { url?: string; title?: string; description?: string };
+
+type StepBlock = {
+  query?: string;
+  results?: Hit[];
+  fallback_used?: boolean;
+};
+
+const STEP_LABELS: Record<string, string> = {
+  step_ahj_identification: 'AHJ identification',
+  step_jurisdiction: 'Jurisdiction',
+  step_building_permits: 'Building permits',
+  step_building_codes: 'Adopted codes',
+  step_residential_zoning: 'Residential zoning',
+  step_federal_fast41: 'FAST-41',
+  step_data_center_water: 'Cooling water / NPDES',
+  step_refrigerant_aim_act: 'AIM Act / refrigerants',
+  step_water_usage_effectiveness: 'Water usage (WUE)',
+  step_dc_state_energy: 'State energy / grid',
+  step_dc_local_moratorium: 'Local moratorium scout',
+};
+
+function pickZipFromPlace(place: google.maps.places.PlaceResult): string {
+  const comps = place.address_components || [];
+  for (const c of comps) {
+    if (c.types.includes('postal_code')) return c.short_name || '';
   }
-  const d = data as Record<string, unknown>;
-  const query = typeof d.query === "string" ? d.query.trim() : "";
-  const results = Array.isArray(d.results) ? d.results : [];
-  const heading =
-    stepKey === "step_building_codes"
-      ? "### Building codes (live scout)"
-      : stepKey === "step_building_permits"
-        ? "### Building permits (live scout)"
-        : stepKey === "step_jurisdiction"
-          ? "### Jurisdiction (live scout)"
-          : stepKey === "step_federal_fast41"
-            ? "### Federal FAST-41 permitting (live scout)"
-            : stepKey === "step_data_center_water"
-              ? "### Utility-scale cooling water / NPDES (live scout)"
-              : stepKey === "step_dc_state_energy"
-                ? "### State energy riders / grid surcharge (live scout)"
-                : stepKey === "step_dc_local_moratorium"
-                  ? "### Local 2026 data center moratorium scout (live scout)"
-                  : `### Scout: ${stepKey}`;
-  let md = `\n\n${heading}\n\n`;
-  if (query) {
-    md += `**Query:** ${query}\n\n`;
-  }
-  if (results.length === 0) {
-    md += "_(No results in this batch.)_\n";
-    return md;
-  }
-  for (const hit of results) {
-    if (hit == null || typeof hit !== "object") {
-      continue;
-    }
-    const h = hit as Record<string, unknown>;
-    const title = typeof h.title === "string" ? h.title.trim() : "";
-    const url = typeof h.url === "string" ? h.url.trim() : "";
-    if (title && url) {
-      md += `- [${title}](${url})\n`;
-    } else if (url) {
-      md += `- ${url}\n`;
-    }
-  }
-  return md;
+  return '';
 }
 
-async function detailFromBadResponse(res: Response): Promise<string> {
-  const ct = res.headers.get("content-type") ?? "";
-  if (ct.includes("application/json")) {
-    try {
-      const body = (await res.json()) as { detail?: unknown };
-      const d = body.detail;
-      if (typeof d === "string") {
-        return d;
-      }
-      if (Array.isArray(d)) {
-        return d
-          .map((x) => (typeof x === "object" && x !== null ? JSON.stringify(x) : String(x)))
-          .join("; ");
-      }
-    } catch {
-      /* fallback below */
+function pickCityFromPlace(place: google.maps.places.PlaceResult): string {
+  const cps = place.address_components || [];
+  for (const c of cps) {
+    if (c.types.includes('locality')) return c.long_name || '';
+  }
+  for (const c of cps) {
+    if (c.types.includes('sublocality')) return c.long_name || '';
+  }
+  return '';
+}
+
+function styles(): string {
+  return `
+    :root {
+      color-scheme: dark;
+      --bg0: #070a10;
+      --bg1: #0c111b;
+      --bg2: #121a28;
+      --stroke: rgba(148, 163, 184, 0.18);
+      --text: #e8eefc;
+      --muted: #94a3b8;
+      --accent: #38bdf8;
+      --accent2: #a78bfa;
+      --good: #4ade80;
+      --warn: #fbbf24;
+      --bad: #fb7185;
+      --radius: 14px;
+      --mono: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", monospace;
+      --sans: "DM Sans", system-ui, -apple-system, Segoe UI, Roboto, sans-serif;
     }
-  }
-  const t = await res.text().catch(() => "");
-  return t.trim() || `${res.status} ${res.statusText}`;
-}
-
-function speechRecognitionCtor(): (new () => SpeechRecognition) | undefined {
-  if (typeof window === "undefined") {
-    return undefined;
-  }
-  return window.SpeechRecognition ?? window.webkitSpeechRecognition;
-}
-
-async function warmMicrophonePermission(): Promise<void> {
-  if (!navigator.mediaDevices?.getUserMedia) {
-    return;
-  }
-  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  for (const track of stream.getTracks()) {
-    track.stop();
-  }
+    * { box-sizing: border-box; }
+    body { margin: 0; font-family: var(--sans); background: radial-gradient(1200px 600px at 20% -10%, rgba(56,189,248,0.14), transparent 55%),
+      radial-gradient(900px 500px at 90% 0%, rgba(167,139,250,0.12), transparent 50%), var(--bg0); color: var(--text); }
+    a { color: var(--accent); }
+    .rg-shell { min-height: 100vh; display: flex; flex-direction: column; }
+    .rg-header {
+      padding: 18px 22px;
+      border-bottom: 1px solid var(--stroke);
+      background: linear-gradient(180deg, rgba(18,26,40,0.9), rgba(18,26,40,0.55));
+      backdrop-filter: blur(10px);
+      display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
+    }
+    .rg-brand { display: flex; align-items: center; gap: 12px; }
+    .rg-title { font-weight: 800; letter-spacing: -0.02em; font-size: 1.05rem; }
+    .rg-sub { font-size: 0.85rem; color: var(--muted); }
+    .rg-pill { font-size: 0.72rem; padding: 6px 10px; border-radius: 999px; border: 1px solid var(--stroke);
+      color: var(--muted); display: inline-flex; align-items: center; gap: 6px; background: rgba(2,8,20,0.35); }
+    .rg-main { flex: 1; display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr); gap: 16px; padding: 16px; max-width: 1500px; margin: 0 auto; width: 100%; }
+    @media (max-width: 1040px) {
+      .rg-main { grid-template-columns: 1fr; }
+    }
+    .rg-panel { background: linear-gradient(180deg, rgba(18,26,40,0.75), rgba(18,26,40,0.45));
+      border: 1px solid var(--stroke); border-radius: var(--radius); overflow: hidden; }
+    .rg-panel-hd { padding: 14px 16px; border-bottom: 1px solid var(--stroke); display: flex; align-items: center; gap: 10px; font-weight: 700; }
+    .rg-panel-bd { padding: 14px 16px; }
+    label.rg-lbl { display: block; font-size: 0.78rem; color: var(--muted); margin: 10px 0 6px; }
+    .rg-input, .rg-ta, .rg-select {
+      width: 100%; border-radius: 12px; border: 1px solid var(--stroke); background: rgba(7,10,16,0.65);
+      color: var(--text); padding: 10px 12px; outline: none; font: inherit;
+    }
+    .rg-ta { min-height: 110px; resize: vertical; }
+    .rg-row2 { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; }
+    .rg-chips { display: flex; flex-wrap: wrap; gap: 8px; }
+    .rg-chip { cursor: pointer; user-select: none; border-radius: 999px; padding: 8px 10px; font-size: 0.78rem;
+      border: 1px solid var(--stroke); color: var(--muted); background: rgba(7,10,16,0.45); }
+    .rg-chip.on { border-color: rgba(56,189,248,0.5); color: var(--text); background: rgba(56,189,248,0.12); }
+    .rg-actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
+    .rg-btn { border: 1px solid rgba(56,189,248,0.45); background: linear-gradient(180deg, rgba(56,189,248,0.22), rgba(56,189,248,0.08));
+      color: var(--text); padding: 10px 14px; border-radius: 12px; cursor: pointer; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; }
+    .rg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
+    @keyframes rgspin { to { transform: rotate(360deg); } }
+    .spin { animation: rgspin 0.9s linear infinite; }
+    .rg-btn2 { border: 1px solid var(--stroke); background: rgba(7,10,16,0.55); }
+    .rg-split { display: grid; grid-template-rows: auto minmax(0, 1fr); gap: 12px; min-height: calc(100vh - 120px); }
+    .rg-reason { max-height: 120px; overflow: auto; padding: 10px 12px; border-radius: 12px; border: 1px solid var(--stroke);
+      background: rgba(7,10,16,0.55); color: var(--muted); font-family: var(--mono); font-size: 0.78rem; white-space: pre-wrap; }
+    .rg-md { padding: 14px 16px; overflow: auto; border-top: 1px solid var(--stroke); max-height: none; }
+    .rg-md h1, .rg-md h2, .rg-md h3 { margin-top: 1.1em; }
+    .rg-steps { display: flex; flex-direction: column; gap: 8px; }
+    .rg-step { border: 1px solid var(--stroke); border-radius: 12px; overflow: hidden; background: rgba(7,10,16,0.35); }
+    .rg-step-top { width: 100%; text-align: left; border: 0; background: transparent; color: var(--text);
+      padding: 10px 12px; display: flex; align-items: center; justify-content: space-between; gap: 10px; cursor: pointer; }
+    .rg-step-body { padding: 10px 12px 12px; border-top: 1px solid var(--stroke); color: var(--muted); font-size: 0.85rem; }
+    .rg-hit { padding: 8px 0; border-top: 1px dashed rgba(148,163,184,0.18); }
+    .rg-hit:first-child { border-top: 0; padding-top: 0; }
+    .rg-small { font-size: 0.78rem; color: var(--muted); }
+    .rg-danger { color: var(--bad); }
+    .rg-warn { color: var(--warn); }
+    .rg-ok { color: var(--good); }
+  `;
 }
 
 export default function App() {
-  const geoSupported =
-    typeof navigator !== "undefined" &&
-    navigator.geolocation != null &&
-    typeof navigator.geolocation.getCurrentPosition === "function";
+  const addressRef = useRef<HTMLInputElement | null>(null);
+  const acRef = useRef<google.maps.places.Autocomplete | null>(null);
 
-  const speechCtorMounted =
-    typeof window !== "undefined"
-      ? (window.SpeechRecognition ?? window.webkitSpeechRecognition)
-      : undefined;
-  const speechSupportedOnMount =
-    typeof speechCtorMounted === "function";
-
-  useEffect(() => {
-    console.log("[RegGuard handshake]", {
-      geolocation: geoSupported,
-      navigatorGeolocationPresent: !!navigator.geolocation,
-      SpeechRecognitionCtor: speechSupportedOnMount,
-      SpeechRecognition_standard: !!window.SpeechRecognition,
-      webkitSpeechRecognition: !!window.webkitSpeechRecognition,
-    });
-  }, [geoSupported, speechSupportedOnMount]);
-
-  useEffect(() => {
-    const id = "rg-font-inter-roboto";
-    if (document.getElementById(id)) {
-      return;
-    }
-    const link = document.createElement("link");
-    link.id = id;
-    link.rel = "stylesheet";
-    link.href =
-      "https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Roboto:wght@400;500;700&display=swap";
-    document.head.appendChild(link);
-  }, []);
-
-  const mapsOk = mapsAutocompleteEnabled();
-  const addressRef = useRef<AddressAutocompleteHandle>(null);
-  /** When the Places field fires `onSelection` (typing, clearing, or picking), skip applying a stale GPS result. */
-  const cancelPendingLocateApplyRef = useRef(false);
-  const dictationAnchorRef = useRef("");
-  const dictationFinalAccumRef = useRef("");
-  const listeningRef = useRef(false);
-  const dictationSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const recognitionRef = useRef<SpeechRecognition | null>(null);
-  const initialRevisionRef = useRef<string | null>(null);
-  const lastPollRevisionRef = useRef<string | null>(null);
-  const dismissedRevisionRef = useRef<string | null>(null);
-  const researchSawChunkRef = useRef(false);
-  const researchCompleteRef = useRef(false);
-  const researchEpochRef = useRef(0);
-  const permitPackageBlobUrlRef = useRef<string | null>(null);
-
-  const [selection, setSelection] = useState<AddressSelection | null>(null);
-  /** Places widget text — keeps Munger-specific UI in sync while typing (selection is often null mid-edit). */
-  const [siteAddressSearch, setSiteAddressSearch] = useState("");
-  const [jobDescription, setJobDescription] = useState("");
+  const [siteAddress, setSiteAddress] = useState('');
+  const [zipCode, setZipCode] = useState('');
+  const [clientCity, setClientCity] = useState('');
+  const [jobDescription, setJobDescription] = useState('');
   const [searchLimit, setSearchLimit] = useState(5);
-  const [scoutTrade, setScoutTrade] = useState<ScoutTradeId>("electrician");
-  const [missionCriticalDc, setMissionCriticalDc] = useState(true);
-  const [scoutVertical, setScoutVertical] = useState<"building" | "infrastructure" | "data_center">(
-    "building",
-  );
+  const [vertical, setVertical] = useState<ScoutVertical>('building');
+  const [missionCriticalDc, setMissionCriticalDc] = useState(false);
+  const [trades, setTrades] = useState<Set<TradeToken>>(new Set());
+  const [bimJson, setBimJson] = useState('');
   const [imageFile, setImageFile] = useState<File | null>(null);
 
-  const [busy, setBusy] = useState(false);
-  const [phase, setPhase] = useState<string>("");
-  const [error, setError] = useState<string | null>(null);
-  const [steps, setSteps] = useState<string[]>([]);
-  const [visionText, setVisionText] = useState("");
-  const [actionPlan, setActionPlan] = useState("");
-  const [sourceUrls, setSourceUrls] = useState<string[]>([]);
-  const [locatingMe, setLocatingMe] = useState(false);
-  const [locateMessage, setLocateMessage] = useState<string | null>(null);
-  const [dictationActive, setDictationActive] = useState(false);
-  const [speechHint, setSpeechHint] = useState<string | null>(null);
-  const [backendStale, setBackendStale] = useState(false);
-  const [autoRefreshSec, setAutoRefreshSec] = useState<number | null>(null);
-  const [streamBroken, setStreamBroken] = useState(false);
-  const sseErrorToastedRef = useRef(false);
-  const [sseConnectionLive, setSseConnectionLive] = useState(false);
-  const [meta, setMeta] = useState<{
-    site?: string | null;
-    zip?: string;
-    city?: string | null;
-    county?: string | null;
-    ahjLabel?: string | null;
-  } | null>(null);
-  const [planToolbarMsg, setPlanToolbarMsg] = useState<string | null>(null);
-  /** Live line from backend Scout/Audit status frames (SSE ``reasoning``). */
-  const [reasoningStep, setReasoningStep] = useState<string | null>(null);
-  const actionPlanPanelRef = useRef<HTMLDivElement | null>(null);
-  const [fileInputKey, setFileInputKey] = useState(0);
-  const [visualAudit, setVisualAudit] = useState<VisualAuditPayload | null>(null);
-  const [projectValueMetrics, setProjectValueMetrics] = useState<{
-    researchValueUsd: number;
-    estimatedLiabilityAvoidedUsd: number;
-  } | null>(null);
-  const [moratoriumStateAlert, setMoratoriumStateAlert] = useState<MoratoriumStateAlertPayload | null>(null);
-  const [pdfFrictionAck, setPdfFrictionAck] = useState(false);
-  const [futureRiskAlert, setFutureRiskAlert] = useState<FutureRiskAlertPayload | null>(null);
-  const [communityInspectorFeedback, setCommunityInspectorFeedback] =
-    useState<CommunityInspectorFeedbackPayload | null>(null);
-  const [inspectorNoteModalOpen, setInspectorNoteModalOpen] = useState(false);
-  const [inspectorNoteDraft, setInspectorNoteDraft] = useState("");
-  const [inspectorNoteSaving, setInspectorNoteSaving] = useState(false);
-  const [resultsTab, setResultsTab] = useState<"plan" | "visual">("plan");
-  const [photoObjectUrl, setPhotoObjectUrl] = useState<string | null>(null);
-  const [maintenanceSubs, setMaintenanceSubs] = useState<MaintenanceSubscription[]>([]);
-  const [maintenanceLoading, setMaintenanceLoading] = useState(false);
-  const [maintProjectName, setMaintProjectName] = useState("");
-  const [maintAlertNote, setMaintAlertNote] = useState("");
-  const [maintSensorProfile, setMaintSensorProfile] = useState("thermal_vibration");
-  const [maintSaving, setMaintSaving] = useState(false);
-  const [bimBridgeReport, setBimBridgeReport] = useState<Record<string, unknown> | null>(null);
-  const [bimImportBusy, setBimImportBusy] = useState(false);
-  const [bimJsonDraft, setBimJsonDraft] = useState("");
-  /** Aggregate of ``summary_delta`` chunks for Proactive Guide (avoids scout-step noise in heuristics). */
-  const [proactiveSummaryBuffer, setProactiveSummaryBuffer] = useState("");
-  const [permitPackageBusy, setPermitPackageBusy] = useState(false);
-  const [permitPackageReady, setPermitPackageReady] = useState(false);
-  const [permitPackageDownloadUrl, setPermitPackageDownloadUrl] = useState<string | null>(null);
-  /** Response from ``getRunResearchAbsoluteUrl()`` (722 Munger mock / permits array). */
-  const [dallasPermitsFixture, setDallasPermitsFixture] = useState<{
-    permits: Record<string, unknown>[];
-    source?: string;
-    fetchError?: string;
-  } | null>(null);
-  /** True after hydrating last-run cache on cold load until fresh SSE ``complete`` clears it. */
-  const [showHydratedCacheBanner, setShowHydratedCacheBanner] = useState(false);
-  /** ``null`` until first ``/api/health`` probe (toasts only — research is not gated on this). */
-  const [backendReachable, setBackendReachable] = useState<boolean | null>(null);
-  const pendingCacheRefreshRef = useRef(false);
-  const prevBackendReachableRef = useRef<boolean | null>(null);
+  const [running, setRunning] = useState(false);
+  const abortRef = useRef<AbortController | null>(null);
 
-  useEffect(() => {
-    let cancelled = false;
-    const probe = async () => {
-      try {
-        const r = await fetchWithTimeout("/api/health", { cache: "no-store" });
-        if (!cancelled) {
-          setBackendReachable(r.ok);
-        }
-      } catch {
-        if (!cancelled) {
-          setBackendReachable(false);
-        }
-      }
-    };
-    void probe();
-    const id = window.setInterval(() => void probe(), 12_000);
-    return () => {
-      cancelled = true;
-      window.clearInterval(id);
-    };
-  }, []);
+  const [reasoning, setReasoning] = useState<string>('');
+  const [visionText, setVisionText] = useState<string>('');
+  const [steps, setSteps] = useState<Record<string, StepBlock | Record<string, unknown>>>({});
+  const [openSteps, setOpenSteps] = useState<Record<string, boolean>>({});
+  const [summaryMd, setSummaryMd] = useState('');
+  const [jurisdictionLabel, setJurisdictionLabel] = useState<string>('');
 
-  useEffect(() => {
-    const prev = prevBackendReachableRef.current;
-    if (backendReachable === false && prev !== false) {
-      toast.warning("Backend offline — start the API at http://127.0.0.1:8000 (Vite proxies /api there).", {
-        autoClose: 4500,
-        hideProgressBar: true,
-      });
+  const [futureRisk, setFutureRisk] = useState<unknown | null>(null);
+  const [communityNotes, setCommunityNotes] = useState<unknown[] | null>(null);
+  const [complete, setOpenComplete] = useState<SseEnvelope | null>(null);
+
+  const placesReady = useMemo(() => typeof window !== 'undefined' && !!window.google?.maps?.places, []);
+
+  const attachAutocomplete = useCallback(() => {
+    const input = addressRef.current;
+    const maps = window.google?.maps;
+    if (!input || !maps?.places) return;
+
+    if (acRef.current) {
+      maps.event.clearInstanceListeners(acRef.current);
     }
-    if (backendReachable !== null) {
-      prevBackendReachableRef.current = backendReachable;
-    }
-  }, [backendReachable]);
 
-  const refreshMaintenanceSubs = useCallback(async () => {
-    setMaintenanceLoading(true);
-    try {
-      const r = await fetchWithTimeout("/api/maintenance/subscriptions");
-      if (!r.ok) {
-        return;
-      }
-      const j = (await r.json()) as { subscriptions?: unknown };
-      const raw = j.subscriptions;
-      setMaintenanceSubs(Array.isArray(raw) ? (raw as MaintenanceSubscription[]) : []);
-    } catch (e) {
-      console.warn("[RegGuard] maintenance subscriptions refresh failed", e);
-    } finally {
-      setMaintenanceLoading(false);
-    }
-  }, []);
-
-  useEffect(() => {
-    void refreshMaintenanceSubs();
-  }, [refreshMaintenanceSubs]);
-
-  useEffect(() => {
-    fetchWithTimeout("/api/finops-cache", { cache: "no-store" })
-      .then(async (r) => {
-        if (!r.ok) {
-          return null;
-        }
-        try {
-          return await r.json();
-        } catch {
-          return null;
-        }
-      })
-      .then((j) => {
-        if (j && typeof j === "object") {
-          console.info("[RegGuard FinOps — caches]", j);
-        }
-      })
-      .catch(() => {
-        /* ignore offline / CORS during static preview */
-      });
-  }, []);
-
-  useEffect(() => {
-    return () => {
-      if (permitPackageBlobUrlRef.current) {
-        URL.revokeObjectURL(permitPackageBlobUrlRef.current);
-      }
-    };
-  }, []);
-
-  const setJobDescriptionRef = useRef(setJobDescription);
-  setJobDescriptionRef.current = setJobDescription;
-  const setSpeechHintRef = useRef(setSpeechHint);
-  setSpeechHintRef.current = setSpeechHint;
-  const setDictationActiveRef = useRef(setDictationActive);
-  setDictationActiveRef.current = setDictationActive;
-
-  /** Dallas Munger parcel intel only when the live job-site text contains the word "munger"; cleared/empty search hides it. */
-  const showMungerIntelPanel = useMemo(() => {
-    const probe =
-      (selection?.formattedAddress ?? "").trim() || siteAddressSearch.trim();
-    return probe.length > 0 && /\bmunger\b/i.test(probe);
-  }, [selection?.formattedAddress, siteAddressSearch]);
-
-  const followUpSourceText = useMemo(() => {
-    const stream = proactiveSummaryBuffer.trim();
-    if (stream.length >= 40) {
-      return stream;
-    }
-    if (phase === "Complete" && actionPlan.trim().length > 120) {
-      return actionPlan;
-    }
-    return "";
-  }, [proactiveSummaryBuffer, phase, actionPlan]);
-
-  const followUpSuggestions = useMemo(
-    () => (followUpSourceText ? deriveProactiveFollowUps(followUpSourceText, jobDescription) : []),
-    [followUpSourceText, jobDescription],
-  );
-
-  const needsPdfFriction = useMemo(
-    () =>
-      Boolean(
-        moratoriumStateAlert ||
-          (actionPlan &&
-            (/\bPERMIT CONFLICT ALERT\b/i.test(actionPlan) ||
-              /WARNING:\s*State Moratorium/i.test(actionPlan))),
-      ),
-    [moratoriumStateAlert, actionPlan],
-  );
-
-  const planParts = useMemo(() => partitionContractorActionPlan(actionPlan), [actionPlan]);
-
-  const pdfExportBlocked = Boolean(needsPdfFriction && phase === "Complete" && !pdfFrictionAck);
-
-  useEffect(() => {
-    if (!imageFile) {
-      setPhotoObjectUrl((prev) => {
-        if (prev) {
-          URL.revokeObjectURL(prev);
-        }
-        return null;
-      });
-      return;
-    }
-    const url = URL.createObjectURL(imageFile);
-    setPhotoObjectUrl(url);
-    return () => {
-      URL.revokeObjectURL(url);
-    };
-  }, [imageFile]);
-
-  /** Subtle reasoning trace above results (live scout / synthesis cues). */
-  const agentStatusLine = useMemo(() => {
-    const locality =
-      (meta?.city && meta?.zip ? `${meta.city}, ${meta.zip}` : null) ||
-      (meta?.city
-        ? meta.city
-        : selection?.formattedAddress
-          ? selection.formattedAddress.split(",").slice(0, 2).join(",").trim()
-          : null) ||
-      "your jurisdiction";
-
-    if (!busy && streamBroken && phase !== "Complete") {
-      return "Status — Stream interrupted before completion; partial results may appear below. Try Resume research or New Job.";
-    }
-    if (busy) {
-      if (phase === "Connecting…") {
-        return "Status — Connecting to Reg Guard research stream…";
-      }
-      if (phase === "Started") {
-        return "Status — Session started; preparing regional compliance context…";
-      }
-      if (phase === "Context ready" || phase === "Context ready (photo + job)") {
-        return "Status — Job + photo context packaged for Universal Scout…";
-      }
-      if (phase === "Jurisdiction locked") {
-        return `Status — Jurisdiction locked for ${locality} — verifying AHJ path…`;
-      }
-      if (phase.startsWith("Research: step_jurisdiction")) {
-        return `Status — Scouting ${locality} jurisdiction, AHJ hints & trusted municipal sources…`;
-      }
-      if (phase.startsWith("Research: step_building_permits")) {
-        return `Status — Scouting building department & permit portals (${locality})…`;
-      }
-      if (phase.startsWith("Research: step_building_codes")) {
-        return "Status — Analyzing adopted codes, NEC 2023 baseline & local amendment deltas…";
-      }
-      if (phase.startsWith("Research: step_federal_fast41")) {
-        return "Status — Scanning FAST-41 / federal permitting status cues (Infrastructure or Data Center vertical)…";
-      }
-      if (phase.startsWith("Research: step_data_center_water")) {
-        return "Status — Cross-referencing cooling-water / NPDES / state environmental signals (DC / infra vertical)…";
-      }
-      if (phase.startsWith("Research: step_dc_state_energy")) {
-        return "Status — Data center tier: ratepayer pledges, state riders, interconnect surcharge cues…";
-      }
-      if (phase.startsWith("Research: step_dc_local_moratorium")) {
-        return "Status — Data center tier: 2026 township moratorium / pause ordinance scout…";
-      }
-      if (phase === "Writing Contractor Action Plan") {
-        return "Status — Synthesizing Master Electrician punch list (fees, technical gotchas, inspections)…";
-      }
-      if (phase === "Analyzing photo") {
-        return "Status — Analyzing job-site photo with vision model…";
-      }
-      if (phase.startsWith("Research:")) {
-        const rest = phase.slice("Research: ".length).trim();
-        return `Status — Research pipeline: ${rest}`;
-      }
-      return phase ? `Status — ${phase}` : "Status — Working…";
-    }
-    if (phase === "Complete") {
-      return "Status — Research complete. Confirm fees, codes, and scope with your AHJ before mobilizing.";
-    }
-    return null;
-  }, [busy, phase, meta, selection, streamBroken]);
-
-  const resetOutput = useCallback(() => {
-    if (permitPackageBlobUrlRef.current) {
-      URL.revokeObjectURL(permitPackageBlobUrlRef.current);
-      permitPackageBlobUrlRef.current = null;
-    }
-    setPermitPackageBusy(false);
-    setPermitPackageReady(false);
-    setPermitPackageDownloadUrl(null);
-    setError(null);
-    setPhase("");
-    setSteps([]);
-    setVisionText("");
-    setActionPlan("");
-    setSourceUrls([]);
-    setMeta(null);
-    setStreamBroken(false);
-    setPlanToolbarMsg(null);
-    setSseConnectionLive(false);
-    setReasoningStep(null);
-    setVisualAudit(null);
-    setProjectValueMetrics(null);
-    setMoratoriumStateAlert(null);
-    setPdfFrictionAck(false);
-    setFutureRiskAlert(null);
-    setCommunityInspectorFeedback(null);
-    setInspectorNoteModalOpen(false);
-    setInspectorNoteDraft("");
-    setInspectorNoteSaving(false);
-    setResultsTab("plan");
-    setProactiveSummaryBuffer("");
-    setDallasPermitsFixture(null);
-  }, []);
-
-  const handleNewJob = useCallback(() => {
-    researchEpochRef.current += 1;
-    researchSawChunkRef.current = false;
-    researchCompleteRef.current = false;
-    sseErrorToastedRef.current = false;
-    cancelPendingLocateApplyRef.current = true;
-
-    listeningRef.current = false;
-    clearDictationSilenceTimer(dictationSilenceTimerRef);
-    dictationAnchorRef.current = "";
-    dictationFinalAccumRef.current = "";
-    try {
-      recognitionRef.current?.stop();
-    } catch {
-      try {
-        recognitionRef.current?.abort();
-      } catch {
-        /* noop */
-      }
-    }
-    setDictationActive(false);
-    setSpeechHint(null);
-    setLocatingMe(false);
-
-    setSelection(null);
-    setSiteAddressSearch("");
-    setJobDescription("");
-    setImageFile(null);
-    setSearchLimit(5);
-    setScoutTrade("electrician");
-    setMissionCriticalDc(true);
-    setScoutVertical("building");
-    setLocateMessage(null);
-    setBusy(false);
-    setShowHydratedCacheBanner(false);
-    resetOutput();
-    addressRef.current?.clearForNewJob();
-    setFileInputKey((k) => k + 1);
-    setBimBridgeReport(null);
-    setBimJsonDraft("");
-
-    window.requestAnimationFrame(() => {
-      cancelPendingLocateApplyRef.current = false;
-      const el = actionPlanPanelRef.current;
-      if (el && typeof el.scrollTop === "number") {
-        el.scrollTop = 0;
-      }
+    const ac = new maps.places.Autocomplete(input, {
+      componentRestrictions: { country: 'us' },
+      fields: ['formatted_address', 'address_components', 'geometry', 'name'],
     });
 
-    toast.info("New job — workspace cleared.", { autoClose: 2200, hideProgressBar: true });
-  }, [resetOutput]);
+    ac.addListener('place_changed', () => {
+      const place = ac.getPlace();
+      const formatted = (place.formatted_address || '').trim();
+      setSiteAddress(formatted);
+      setZipCode(pickZipFromPlace(place));
+      setClientCity(pickCityFromPlace(place));
+    });
 
-  const handleRefreshApp = useCallback(() => {
-    setSelection(null);
-    setSiteAddressSearch("");
-    addressRef.current?.clearForNewJob();
-    window.location.reload();
+    acRef.current = ac;
   }, []);
 
-  const handleSubmitInspectorNote = useCallback(async () => {
-    if (!selection?.zip) {
-      toast.error("Select a job site with a ZIP first.");
+  const toggleTrade = (t: TradeToken) => {
+    setTrades((prev) => {
+      const next = new Set(prev);
+      if (next.has(t)) next.delete(t);
+      else next.add(t);
+      return next;
+    });
+  };
+
+  const resetRunState = () => {
+    setReasoning('');
+    setVisionText('');
+    setSteps({});
+    setOpenSteps({});
+    setSummaryMd('');
+    setJurisdictionLabel('');
+    setFutureRisk(null);
+    setCommunityNotes(null);
+    setOpenComplete(null);
+  };
+
+  const runResearch = async () => {
+    const addr = siteAddress.trim();
+    if (!addr) {
+      toast.warning('Select a U.S. job site from address suggestions (Places).');
       return;
     }
-    const t = inspectorNoteDraft.trim();
-    if (!t) {
-      toast.error("Enter a short inspector note.");
+    let z = zipCode.trim();
+    if (!/^\d{5}(-\d{4})?$/.test(z.replace(/\s+/g, ''))) {
+      toast.warning('Enter a valid 5-digit ZIP (from the address picker).');
       return;
     }
-    setInspectorNoteSaving(true);
-    try {
-      const form = new FormData();
-      form.append("zip_code", selection.zip);
-      form.append("text", t);
-      const res = await fetchWithTimeout("/api/community-gotchas", { method: "POST", body: form });
-      if (!res.ok) {
-        const detail = await detailFromBadResponse(res);
-        toast.error(detail.length > 220 ? `${detail.slice(0, 220)}…` : detail);
+    z = z.replace(/\s+/g, '');
+    if (z.includes('-')) z = z.slice(0, 5);
+
+    resetRunState();
+    setRunning(true);
+    abortRef.current?.abort();
+    abortRef.current = new AbortController();
+    const { signal } = abortRef.current;
+
+    const fd = new FormData();
+    fd.set('zip_code', z);
+    fd.set('client_city', clientCity.trim());
+    fd.set('site_address', addr);
+    fd.set('job_description', jobDescription);
+    fd.set('search_limit', String(Math.min(20, Math.max(1, searchLimit))));
+    fd.set('scout_vertical', vertical);
+    fd.set('mission_critical_dc', missionCriticalDc ? 'true' : 'false');
+    const tradeCsv = Array.from(trades).join(',');
+    fd.set('scout_trades', tradeCsv);
+    if (bimJson.trim()) fd.set('bim_bridge_json', bimJson.trim());
+    if (imageFile) fd.set('image', imageFile, imageFile.name);
+
+    const onData = (raw: unknown) => {
+      if (!raw || typeof raw !== 'object') return;
+      const msg = raw as SseEnvelope;
+      const ev = msg.event || '';
+
+      if (ev === 'error') {
+        toast.error(msg.message || 'Research error');
         return;
       }
-      toast.success("Inspector note saved for this ZIP. It will appear on the next research run.", {
-        autoClose: 3800,
-        hideProgressBar: true,
-      });
-      setInspectorNoteModalOpen(false);
-      setInspectorNoteDraft("");
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save note.");
-    } finally {
-      setInspectorNoteSaving(false);
-    }
-  }, [inspectorNoteDraft, selection?.zip]);
-
-  const handleCreateMaintenanceSubscription = useCallback(async () => {
-    if (!maintProjectName.trim()) {
-      toast.error("Enter a project name.");
-      return;
-    }
-    const zip = selection?.zip?.trim();
-    if (!zip) {
-      toast.error("Select a job site with a ZIP first.");
-      return;
-    }
-    setMaintSaving(true);
-    try {
-      const form = new FormData();
-      form.append("project_name", maintProjectName.trim());
-      form.append("zip_code", zip);
-      form.append("site_address", selection?.formattedAddress ?? "");
-      form.append("sensor_profile", maintSensorProfile);
-      form.append("alert_threshold_note", maintAlertNote.trim());
-      form.append("maintenance_mode_enabled", "true");
-      const res = await fetchWithTimeout("/api/maintenance/subscriptions", { method: "POST", body: form });
-      if (!res.ok) {
-        const detail = await detailFromBadResponse(res);
-        toast.error(detail.length > 200 ? `${detail.slice(0, 200)}…` : detail);
+      if (ev === 'reasoning') {
+        const line =
+          msg.phase && msg.text
+            ? `[${msg.phase}] ${msg.text}`
+            : msg.text || JSON.stringify(msg);
+        setReasoning((prev) => (prev ? `${prev}\n${line}` : line));
         return;
       }
-      toast.success("Maintenance Mode subscription saved.");
-      setMaintProjectName("");
-      setMaintAlertNote("");
-      await refreshMaintenanceSubs();
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "Could not save subscription.");
-    } finally {
-      setMaintSaving(false);
-    }
-  }, [
-    maintProjectName,
-    maintAlertNote,
-    maintSensorProfile,
-    selection?.zip,
-    selection?.formattedAddress,
-    refreshMaintenanceSubs,
-  ]);
-
-  const handleToggleMaintenanceMode = useCallback(
-    async (id: string, enabled: boolean) => {
-      try {
-        const res = await fetchWithTimeout(`/api/maintenance/subscriptions/${encodeURIComponent(id)}`, {
-          method: "PATCH",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({ maintenance_mode_enabled: enabled }),
-        });
-        if (!res.ok) {
-          const detail = await detailFromBadResponse(res);
-          toast.error(detail.length > 220 ? `${detail.slice(0, 220)}…` : detail);
-          return;
+      if (ev === 'jurisdiction') {
+        const prof = msg.profile as Record<string, unknown> | undefined;
+        const lab = prof && typeof prof.label === 'string' ? prof.label : '';
+        if (lab) setJurisdictionLabel(lab);
+        return;
+      }
+      if (ev === 'step') {
+        const key = String(msg.step || '');
+        const data = msg.data;
+        if (key && data && typeof data === 'object') {
+          setSteps((prev) => ({ ...prev, [key]: data as StepBlock }));
+          setOpenSteps((prev) => ({ ...prev, [key]: true }));
         }
-        toast.success(enabled ? "Maintenance Mode on" : "Maintenance Mode paused", {
-          autoClose: 2200,
-          hideProgressBar: true,
-        });
-        await refreshMaintenanceSubs();
-      } catch (e) {
-        toast.error(e instanceof Error ? e.message : "Update failed.");
-      }
-    },
-    [refreshMaintenanceSubs],
-  );
-
-  const handleBimImport = useCallback(async () => {
-    let parsed: Record<string, unknown>;
-    try {
-      parsed = JSON.parse(bimJsonDraft) as Record<string, unknown>;
-    } catch {
-      toast.error("BIM JSON is not valid.");
-      return;
-    }
-    setBimImportBusy(true);
-    try {
-      const res = await fetchWithTimeout("/api/bim/import", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(parsed),
-      });
-      if (!res.ok) {
-        const detail = await detailFromBadResponse(res);
-        toast.error(detail.length > 240 ? `${detail.slice(0, 240)}…` : detail);
         return;
       }
-      const report = (await res.json()) as Record<string, unknown>;
-      setBimBridgeReport(report);
-      const clashes = report.clash_zones;
-      const n = Array.isArray(clashes) ? clashes.length : 0;
-      toast.success(
-        n > 0
-          ? `BIM import: ${n} gas/conduit clash zone(s) — will merge into the next research for this ZIP.`
-          : "BIM import complete — cross-referenced to Universal Scout archive.",
-        { autoClose: 4200, hideProgressBar: true },
-      );
-    } catch (e) {
-      toast.error(e instanceof Error ? e.message : "BIM import failed.");
-    } finally {
-      setBimImportBusy(false);
-    }
-  }, [bimJsonDraft]);
-
-  const runResearch = useCallback(async (launchOpts?: {
-    followUpAppend?: string;
-    tradeBoost?: FollowUpChip["tradeBoost"];
-    vertical?: FollowUpChip["vertical"];
-    missionCritical?: FollowUpChip["missionCritical"];
-    /** Skip clearing the results pane (used when repainting from localStorage then refreshing in background). */
-    preserveUi?: boolean;
-  }) => {
-    if (!launchOpts?.preserveUi) {
-      resetOutput();
-    } else {
-      setError(null);
-    }
-    setStreamBroken(false);
-    researchSawChunkRef.current = false;
-    researchCompleteRef.current = false;
-    const epochAtStart = researchEpochRef.current;
-    sseErrorToastedRef.current = false;
-    if (!launchOpts?.preserveUi) {
-      setProactiveSummaryBuffer("");
-    }
-    setBusy(true);
-    setPhase("Connecting…");
+      if (ev === 'future_risk_alert') {
+        setFutureRisk(msg.payload ?? null);
+        return;
+      }
+      if (ev === 'community_inspector_feedback') {
+        if (Array.isArray(msg.notes)) setCommunityNotes(msg.notes);
+        return;
+      }
+      if (ev === 'summary_delta' && msg.text) {
+        setSummaryMd((prev) => prev + msg.text);
+        return;
+      }
+      if (ev === 'vision_delta' && msg.text) {
+        setVisionText((prev) => prev + msg.text);
+        return;
+      }
+      if (ev === 'visual_audit') {
+        return;
+      }
+      if (ev === 'complete') {
+        setOpenComplete(msg);
+        if (typeof msg.summary === 'string' && msg.summary.trim()) setSummaryMd(msg.summary);
+      }
+    };
 
     try {
-      const runResearchUrl = getRunResearchAbsoluteUrl();
-      const frRes = await fetchWithTimeout(runResearchUrl, {
-        method: "GET",
-        mode: "cors",
-        cache: "no-store",
-      });
-      let frJson: unknown;
-      try {
-        frJson = await frRes.json();
-      } catch {
-        throw new Error(`Invalid JSON from Dallas permits server (HTTP ${frRes.status}).`);
-      }
-      if (!frRes.ok) {
-        const msg =
-          frJson && typeof frJson === "object" && typeof (frJson as { message?: unknown }).message === "string"
-            ? (frJson as { message: string }).message
-            : `HTTP ${frRes.status}`;
-        throw new Error(msg);
-      }
-      const permits =
-        frJson && typeof frJson === "object" && Array.isArray((frJson as { permits?: unknown }).permits)
-          ? (frJson as { permits: Record<string, unknown>[] }).permits
-          : [];
-      const source =
-        frJson && typeof frJson === "object" && typeof (frJson as { source?: unknown }).source === "string"
-          ? (frJson as { source: string }).source
-          : undefined;
-      setDallasPermitsFixture({ permits, source });
-      toast.success(`Dallas permits loaded (${permits.length}).`, {
-        autoClose: 2400,
-        hideProgressBar: true,
-      });
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      setDallasPermitsFixture({ permits: [], fetchError: msg });
-      toast.warning(`Dallas permits (${getRunResearchAbsoluteUrl()}): ${msg}`, { autoClose: 5200 });
-    }
-
-    const form = new FormData();
-    const zipCode = (selection?.zip ?? "").trim() || "75202";
-    const siteAddress =
-      (selection?.formattedAddress ?? "").trim() || "722 Munger Ave, Dallas, TX 75202, USA";
-    form.append("zip_code", zipCode);
-    form.append("site_address", siteAddress);
-    const clientCity = selection?.city?.trim();
-    if (clientCity) {
-      form.append("client_city", clientCity);
-    }
-    const jd0 = jobDescription.trim();
-    const jd =
-      launchOpts?.followUpAppend != null && launchOpts.followUpAppend.trim()
-        ? `${jd0}\n\n${launchOpts.followUpAppend.trim()}`.trim()
-        : jd0;
-    form.append("job_description", jd);
-    form.append("search_limit", String(searchLimit));
-    const tb = launchOpts?.tradeBoost;
-    const tg = scoutTrade === "general_contractor" || !!tb?.generalContractor;
-    const te = scoutTrade === "electrician" || !!tb?.electrician;
-    const tp = scoutTrade === "plumber" || !!tb?.plumber;
-    const tm = scoutTrade === "hvac" || !!tb?.hvac;
-    const tz = scoutTrade === "zoning_planning" || !!tb?.zoningPlanning;
-    const to = scoutTrade === "owner_builder" || !!tb?.ownerBuilder;
-    const trades: string[] = [];
-    if (tg) {
-      trades.push("general_contractor");
-    }
-    if (te) {
-      trades.push("electrician");
-    }
-    if (tp) {
-      trades.push("plumber");
-    }
-    if (tm) {
-      trades.push("hvac");
-    }
-    if (tz) {
-      trades.push("zoning_planning");
-    }
-    if (to) {
-      trades.push("owner_builder");
-    }
-    form.append("scout_trades", trades.join(","));
-    const mc = launchOpts?.missionCritical ?? missionCriticalDc;
-    form.append("mission_critical_dc", mc ? "true" : "false");
-    const vert = launchOpts?.vertical ?? scoutVertical;
-    form.append("scout_vertical", vert);
-    if (imageFile) {
-      form.append("image", imageFile);
-    }
-    if (
-      bimBridgeReport &&
-      typeof bimBridgeReport.zip === "string" &&
-      bimBridgeReport.zip === zipCode
-    ) {
-      form.append("bim_bridge_json", JSON.stringify(bimBridgeReport));
-    }
-
-    try {
-      await fetchEventSource("/api/research", {
-        method: "POST",
-        body: form,
-        /** Long runs (Firecrawl + Claude); keep streaming while tab is in background. */
-        openWhenHidden: true,
-        cache: "no-store",
-        async onopen(response) {
-          try {
-            if (!response.ok) {
-              let detail = "";
-              try {
-                detail = await detailFromBadResponse(response);
-              } catch (parseErr) {
-                console.warn("[RegGuard research] could not parse error body", parseErr);
-                detail = `HTTP ${response.status}`;
-              }
-              toast.error(
-                `Research failed to start (HTTP ${response.status}). ${detail.length > 220 ? `${detail.slice(0, 220)}…` : detail}`,
-              );
-              console.error("[RegGuard research] HTTP error", response.status, detail);
-              throw new Error(detail);
-            }
-            setSseConnectionLive(true);
-            toast.success("Connection active", {
-              autoClose: 2000,
-              hideProgressBar: true,
-            });
-            const ct = response.headers.get("content-type") ?? "";
-            if (!ct.toLowerCase().includes("text/event-stream")) {
-              console.warn("[RegGuard research] expected text/event-stream; got:", ct);
-            }
-          } catch (openErr) {
-            console.error("[RegGuard research] onopen handler error", openErr);
-            if (response.ok) {
-              toast.error(
-                openErr instanceof Error ? openErr.message.slice(0, 180) : "Could not finalize research stream open.",
-              );
-            }
-            throw openErr;
-          }
+      await fetchEventSource('/api/research', {
+        method: 'POST',
+        body: fd,
+        signal,
+        credentials: 'include',
+        shouldRetry: () => false,
+        onopen: async (res) => {
+          if (res.ok) return;
+          const t = await res.text().catch(() => '');
+          throw new Error(t || `HTTP ${res.status}`);
         },
         onmessage(ev) {
-          const handleChunk = (): void => {
-            console.log("Stream chunk:", ev.data);
-          const raw = typeof ev.data === "string" ? ev.data : "";
-          if (!raw.trim()) {
-            return;
-          }
-          researchSawChunkRef.current = true;
-
-          let payload: Record<string, unknown>;
+          if (!ev.data) return;
           try {
-            payload = JSON.parse(raw) as Record<string, unknown>;
+            onData(JSON.parse(ev.data) as unknown);
           } catch {
-            if (researchEpochRef.current !== epochAtStart) {
-              return;
-            }
-            setActionPlan((p) => (p ? `${p}\n\n` : "") + raw);
-            return;
+            /* ignore non-json */
           }
-
-          if (researchEpochRef.current !== epochAtStart) {
-            return;
-          }
-
-          const appendToActionPlan = (text: string) => {
-            if (researchEpochRef.current !== epochAtStart) {
-              return;
-            }
-            const t = text.trim();
-            if (!t) {
-              return;
-            }
-            setActionPlan((p) => (p ? `${p}\n\n` : "") + t);
-          };
-
-          const eventName = payload.event;
-          if (typeof eventName !== "string") {
-            const s = payload.summary;
-            if (typeof s === "string" && s.trim()) {
-              appendToActionPlan(s);
-            } else {
-              appendToActionPlan(raw);
-            }
-            return;
-          }
-
-          const topSummary = payload.summary;
-          if (
-            typeof topSummary === "string" &&
-            topSummary.trim() &&
-            eventName !== "complete" &&
-            eventName !== "summary_delta"
-          ) {
-            appendToActionPlan(topSummary);
-          }
-
-          switch (eventName) {
-            case "open":
-              setPhase("Started");
-              break;
-            case "heartbeat":
-              setPhase((p) =>
-                p.startsWith("Research:") || p === "Writing Contractor Action Plan"
-                  ? p
-                  : "Research scan in progress…",
-              );
-              break;
-            case "vision_delta": {
-              const vt = typeof payload.text === "string" ? payload.text : "";
-              setPhase("Analyzing photo");
-              setVisionText((prev) => prev + vt);
-              break;
-            }
-            case "context": {
-              const pa = payload.photo_analysis;
-              setPhase(
-                pa != null && String(pa).trim()
-                  ? "Context ready (photo + job)"
-                  : "Context ready",
-              );
-              break;
-            }
-            case "jurisdiction": {
-              setPhase("Jurisdiction locked");
-              const site = payload.site_address;
-              const prof = payload.profile;
-              if (site != null || prof != null) {
-                const label =
-                  prof != null &&
-                  typeof prof === "object" &&
-                  "label" in prof &&
-                  typeof (prof as { label?: unknown }).label === "string"
-                    ? ((prof as { label: string }).label || "").trim() || undefined
-                    : undefined;
-                setMeta((m) => ({
-                  ...m,
-                  site: typeof site === "string" ? site : m?.site,
-                  ...(label ? { ahjLabel: label } : {}),
-                }));
-              }
-              break;
-            }
-            case "reasoning": {
-              const line = typeof payload.text === "string" ? payload.text.trim() : "";
-              if (line) {
-                setReasoningStep(line);
-              }
-              break;
-            }
-            case "future_risk_alert": {
-              const parsed = parseFutureRiskPayload((payload as { payload?: unknown }).payload);
-              setFutureRiskAlert(parsed?.active ? parsed : null);
-              break;
-            }
-            case "community_inspector_feedback": {
-              const zip = typeof payload.zip === "string" ? payload.zip : "";
-              const parsed = parseCommunityInspectorNotesPayload(zip, payload.notes);
-              if (parsed) {
-                setCommunityInspectorFeedback(parsed);
-              }
-              break;
-            }
-            case "step": {
-              const name = typeof payload.step === "string" ? payload.step : "step";
-              setPhase(`Research: ${name}`);
-              setSteps((s) =>
-                s.includes(name) ? s : [...s, name],
-              );
-              if (
-                name === "step_building_codes" ||
-                name === "step_building_permits" ||
-                name === "step_jurisdiction" ||
-                name === "step_federal_fast41" ||
-                name === "step_data_center_water" ||
-                name === "step_dc_state_energy" ||
-                name === "step_dc_local_moratorium"
-              ) {
-                appendToActionPlan(scoutStepDataToMarkdown(name, payload.data));
-              }
-              break;
-            }
-            case "visual_audit": {
-              const rawPay = (payload as { payload?: unknown }).payload;
-              const parsed = parseVisualAuditPayload(rawPay);
-              if (parsed) {
-                setVisualAudit(parsed);
-              }
-              break;
-            }
-            case "summary_delta": {
-              const piece = typeof payload.text === "string" ? payload.text : "";
-              if (!piece) {
-                console.warn("[RegGuard research] summary_delta missing text", payload);
-                break;
-              }
-              setPhase("Writing Contractor Action Plan");
-              appendToActionPlan(piece);
-              setProactiveSummaryBuffer((b) => b + piece);
-              break;
-            }
-            case "complete": {
-              researchCompleteRef.current = true;
-              setStreamBroken(false);
-              setPhase("Complete");
-              setReasoningStep(null);
-              const fin = typeof payload.summary === "string" ? payload.summary : "";
-              if (fin.trim()) {
-                setActionPlan(fin);
-                setProactiveSummaryBuffer(fin.trim());
-              }
-              const urls = payload.source_urls;
-              if (Array.isArray(urls)) {
-                setSourceUrls(urls.filter((u): u is string => typeof u === "string"));
-              }
-              setMeta((m) => ({
-                site: typeof payload.site_address === "string" ? payload.site_address : m?.site,
-                zip: typeof payload.zip === "string" ? payload.zip : m?.zip,
-                city: typeof payload.city === "string" ? payload.city : m?.city,
-                county: typeof payload.county === "string" ? payload.county : m?.county,
-                ahjLabel:
-                  typeof payload.ahj_label === "string" && payload.ahj_label.trim()
-                    ? payload.ahj_label.trim()
-                    : m?.ahjLabel,
-              }));
-              if ("visual_audit" in payload && payload.visual_audit != null) {
-                const parsed = parseVisualAuditPayload(payload.visual_audit);
-                if (parsed) {
-                  setVisualAudit(parsed);
-                }
-              }
-              if ("future_risk_alert" in payload && payload.future_risk_alert != null) {
-                const fr = parseFutureRiskPayload(payload.future_risk_alert);
-                if (fr?.active) {
-                  setFutureRiskAlert(fr);
-                }
-              }
-              {
-                const zipFin = typeof payload.zip === "string" ? payload.zip : "";
-                const cfb =
-                  "community_inspector_feedback" in payload
-                    ? payload.community_inspector_feedback
-                    : undefined;
-                const parsed =
-                  cfb != null ? parseCommunityInspectorNotesPayload(zipFin, cfb) : null;
-                setCommunityInspectorFeedback(parsed);
-              }
-              {
-                const vmRaw: unknown =
-                  "value_metrics" in payload ? (payload as { value_metrics?: unknown }).value_metrics : undefined;
-                if (vmRaw != null && typeof vmRaw === "object") {
-                  const vm = vmRaw as Record<string, unknown>;
-                  const rv =
-                    typeof vm.research_value_usd === "number" && !Number.isNaN(vm.research_value_usd)
-                      ? vm.research_value_usd
-                      : BASE_SEARCH_VALUE_USD;
-                  const li =
-                    typeof vm.estimated_liability_avoided_usd === "number" &&
-                    !Number.isNaN(vm.estimated_liability_avoided_usd)
-                      ? vm.estimated_liability_avoided_usd
-                      : 0;
-                  setProjectValueMetrics({
-                    researchValueUsd: rv,
-                    estimatedLiabilityAvoidedUsd: li,
-                  });
-                } else {
-                  setProjectValueMetrics({
-                    researchValueUsd: BASE_SEARCH_VALUE_USD,
-                    estimatedLiabilityAvoidedUsd: 0,
-                  });
-                }
-              }
-              {
-                const msRaw = (payload as { moratorium_state_alert?: unknown }).moratorium_state_alert;
-                const msParsed = parseMoratoriumStateAlertPayload(msRaw);
-                setMoratoriumStateAlert(msParsed);
-              }
-              setShowHydratedCacheBanner(false);
-              break;
-            }
-            case "error": {
-              const msg = typeof payload.message === "string" ? payload.message : "Unknown error";
-              console.error("[RegGuard research] server error event", msg);
-              throw new Error(msg);
-            }
-            default:
-              console.warn("[RegGuard research] unknown SSE event shape", payload);
-              break;
-          }
-          };
-          try {
-            handleChunk();
-          } catch (handlerErr) {
-            console.error("[RegGuard research] onmessage handler error", handlerErr);
-            toast.error(
-              handlerErr instanceof Error
-                ? handlerErr.message.length > 160
-                  ? `${handlerErr.message.slice(0, 160)}…`
-                  : handlerErr.message
-                : "Stream chunk handler failed.",
-            );
-          }
-        },
-        onclose() {
-          setSseConnectionLive(false);
-          console.info("[RegGuard research] SSE connection closed");
         },
         onerror(err) {
-          setSseConnectionLive(false);
-          const stack = err instanceof Error ? (err.stack ?? "") : "";
-          const message = err instanceof Error ? err.message : String(err);
-          sseErrorToastedRef.current = true;
-          toast.error("Connection interrupted. Retrying...");
-          console.error(
-            "[RegGuard research] SSE transport error (not retrying)",
-            message,
-            err,
-            stack.slice(0, 800),
-          );
           throw err;
         },
       });
-
-      if (
-        researchEpochRef.current === epochAtStart &&
-        researchSawChunkRef.current &&
-        !researchCompleteRef.current
-      ) {
-        console.error("[RegGuard research] stream ended without complete event");
-        setStreamBroken(true);
-        setError((prev) => prev ?? "Research stream ended before completion.");
-      }
+      toast.success('Research stream finished');
     } catch (e) {
-      const isAbort =
-        e instanceof DOMException
-          ? e.name === "AbortError"
-          : e instanceof Error && e.name === "AbortError";
-      if (researchEpochRef.current !== epochAtStart) {
-        sseErrorToastedRef.current = false;
-        return;
-      }
-      if (isAbort) {
-        console.info("[RegGuard research] aborted");
-        setError("Research was canceled.");
-        setPhase("");
-        if (researchSawChunkRef.current && !researchCompleteRef.current) {
-          setStreamBroken(true);
-        }
+      if ((e as Error).name === 'AbortError') {
+        toast.info('Research cancelled');
       } else {
-        const msg = e instanceof Error ? e.message : String(e);
-        console.error("[RegGuard research] failed", e);
-        if (!sseErrorToastedRef.current) {
-          toast.error(msg.length > 180 ? `${msg.slice(0, 180)}…` : msg);
-        } else {
-          sseErrorToastedRef.current = false;
-        }
-        setError(msg);
-        setPhase("");
-        if (researchSawChunkRef.current && !researchCompleteRef.current) {
-          setStreamBroken(true);
-        }
+        toast.error((e as Error).message || 'Research failed');
       }
     } finally {
-      setBusy(false);
-      setSseConnectionLive(false);
+      setRunning(false);
+      abortRef.current = null;
     }
-  }, [
-    selection,
-    jobDescription,
-    searchLimit,
-    scoutTrade,
-    missionCriticalDc,
-    scoutVertical,
-    imageFile,
-    resetOutput,
-    bimBridgeReport,
-  ]);
+  };
 
-  const runResearchRef = useRef(runResearch);
-  runResearchRef.current = runResearch;
+  const cancelRun = () => abortRef.current?.abort();
 
-  useEffect(() => {
-    if (backendReachable === false || !pendingCacheRefreshRef.current) {
+  const downloadPermitPackage = async () => {
+    const c = complete;
+    if (!c) {
+      toast.warning('Run research first — nothing to export yet.');
       return;
     }
-    pendingCacheRefreshRef.current = false;
-    void runResearchRef.current({ preserveUi: true });
-  }, [backendReachable]);
-
-  useEffect(() => {
+    const feeSummary =
+      summaryMd.split('### Permit Costs')[1]?.split('###')[0]?.trim().slice(0, 4000) ||
+      'See Contractor Action Plan — permit fees section.';
     try {
-      const parsed = loadResearchCache();
-      if (!parsed) {
-        return;
-      }
-
-      setSelection({
-        formattedAddress: parsed.formattedAddress,
-        zip: parsed.zip,
-        ...(parsed.city ? { city: parsed.city } : {}),
-      });
-      setSiteAddressSearch(parsed.formattedAddress);
-      setJobDescription(parsed.jobDescription ?? "");
-      setPhase(parsed.phase || "Complete");
-      setSteps(Array.isArray(parsed.steps) ? [...parsed.steps] : []);
-      setVisionText(parsed.visionText ?? "");
-      setActionPlan(parsed.actionPlan ?? "");
-      setSourceUrls(Array.isArray(parsed.sourceUrls) ? [...parsed.sourceUrls] : []);
-      setMeta({
-        site: parsed.formattedAddress,
-        zip: parsed.zip,
-        city: parsed.city ?? null,
-        county: parsed.county ?? null,
-        ahjLabel: parsed.ahjLabel ?? null,
-      });
-      setVisualAudit(parseVisualAuditPayload(parsed.visualAudit));
-      setProjectValueMetrics(parsed.projectValueMetrics);
-      setMoratoriumStateAlert(parsed.moratoriumStateAlert);
-      setFutureRiskAlert(parseFutureRiskPayload(parsed.futureRiskAlert));
-      const cfb = parsed.communityInspectorFeedback;
-      setCommunityInspectorFeedback(
-        cfb != null && typeof cfb === "object" ? (cfb as CommunityInspectorFeedbackPayload) : null,
+      const res = await axios.post<Blob>(
+        '/api/permit-package',
+        {
+          site_address: (c.site_address as string) || siteAddress,
+          scope: (jobDescription || 'Electrical / panel scope — see memo.').slice(0, 4000),
+          fee_summary: feeSummary,
+          trade: 'Electrical',
+          zip: (c.zip as string) || zipCode,
+          city: (c.city as string) || '',
+          county: (c.county as string) || '',
+          ahj_label: (c.ahj_label as string) || jurisdictionLabel || '',
+        },
+        { responseType: 'blob' },
       );
-      setProactiveSummaryBuffer(parsed.proactiveSummaryBuffer ?? "");
-      setDallasPermitsFixture(parsed.dallasPermitsFixture ?? null);
-      setPdfFrictionAck(false);
-      setStreamBroken(false);
-      setReasoningStep(null);
-
-      if (Object.prototype.hasOwnProperty.call(SCOUT_TRADE_LABELS, parsed.scoutTrade)) {
-        setScoutTrade(parsed.scoutTrade as ScoutTradeId);
-      }
-      const vertical = parsed.scoutVertical;
-      if (vertical === "building" || vertical === "infrastructure" || vertical === "data_center") {
-        setScoutVertical(vertical);
-      }
-      setMissionCriticalDc(parsed.missionCriticalDc ?? true);
-      setSearchLimit(typeof parsed.searchLimit === "number" && parsed.searchLimit > 0 ? parsed.searchLimit : 5);
-
-      setShowHydratedCacheBanner(true);
-
-      queueMicrotask(() => {
-        addressRef.current?.setLocatedAddress({
-          formattedAddress: parsed.formattedAddress,
-          zip: parsed.zip,
-          ...(parsed.city ? { city: parsed.city } : {}),
-        });
-      });
-
-      if (typeof sessionStorage === "undefined") {
-        toast.info("Showing saved research — refreshing from the server…", {
-          autoClose: 4200,
-          hideProgressBar: true,
-        });
-        pendingCacheRefreshRef.current = true;
-        return;
-      }
-
-      const bgKey = REG_GUARD_SESSION_CACHE_HYDRATE_KEY;
-      if (!sessionStorage.getItem(bgKey)) {
-        sessionStorage.setItem(bgKey, "1");
-        toast.info("Showing saved research — refreshing from the server…", {
-          autoClose: 4200,
-          hideProgressBar: true,
-        });
-        pendingCacheRefreshRef.current = true;
-      }
-    } catch (e) {
-      console.warn("[RegGuard] research cache hydrate failed", e);
-    }
-  }, []);
-
-  useEffect(() => {
-    if (phase !== "Complete") {
-      return;
-    }
-    const site = (meta?.site ?? selection?.formattedAddress ?? "").trim();
-    const zip = (meta?.zip ?? selection?.zip ?? "").trim();
-    if (!site || !zip || actionPlan.trim().length < 60) {
-      return;
-    }
-    try {
-      const entry: ResearchCacheV1 = {
-        version: 1,
-        cacheKey: normalizeResearchCacheKey(site, zip),
-        savedAt: new Date().toISOString(),
-        formattedAddress: site,
-        zip,
-        city: meta?.city ?? selection?.city ?? null,
-        county: meta?.county ?? null,
-        ahjLabel: meta?.ahjLabel ?? null,
-        phase: "Complete",
-        actionPlan,
-        steps: [...steps],
-        visionText,
-        sourceUrls: [...sourceUrls],
-        visualAudit,
-        projectValueMetrics,
-        moratoriumStateAlert,
-        futureRiskAlert,
-        communityInspectorFeedback,
-        proactiveSummaryBuffer,
-        jobDescription,
-        dallasPermitsFixture,
-        scoutTrade,
-        scoutVertical,
-        missionCriticalDc,
-        searchLimit,
-      };
-      saveResearchCache(entry);
-    } catch (e) {
-      console.warn("[RegGuard] research cache persist failed", e);
-    }
-  }, [
-    phase,
-    actionPlan,
-    meta,
-    selection,
-    steps,
-    visionText,
-    sourceUrls,
-    visualAudit,
-    projectValueMetrics,
-    moratoriumStateAlert,
-    futureRiskAlert,
-    communityInspectorFeedback,
-    proactiveSummaryBuffer,
-    jobDescription,
-    dallasPermitsFixture,
-    scoutTrade,
-    scoutVertical,
-    missionCriticalDc,
-    searchLimit,
-  ]);
-
-  const handleFollowUpChip = useCallback(
-    (chip: FollowUpChip) => {
-      if (!selection?.formattedAddress || !selection.zip) {
-        toast.error("Select a job site first.");
-        return;
-      }
-      toast.success(`RegGuard just saved you ${chip.minutesSaved} minutes of manual research.`, {
-        autoClose: 3800,
-        hideProgressBar: true,
-      });
-      void runResearch({
-        followUpAppend: `[Proactive Guide — ${chip.label}]\n\nFocused scout: ${chip.scoutPrompt}`,
-        tradeBoost: chip.tradeBoost,
-        vertical: chip.vertical,
-        missionCritical: chip.missionCritical,
-      });
-    },
-    [selection, runResearch],
-  );
-
-  const geolocationReadOptions = useMemo<PositionOptions>(
-    () => ({
-      enableHighAccuracy: true,
-      /** Fast fail; combined with maximumAge 0 to push a fresh hardware fix on Mac. */
-      timeout: 5_000,
-      maximumAge: 0,
-    }),
-    [],
-  );
-
-  const onAddressSelection = useCallback((sel: AddressSelection | null) => {
-    cancelPendingLocateApplyRef.current = true;
-    setSelection(sel);
-    if (sel == null) {
-      queueMicrotask(() => {
-        setSiteAddressSearch(addressRef.current?.getInputValue() ?? "");
-      });
-    }
-  }, []);
-
-  const runDeviceLocate = useCallback(
-    (recenter: boolean) => {
-      setLocateMessage(null);
-      if (!geoSupported || !mapsOk) {
-        return;
-      }
-      const typed = (addressRef.current?.getInputValue() ?? "").trim();
-      if (!selection && typed) {
-        setLocateMessage(
-          "Choose an address from the suggestions list, or clear the field to use Locate Me / Recenter.",
-        );
-        return;
-      }
-      cancelPendingLocateApplyRef.current = false;
-      setLocatingMe(true);
-      navigator.geolocation.getCurrentPosition(
-        async (position) => {
-          if (cancelPendingLocateApplyRef.current) {
-            setLocateMessage(
-              "Address field changed before GPS finished — location not applied. Adjust the text or pick from the list, or try Locate / Recenter again.",
-            );
-            setLocatingMe(false);
-            return;
-          }
-          const lat = position.coords.latitude;
-          const lon = position.coords.longitude;
-          try {
-            const q = new URLSearchParams({
-              latitude: String(lat),
-              longitude: String(lon),
-            });
-            if (recenter) {
-              q.set("_", String(Date.now()));
-            }
-            const res = await fetchWithTimeout(`/api/reverse-geocode-address?${q}`, {
-              method: "GET",
-              cache: "no-store",
-            });
-            if (cancelPendingLocateApplyRef.current) {
-              setLocateMessage(
-                "Address field changed while resolving location — location not applied.",
-              );
-              setLocatingMe(false);
-              return;
-            }
-            if (!res.ok) {
-              setLocateMessage(await detailFromBadResponse(res.clone()));
-              setLocatingMe(false);
-              return;
-            }
-            const data = (await res.json()) as {
-              formatted_address?: string;
-              zip?: string;
-              city?: string;
-            };
-            const formattedAddress =
-              typeof data.formatted_address === "string" ? data.formatted_address.trim() : "";
-            const zip = typeof data.zip === "string" ? data.zip.trim() : "";
-            const city =
-              typeof data.city === "string" && data.city.trim() ? data.city.trim() : undefined;
-            if (!formattedAddress || zip.length !== 5) {
-              setLocateMessage("Could not decode that location into a U.S. address with ZIP.");
-              setLocatingMe(false);
-              return;
-            }
-            if (cancelPendingLocateApplyRef.current) {
-              setLocateMessage(
-                "Address field changed before geocode finished — location not applied.",
-              );
-              setLocatingMe(false);
-              return;
-            }
-            const sel = { formattedAddress, zip, ...(city ? { city } : {}) };
-            setSelection(sel);
-            addressRef.current?.setLocatedAddress(sel);
-            setLocateMessage(null);
-          } catch (e) {
-            setLocateMessage(e instanceof Error ? e.message : String(e));
-          }
-          setLocatingMe(false);
-        },
-        (err) => {
-          setLocateMessage(
-            err.message ? `Location unavailable: ${err.message}` : "Location permission denied.",
-          );
-          setLocatingMe(false);
-        },
-        geolocationReadOptions,
-      );
-    },
-    [geoSupported, mapsOk, geolocationReadOptions, selection],
-  );
-
-  const handleLocateMe = useCallback(() => runDeviceLocate(false), [runDeviceLocate]);
-  const handleRecenter = useCallback(() => runDeviceLocate(true), [runDeviceLocate]);
-
-  const speechCtor = useMemo(() => speechRecognitionCtor(), []);
-  const speechSupported = Boolean(speechCtor) && speechSupportedOnMount;
-
-  useEffect(() => {
-    if (!speechCtor) {
-      recognitionRef.current = null;
-      return;
-    }
-
-    const transcriptFor = (r: SpeechRecognitionResult): string => {
-      try {
-        const a = typeof r.item === "function" ? r.item(0) : undefined;
-        const alt = (a ?? r[0]) as SpeechRecognitionAlternative | undefined;
-        return typeof alt?.transcript === "string" ? alt.transcript : "";
-      } catch {
-        return "";
-      }
-    };
-
-    const rec = new speechCtor();
-
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = "en-US";
-
-    rec.onstart = () => {
-      console.log("[RegGuard speech] onstart — browser is listening");
-    };
-
-    rec.onresult = (ev) => {
-      console.log("[RegGuard speech] onresult", {
-        resultIndex: ev.resultIndex,
-        resultsLength: ev.results.length,
-      });
-
-      let newFinalChunk = "";
-      let interimChunk = "";
-
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        const r = ev.results[i];
-        const txt = transcriptFor(r);
-        console.log("[RegGuard speech] segment", i, { isFinal: r.isFinal, transcript: txt });
-        if (r.isFinal) {
-          newFinalChunk += txt;
-        } else {
-          interimChunk += txt;
-        }
-      }
-
-      dictationFinalAccumRef.current += newFinalChunk;
-      const nextText =
-        dictationAnchorRef.current + dictationFinalAccumRef.current + interimChunk;
-
-      console.log("[RegGuard speech] setJobDescription", {
-        mergedLength: nextText.length,
-        preview: nextText.slice(-120),
-      });
-
-      setJobDescriptionRef.current(nextText);
-
-      scheduleDictationSilenceStop({
-        timerRef: dictationSilenceTimerRef,
-        silenceMs: DICTATION_SILENCE_MS,
-        isListening: () => listeningRef.current,
-        stopRecognition: () => {
-          listeningRef.current = false;
-          const r = recognitionRef.current;
-          if (!r) {
-            return;
-          }
-          try {
-            r.stop();
-          } catch {
-            try {
-              r.abort();
-            } catch {
-              /* noop */
-            }
-          }
-        },
-        onSilenceStop: () => {
-          setDictationActiveRef.current(false);
-          setSpeechHintRef.current("Processing…");
-        },
-      });
-    };
-
-    rec.onerror = (ev) => {
-      clearDictationSilenceTimer(dictationSilenceTimerRef);
-      if (ev.error === "audio-capture" || ev.error === "not-allowed") {
-        toast.error(
-          `Speech recognition: ${ev.error}. ${(ev.message && String(ev.message).trim()) || "Microphone unavailable or blocked for this site."}`,
-        );
-      }
-
-      if (ev.error === "aborted" || ev.error === "no-speech") {
-        return;
-      }
-      if (ev.error === "not-allowed") {
-        setSpeechHintRef.current(
-          "Microphone permission denied. Use site settings to allow the microphone, then try dictation again.",
-        );
-      } else if (ev.error === "audio-capture") {
-        setSpeechHintRef.current("No microphone found or it is busy in another app.");
-      } else {
-        setSpeechHintRef.current(`Voice input paused (${ev.error}). You can keep typing.`);
-      }
-      listeningRef.current = false;
-      setDictationActiveRef.current(false);
-    };
-
-    rec.onend = () => {
-      console.log("[RegGuard speech] onend — recognition session ended");
-      if (!listeningRef.current) {
-        setDictationActiveRef.current(false);
-        return;
-      }
-      try {
-        recognitionRef.current?.start();
-      } catch {
-        listeningRef.current = false;
-        setDictationActiveRef.current(false);
-      }
-    };
-
-    recognitionRef.current = rec;
-
-    return () => {
-      listeningRef.current = false;
-      clearDictationSilenceTimer(dictationSilenceTimerRef);
-      try {
-        rec.abort();
-      } catch {
-        /* noop */
-      }
-      recognitionRef.current = null;
-    };
-  }, [speechCtor]);
-
-  useEffect(() => {
-    let alive = true;
-    const poll = async () => {
-      try {
-        const r = await fetchWithTimeout("/api/dashboard-revision", { cache: "no-store" });
-        if (!alive || !r.ok) {
-          return;
-        }
-        const j = (await r.json()) as { revision?: string; version?: string };
-        let rev = typeof j.revision === "string" && j.revision.length > 0 ? j.revision : "";
-        if (!rev && typeof j.version === "string") {
-          rev = `version:${j.version}`;
-        }
-        if (!rev) {
-          return;
-        }
-        lastPollRevisionRef.current = rev;
-        if (initialRevisionRef.current === null) {
-          initialRevisionRef.current = rev;
-          return;
-        }
-        if (rev !== initialRevisionRef.current && rev !== dismissedRevisionRef.current) {
-          setBackendStale(true);
-        }
-      } catch {
-        /* proxy down or offline */
-      }
-    };
-    void poll();
-    const id = window.setInterval(() => void poll(), 30_000);
-    return () => {
-      alive = false;
-      window.clearInterval(id);
-    };
-  }, []);
-
-  useEffect(() => {
-    if (!backendStale) {
-      setAutoRefreshSec(null);
-      return;
-    }
-    let sec = 12;
-    setAutoRefreshSec(sec);
-    const id = window.setInterval(() => {
-      sec -= 1;
-      setAutoRefreshSec(sec);
-      if (sec <= 0) {
-        window.clearInterval(id);
-        window.location.reload();
-      }
-    }, 1000);
-    return () => window.clearInterval(id);
-  }, [backendStale]);
-
-  const handleReviewActionPlan = useCallback(() => {
-    setResultsTab("plan");
-    const pulse = (el: HTMLElement) => {
-      el.classList.remove("rg-plan-panel--pulse");
-      void el.offsetWidth;
-      el.classList.add("rg-plan-panel--pulse");
-      window.setTimeout(() => el.classList.remove("rg-plan-panel--pulse"), 1400);
-    };
-    const run = () => {
-      document.getElementById("rg-results-heading")?.scrollIntoView({ behavior: "smooth", block: "nearest" });
-      const panel = actionPlanPanelRef.current;
-      const scrollTarget =
-        document.getElementById("rg-action-plan-header") ??
-        document.getElementById("contractor-action-plan");
-      const pulseEl = panel ?? document.getElementById("contractor-action-plan");
-      scrollTarget?.scrollIntoView({ behavior: "smooth", block: "start" });
-      if (pulseEl) {
-        pulse(pulseEl);
-      }
-    };
-    window.requestAnimationFrame(() => {
-      window.requestAnimationFrame(() => {
-        run();
-        if (!actionPlanPanelRef.current) {
-          window.setTimeout(run, 160);
-        }
-      });
-    });
-  }, []);
-
-  const handleAcceptActionPlan = useCallback(async () => {
-    const t = actionPlan.trim();
-    if (!t) {
-      setPlanToolbarMsg("Nothing to copy yet — run research or wait for the plan to finish streaming.");
-      window.setTimeout(() => setPlanToolbarMsg(null), 4000);
-      return;
-    }
-    try {
-      await navigator.clipboard.writeText(t);
-      setPlanToolbarMsg("Copied action plan to clipboard.");
-      window.setTimeout(() => setPlanToolbarMsg(null), 3500);
+      const blob = new Blob([res.data], { type: 'application/pdf' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = 'RegGuard-permit-application-package.pdf';
+      a.click();
+      URL.revokeObjectURL(url);
+      toast.success('Permit package downloaded');
     } catch {
-      toast.error("Could not copy — your browser blocked clipboard access.");
+      toast.error('Permit package download failed');
     }
-  }, [actionPlan]);
+  };
 
-  const handleDownloadPunchListPdf = useCallback(() => {
-    const md = actionPlan.trim();
-    if (!md) {
-      setPlanToolbarMsg("Nothing to export — run research or wait for the plan to finish streaming.");
-      window.setTimeout(() => setPlanToolbarMsg(null), 4000);
-      return;
-    }
-    if (needsPdfFriction && phase === "Complete" && !pdfFrictionAck) {
-      setPlanToolbarMsg(
-        "Confirm & Acknowledge the moratorium or conflict flags before downloading the PDF.",
-      );
-      window.setTimeout(() => setPlanToolbarMsg(null), 4500);
-      return;
-    }
-    try {
-      downloadActionPlanPdf({
-        markdown: md,
-        siteAddress: meta?.site ?? selection?.formattedAddress ?? null,
-        zip: meta?.zip ?? selection?.zip ?? null,
-        city: meta?.city ?? null,
-        county: meta?.county ?? null,
-      });
-      setPlanToolbarMsg("Punch list PDF downloaded.");
-      window.setTimeout(() => setPlanToolbarMsg(null), 3500);
-    } catch (e) {
-      const msg = e instanceof Error ? e.message : String(e);
-      toast.error(`Could not generate PDF: ${msg}`);
-    }
-  }, [actionPlan, meta, selection, needsPdfFriction, phase, pdfFrictionAck]);
-
-  const handleGeneratePermitPackage = useCallback(() => {
-    const md = actionPlan.trim();
-    if (!md) {
-      setPlanToolbarMsg("Nothing to export — run research first so the Contractor Action Plan is available.");
-      window.setTimeout(() => setPlanToolbarMsg(null), 4000);
-      return;
-    }
-    if (needsPdfFriction && phase === "Complete" && !pdfFrictionAck) {
-      setPlanToolbarMsg(
-        "Confirm & Acknowledge the moratorium or conflict flags before downloading the permit package.",
-      );
-      window.setTimeout(() => setPlanToolbarMsg(null), 4500);
-      return;
-    }
-    const siteAddress = meta?.site ?? selection?.formattedAddress ?? "";
-    const zip = meta?.zip ?? selection?.zip ?? "";
-    const city = meta?.city ?? "";
-    const county = meta?.county ?? "";
-    const jd = jobDescription.trim() || "200 A service / panel upgrade (planning basis)";
-    const scopeParts = [jd];
-    if (md.length > 0) {
-      scopeParts.push("--- Contractor Action Plan (research excerpt) ---", md.slice(0, 12_000));
-    }
-    const scope = scopeParts.join("\n\n").slice(0, 28_000);
-    const isDallas = jobSiteLooksLikeDallas(city || null, siteAddress || null);
-    let feeSummary = isDallas
-      ? `Reg Guard 2026 sync — Dallas base building permit (planning): USD $${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD} including administrative fee bundle; confirm final amount on the official City of Dallas Development Services / Building Inspection fee schedule.`
-      : "Confirm all permit, plan review, surcharge, and impact fees with the local Authority Having Jurisdiction before payment.";
-    if (isDallas && scoutTrade === "hvac") {
-      feeSummary +=
-        ` For HVAC / mechanical scopes, verify Dallas mechanical trade permit and IMC-related plan-review line items on that same fee schedule (Reg Guard keeps the $${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD} trade-permit planning floor until the AHJ itemizes mechanical adders).`;
-    }
-    void (async () => {
-      if (permitPackageBlobUrlRef.current) {
-        URL.revokeObjectURL(permitPackageBlobUrlRef.current);
-        permitPackageBlobUrlRef.current = null;
-      }
-      setPermitPackageReady(false);
-      setPermitPackageDownloadUrl(null);
-      const ac = new AbortController();
-      const abortTimer = window.setTimeout(() => ac.abort(), 120_000);
-      setPermitPackageBusy(true);
-      try {
-        const res = await fetchWithTimeout("/api/permit-package", {
-          method: "POST",
-          headers: { "Content-Type": "application/json" },
-          body: JSON.stringify({
-            site_address: siteAddress,
-            scope,
-            fee_summary: feeSummary,
-            trade: SCOUT_TRADE_LABELS[scoutTrade],
-            zip,
-            city,
-            county,
-            ahj_label: meta?.ahjLabel ?? "",
-          }),
-          signal: ac.signal,
-          timeoutMs: PERMIT_PACKAGE_FETCH_TIMEOUT_MS,
-        });
-        if (!res.ok) {
-          const raw = await res.text().catch(() => "");
-          let detail = raw.trim();
-          try {
-            const j = JSON.parse(raw) as { detail?: string };
-            if (typeof j.detail === "string" && j.detail.trim()) {
-              detail = j.detail.trim();
-            }
-          } catch {
-            /* plain text body */
-          }
-          throw new Error(detail || `Permit package failed (HTTP ${res.status}).`);
-        }
-        const blob = await res.blob();
-        const url = URL.createObjectURL(blob);
-        permitPackageBlobUrlRef.current = url;
-        setPermitPackageDownloadUrl(url);
-        setPermitPackageReady(true);
-        setPlanToolbarMsg("Package ready — download the Dallas permit worksheet using the link below.");
-        window.setTimeout(() => setPlanToolbarMsg(null), 6000);
-      } catch (e) {
-        const isAbort =
-          (e instanceof DOMException && e.name === "AbortError") ||
-          (e instanceof Error && e.name === "AbortError");
-        if (isAbort) {
-          toast.error(
-            "Permit package request timed out after 120s. Try again, or shorten the action plan excerpt.",
-          );
-        } else {
-          const msg = e instanceof Error ? e.message : String(e);
-          toast.error(`Could not generate permit package: ${msg}`);
-        }
-      } finally {
-        window.clearTimeout(abortTimer);
-        setPermitPackageBusy(false);
-      }
-    })();
-  }, [
-    actionPlan,
-    meta,
-    selection,
-    jobDescription,
-    needsPdfFriction,
-    phase,
-    pdfFrictionAck,
-    scoutTrade,
-  ]);
-
-  const dismissBackendNotice = useCallback(() => {
-    dismissedRevisionRef.current = lastPollRevisionRef.current;
-    setBackendStale(false);
-  }, []);
-
-  const voiceMicProcessing = speechHint === "Processing…";
-
-  const toggleDictation = useCallback(() => {
-    if (!speechCtor) {
-      setSpeechHint("Voice dictation is not supported in this browser. Try Chrome or Edge.");
-      return;
-    }
-
-    const rec = recognitionRef.current;
-    if (!rec) {
-      setSpeechHint("Speech engine is not ready yet. Reload the page and try again.");
-      return;
-    }
-
-    if (listeningRef.current) {
-      clearDictationSilenceTimer(dictationSilenceTimerRef);
-      listeningRef.current = false;
-      try {
-        rec.stop();
-      } catch {
-        rec.abort();
-      }
-      setDictationActive(false);
-      return;
-    }
-
-    setSpeechHint(null);
-    void (async () => {
-      try {
-        await warmMicrophonePermission();
-      } catch {
-        setSpeechHint(
-          "Microphone warmup was blocked—you may still get a browser prompt; choose Allow to dictate.",
-        );
-      }
-
-      dictationAnchorRef.current = jobDescription;
-      dictationFinalAccumRef.current = "";
-      listeningRef.current = true;
-
-      try {
-        rec.continuous = true;
-        rec.interimResults = true;
-        rec.lang = "en-US";
-        rec.start();
-        setDictationActive(true);
-        scheduleDictationSilenceStop({
-          timerRef: dictationSilenceTimerRef,
-          silenceMs: DICTATION_SILENCE_MS,
-          isListening: () => listeningRef.current,
-          stopRecognition: () => {
-            listeningRef.current = false;
-            const r = recognitionRef.current;
-            if (!r) {
-              return;
-            }
-            try {
-              r.stop();
-            } catch {
-              try {
-                r.abort();
-              } catch {
-                /* noop */
-              }
-            }
-          },
-          onSilenceStop: () => {
-            setDictationActive(false);
-            setSpeechHint("Processing…");
-          },
-        });
-      } catch {
-        listeningRef.current = false;
-        setSpeechHint("Could not start the microphone. Confirm permissions and try again.");
-        setDictationActive(false);
-      }
-    })();
-  }, [jobDescription, speechCtor]);
+  const stepKeys = useMemo(() => Object.keys(steps).sort(), [steps]);
 
   return (
-    <DashboardErrorBoundary>
-    <div className="app-shell">
-      <header
-        className="app-header"
-        style={{ fontFamily: "'Inter', 'Roboto', system-ui, sans-serif" }}
-      >
-        <div>
-          <h1 className="app-title">Reg Guard</h1>
-          <p className="app-tagline">
-            Compliance research for U.S. job sites — pick an address, describe the scope, optionally
-            add a photo, then stream jurisdiction and a Contractor Action Plan (SSE) from the API on port
-            8000 (proxied via <code>/api</code>).
-          </p>
-          <p className="field-hint rg-regulatory-shield" style={{ marginTop: 8 }} role="status">
-            <strong>Regulatory Shield</strong> active — API handshake <code>{getBackendOrigin()}</code>
-          </p>
-          <p className="field-hint" style={{ marginTop: 6 }} role="note">
-            <strong>May 2025 Dallas Parking Reform</strong> (effective May 2025): small-project stall rules and overlays —
-            AHJ-verify before omitting stalls. Dallas trade permit planning floor <strong>${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD}</strong>{" "}
-            (incl. admin fees).
-          </p>
-        </div>
-        <div className="app-header-actions">
-          <button
-            type="button"
-            className="rg-btn rg-btn--ghost"
-            style={{
-              fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-              fontWeight: 600,
-            }}
-            onClick={handleNewJob}
-          >
-            New Job
-          </button>
-          <button
-            type="button"
-            className="rg-btn rg-btn--ghost app-header-refresh"
-            style={{
-              fontFamily: "'Inter', 'Roboto', system-ui, sans-serif",
-              fontWeight: 600,
-            }}
-            title="Reload the app from the server (clears all browser state)"
-            onClick={handleRefreshApp}
-          >
-            Refresh
-          </button>
-        </div>
-      </header>
-
-      <div className="app-grid">
-        <section
-          className="rg-panel rg-dallas-dashboard"
-          style={{ gridColumn: "1 / -1" }}
-          aria-label="Dallas building dashboard — static research panel"
-          data-rg-static-research="dallas"
-        >
-          <h2>Dallas dashboard</h2>
-          <p className="rg-dallas-dashboard__lead">
-            City of Dallas workflow defaults: electrical / trade permits, Oncor utility sequencing, and zoning overlays
-            that matter on tight infill parcels (including Deep Ellum and downtown-edge lots).
-          </p>
-          <ul className="rg-dallas-dashboard__list">
-            <li>
-              <strong>Permit fee (2026 sync):</strong> plan for the Dallas{" "}
-              <strong>${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD}</strong> minimum <strong>trade</strong> permit bundle including{" "}
-              <strong>administrative fees</strong> — confirm line items on the official City of Dallas Development Services /
-              Building Inspection fee schedule.
-            </li>
-            <li>
-              <strong>Oncor coordination:</strong> mandatory scheduling / notification for{" "}
-              <strong>service disconnect</strong>, <strong>meter seal</strong> release, pulls, and other utility-side work
-              before energized work — a city permit does not replace Oncor field rules.
-            </li>
-            <li>
-              <strong>3 ft vs 5 ft setbacks:</strong> crews often anchor on a ~<strong>3 ft</strong> rear setback read that
-              still fails the more typical <strong>5 ft</strong> rear-yard building-line expectation in many districts — stake,
-              survey, and verify yard tables before masonry or foundation.
-            </li>
-            <li>
-              <strong>BDA variance alert:</strong> when yard, height, or use standards do not clear codified tables, a{" "}
-              <strong>Board of Adjustment</strong> variance or other zoning relief may be required before certificate of
-              occupancy — integrate Planning with Building milestones early.
-            </li>
-            <li>
-              <strong>May 2025 Dallas Parking Reform</strong> (city-adopted parking standards update — effective{" "}
-              <strong>May 2025</strong>): reforms exempt many small projects from legacy stall minima — for example, developments
-              with <strong>20 dwelling units or fewer</strong> (including common <strong>ADU</strong> paths) may have{" "}
-              <strong>no minimum off-street parking</strong>. Confirm PD overlays, TIF districts, and Planning bulletins before
-              omitting stalls on cover sheets.
-            </li>
-          </ul>
-          {showMungerIntelPanel ? (
-            <>
-              <div
-                id="rg-munger-intel-dashboard"
-                className="rg-munger-intel rg-munger-intel--dashboard"
-                role="region"
-                aria-labelledby="rg-munger-intel-dashboard-label"
-              >
-                <div id="rg-munger-intel-dashboard-label" className="rg-munger-intel__title">
-                  722 Munger Ave — intelligence panel (Dallas, TX)
-                </div>
-                <ul className="rg-munger-intel__list">
-                  <li>
-                    <strong>3 ft vs 5 ft setback:</strong> a <strong>3 ft</strong> rear setback read often still fails the more
-                    typical <strong>5 ft</strong> rear-yard building line for many Dallas residential-style lots — verify exact
-                    zoning district, Form District, and adopted yard tables before enclosure or cladding.
-                  </li>
-                  <li>
-                    <strong>BDA variance alert:</strong> if the improvement cannot meet codified setbacks or use standards, a{" "}
-                    <strong>Board of Adjustment (BDA)</strong> variance or other relief may be required before certificate of
-                    occupancy or final release.
-                  </li>
-                  <li>
-                    <strong>May 2025 Dallas Parking Reform</strong> (city parking standards — adopted{" "}
-                    <strong>May 2025</strong>): Dallas reforms exempt many small projects from legacy stall minima —{" "}
-                    <strong>20 dwelling units or fewer</strong> (including typical <strong>ADU</strong> scopes) generally have{" "}
-                    <strong>no minimum off-street parking</strong>. Confirm PD overlays, TIF/overlay conditions, and current
-                    Planning guidance before omitting stalls.
-                  </li>
-                  <li>
-                    <strong>Permit fee (2026 sync):</strong> plan for the Dallas{" "}
-                    <strong>${REG_GUARD_DALLAS_MIN_TRADE_PERMIT_USD}</strong> minimum trade permit bundle (incl. administrative fees)
-                    before AHJ verification.
-                  </li>
-                </ul>
-              </div>
-              <p className="field-hint rg-dallas-dashboard__foot">
-                This reference parcel stays pinned on the Dallas dashboard. Pick{" "}
-                <strong>722 Munger Ave, Dallas, TX</strong> under Job site when you want the same context on permit PDFs and research
-                payloads.
-              </p>
-            </>
-          ) : null}
-        </section>
-
-        <section className="rg-panel">
-          <h2>Job site</h2>
-          {!mapsOk ? (
-            <div className="rg-banner rg-banner--warn" role="status">
-              Add <code>VITE_GOOGLE_MAPS_API_KEY</code> to <code>frontend/.env</code> and restart{' '}
-              <code>npm run dev</code> to enable verified U.S. address search (required by the backend).
-            </div>
-          ) : null}
-
-          <div className="rg-field">
-            <div id="job-site-address-label" className="rg-field-label-text">
-              Address (Google Places)
-            </div>
-            <div className="rg-address-bar">
-              <div className="rg-address-slot">
-                <AddressAutocomplete
-                  ref={addressRef}
-                  disabled={busy || locatingMe}
-                  onSelection={onAddressSelection}
-                  onAddressSearchChange={setSiteAddressSearch}
-                />
-              </div>
-              <button
-                type="button"
-                className="rg-btn rg-btn--ghost rg-locate-btn"
-                title="Use current location"
-                aria-label="Locate me with GPS"
-                disabled={busy || locatingMe || !mapsOk || !geoSupported}
-                onClick={() => handleLocateMe()}
-              >
-                {locatingMe ? (
-                  <span className="rg-locate-loading" aria-hidden />
-                ) : (
-                  <svg className="rg-locate-icon" viewBox="0 0 24 24" aria-hidden>
-                    <circle cx="12" cy="12" r="3" fill="none" stroke="currentColor" strokeWidth="2" />
-                    <path
-                      fill="none"
-                      stroke="currentColor"
-                      strokeWidth="2"
-                      d="M12 19v3M12 2v3M21 11h3M3 11h3M17.657 17.657l2.121 2.121M6.344 17.657l-2.12 2.121M17.657 6.344l2.121-2.12M6.344 6.344L4.223 4.223"
-                    />
-                  </svg>
-                )}
-              </button>
-              <button
-                type="button"
-                className="rg-btn rg-btn--ghost rg-recenter-btn"
-                title="Recenter: fresh high-accuracy GPS and bypass cached geocode responses"
-                aria-label="Recenter with high-accuracy GPS"
-                disabled={busy || locatingMe || !mapsOk || !geoSupported}
-                onClick={() => handleRecenter()}
-              >
-                Recenter
-              </button>
-            </div>
-            {!geoSupported ? (
-              <p className="field-hint">
-                Locate Me isn’t supported in this browser — use search or enter an address manually.
-              </p>
-            ) : null}
-            {locateMessage ? (
-              <div className="rg-banner rg-banner--warn" role="alert">
-                {locateMessage}
-              </div>
-            ) : null}
-            {selection ? (
-              <p className="field-hint">
-                Selected ZIP <strong>{selection.zip}</strong> — must match Places result for{' '}
-                <code>/research</code>.
-              </p>
-            ) : (
-              <p className="field-hint">
-                Choose a full U.S. address from the dropdown so the backend can geocode jurisdiction.
-              </p>
-            )}
-          </div>
-
-          <div className="rg-field">
-            <div className="rg-job-desc-head">
-              <label htmlFor="job-desc">Job description</label>
-              <button
-                type="button"
-                className={`rg-btn rg-btn--ghost rg-mic-btn${dictationActive ? " rg-mic-btn--active" : ""}${voiceMicProcessing ? " rg-mic-btn--processing" : ""}`}
-                title={
-                  dictationActive ? "Listening (stops after 6s silence)" :
-                    voiceMicProcessing ? "Processing…" :
-                      "Dictate with microphone"
-                }
-                aria-label={
-                  dictationActive ? "Stop voice dictation" :
-                    voiceMicProcessing ? "Voice processing" :
-                      "Start voice dictation"
-                }
-                aria-pressed={dictationActive}
-                disabled={busy || !speechSupported}
-                onClick={() => toggleDictation()}
-              >
-                {dictationActive ? (
-                  <span className="rg-mic-pulse" aria-hidden />
-                ) : voiceMicProcessing ? (
-                  <span className="rg-mic-processing-label" aria-hidden>
-                    ⋯
-                  </span>
-                ) : (
-                  <svg
-                    className="rg-mic-icon"
-                    viewBox="0 0 24 24"
-                    fill="none"
-                    stroke="currentColor"
-                    strokeWidth="2"
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    aria-hidden
-                  >
-                    <path d="M12 2a3 3 0 0 1 3 3v7a3 3 0 1 1-6 0V5a3 3 0 0 1 3-3Z" />
-                    <path d="M19 10v1a7 7 0 1 1-14 0v-1" />
-                    <line x1="12" x2="12" y1="19" y2="22" />
-                    <line x1="8" x2="16" y1="22" y2="22" />
-                  </svg>
-                )}
-              </button>
-            </div>
-            {!speechSupported ? (
-              <p className="field-hint">
-                Voice dictation requires a Chromium-based desktop browser (speech recognition APIs).
-              </p>
-            ) : null}
-            {speechHint ? (
-              <p id="job-desc-speech-hint" className="field-hint rg-speech-hint" role="status">
-                {speechHint}
-              </p>
-            ) : null}
-            <textarea
-              id="job-desc"
-              className={`rg-input${dictationActive ? " rg-input--dictating" : ""}`}
-              placeholder="Type or use the microphone: trades, scope, timelines, AHJ questions…"
-              value={jobDescription}
-              disabled={busy}
-              onChange={(e) => setJobDescription(e.target.value)}
-              aria-describedby={speechHint ? "job-desc-speech-hint" : undefined}
-            />
-          </div>
-
-          <div className="rg-field">
-            <div className="rg-field-label-text" id="universal-scout-profile-label">
-              Universal Scout — trades &amp; vertical
-            </div>
-            <div className="rg-trade-toggles" role="group" aria-labelledby="universal-scout-profile-label">
-              <button
-                type="button"
-                className={`rg-btn rg-btn--compact${scoutTrade === "general_contractor" ? " rg-btn--primary" : " rg-btn--ghost"}`}
-                aria-pressed={scoutTrade === "general_contractor"}
-                disabled={busy}
-                onClick={() => setScoutTrade("general_contractor")}
-              >
-                General Contractor
-              </button>
-              <button
-                type="button"
-                className={`rg-btn rg-btn--compact${scoutTrade === "electrician" ? " rg-btn--primary" : " rg-btn--ghost"}`}
-                aria-pressed={scoutTrade === "electrician"}
-                disabled={busy}
-                onClick={() => setScoutTrade("electrician")}
-              >
-                Electrician
-              </button>
-              <button
-                type="button"
-                className={`rg-btn rg-btn--compact${scoutTrade === "plumber" ? " rg-btn--primary" : " rg-btn--ghost"}`}
-                aria-pressed={scoutTrade === "plumber"}
-                disabled={busy}
-                onClick={() => setScoutTrade("plumber")}
-              >
-                Plumber
-              </button>
-              <button
-                type="button"
-                className={`rg-btn rg-btn--compact${scoutTrade === "hvac" ? " rg-btn--primary" : " rg-btn--ghost"}`}
-                aria-pressed={scoutTrade === "hvac"}
-                disabled={busy}
-                onClick={() => setScoutTrade("hvac")}
-              >
-                HVAC / Mechanical
-              </button>
-              <button
-                type="button"
-                className={`rg-btn rg-btn--compact${scoutTrade === "zoning_planning" ? " rg-btn--primary" : " rg-btn--ghost"}`}
-                aria-pressed={scoutTrade === "zoning_planning"}
-                disabled={busy}
-                onClick={() => setScoutTrade("zoning_planning")}
-              >
-                Zoning &amp; Planning
-              </button>
-              <button
-                type="button"
-                className={`rg-btn rg-btn--compact${scoutTrade === "owner_builder" ? " rg-btn--primary" : " rg-btn--ghost"}`}
-                aria-pressed={scoutTrade === "owner_builder"}
-                disabled={busy}
-                onClick={() => setScoutTrade("owner_builder")}
-              >
-                Owner-Builder
-              </button>
-            </div>
-            <div className="rg-scout-vertical-row">
-              <label htmlFor="scout-vertical" className="rg-scout-vertical-label">
-                Project vertical
-              </label>
-              <select
-                id="scout-vertical"
-                className="rg-input rg-input--select"
-                disabled={busy}
-                value={scoutVertical}
-                onChange={(e) =>
-                  setScoutVertical(e.target.value as "building" | "infrastructure" | "data_center")
-                }
-              >
-                <option value="building">Building / general</option>
-                <option value="infrastructure">Infrastructure</option>
-                <option value="data_center">Data center</option>
-              </select>
-            </div>
-            <label className="rg-mission-critical">
-              <input
-                type="checkbox"
-                checked={missionCriticalDc}
-                disabled={busy}
-                onChange={(e) => setMissionCriticalDc(e.target.checked)}
-              />{" "}
-              Mission critical (data center) — Tier III/IV redundancy + liquid cooling / containment code scout
-            </label>
-            <p className="field-hint">
-              <strong>Infrastructure</strong> or <strong>Data center</strong> adds a FAST-41 federal permitting pass.
-              The selected trade appends scout phrases for GC sequencing, NEC/IPC/IMC, entitlement (FAR, setbacks,
-              parking overlays), owner-builder affidavit cues, or MEP coordination, depending on which profile is active.
-            </p>
-          </div>
-
-          <div className="rg-field">
-            <label htmlFor="site-photo">Job-site photo (optional)</label>
-            <input
-              key={fileInputKey}
-              id="site-photo"
-              className="rg-input"
-              type="file"
-              accept="image/*"
-              disabled={busy}
-              onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
-            />
-            <p className="field-hint">
-              Sends vision analysis into the research context when included.
-            </p>
-          </div>
-
-          <div className="rg-field rg-row">
-            <label htmlFor="search-limit">
-              Sources per scout step{' '}
-              <span style={{ fontWeight: 400, color: "var(--rg-muted)" }}>(1–20)</span>
-            </label>
-            <input
-              id="search-limit"
-              className="rg-input"
-              type="number"
-              min={1}
-              max={20}
-              value={searchLimit}
-              disabled={busy}
-              onChange={(e) => {
-                const n = Number(e.target.value);
-                if (!Number.isFinite(n)) {
-                  return;
-                }
-                setSearchLimit(Math.min(20, Math.max(1, Math.round(n))));
-              }}
-            />
-          </div>
-
-          <div className="rg-field rg-service-bridge">
-            <h3 className="rg-service-bridge__title">Operations hub — enterprise connectors &amp; field tools</h3>
-            <div className="rg-enterprise-lite" aria-label="Enterprise connectors (preview)">
-              <div className="rg-enterprise-lite__card">
-                <div className="rg-enterprise-lite__card-head">
-                  <span className="rg-enterprise-lite__card-title">Service Bridge</span>
-                  <span className="rg-badge rg-badge--lite" title="Lite — connector API not wired in this build">
-                    Lite
-                  </span>
-                </div>
-                <p className="field-hint rg-enterprise-lite__hint">
-                  Lite placeholder for ERP / CMMS handoff. Full connector provisioning is not enabled in this build.
-                </p>
-              </div>
-              <div className="rg-enterprise-lite__card">
-                <div className="rg-enterprise-lite__card-head">
-                  <span className="rg-enterprise-lite__card-title">BIM / Digital Twin</span>
-                  <span className="rg-badge rg-badge--lite" title="Lite — model upload is UI-only; use JSON import below">
-                    Lite
-                  </span>
-                </div>
-                <div className="rg-enterprise-lite__upload" aria-disabled="true">
-                  <span className="rg-enterprise-lite__upload-label">Upload Model</span>
-                  <span className="field-hint rg-enterprise-lite__hint">
-                    UI-only — no file transfer. Use JSON import below for the live clash bridge, or wait for Digital Twin
-                    API.
-                  </span>
-                </div>
-              </div>
-            </div>
-
-            <h4 className="rg-service-bridge__subtitle">BIM JSON cross-reference &amp; maintenance</h4>
-            <p className="field-hint">
-              <strong>BIM (JSON):</strong> paste a Revit-style JSON export. The backend cross-references your archived{" "}
-              <strong>Universal Scout</strong> snapshot for that ZIP and flags <strong>clash zones</strong> where conduit
-              encroaches on typical gas-relief / meter clearance envelopes for that area. Seed the archive by running
-              compliance research once per ZIP before BIM import. Matching ZIP merges into the next research automatically.
-            </p>
-            {bimBridgeReport && typeof bimBridgeReport.zip === "string" ? (
-              <div className="rg-service-bridge__row">
-                <span className="field-hint rg-service-bridge__badge">
-                  Last BIM bridge: ZIP <strong>{String(bimBridgeReport.zip)}</strong>
-                  {Array.isArray(bimBridgeReport.clash_zones) ? (
-                    <> — {bimBridgeReport.clash_zones.length} clash zone(s)</>
-                  ) : null}
-                </span>
-              </div>
-            ) : null}
-            <textarea
-              className="rg-input rg-service-bridge__textarea"
-              rows={5}
-              placeholder={'{"zip":"…","project":{...},"elements":[...]}'}
-              value={bimJsonDraft}
-              disabled={busy || bimImportBusy}
-              onChange={(e) => setBimJsonDraft(e.target.value)}
-            />
-            <button
-              type="button"
-              className="rg-btn rg-btn--primary rg-btn--compact rg-service-bridge__bim-btn"
-              disabled={busy || bimImportBusy || !bimJsonDraft.trim()}
-              onClick={() => void handleBimImport()}
-            >
-              {bimImportBusy ? "Importing…" : "Run BIM import"}
-            </button>
-
-            <hr className="rg-service-bridge__hr" />
-
-            <p className="field-hint">
-              <strong>Maintenance Mode:</strong> configure AI-driven sensor alert targets for a{" "}
-              <strong>completed</strong> project—describe wear signals to catch before an outage.
-            </p>
-            <div className="rg-maintenance-form">
-              <input
-                className="rg-input"
-                placeholder="Project name"
-                value={maintProjectName}
-                disabled={busy || maintSaving}
-                onChange={(e) => setMaintProjectName(e.target.value)}
-              />
-              <input
-                className="rg-input"
-                placeholder="Sensor profile (e.g. thermal_vibration)"
-                value={maintSensorProfile}
-                disabled={busy || maintSaving}
-                onChange={(e) => setMaintSensorProfile(e.target.value)}
-              />
-              <textarea
-                className="rg-input rg-maintenance-form__note"
-                rows={2}
-                placeholder="Alert thresholds / failure precursors to monitor…"
-                value={maintAlertNote}
-                disabled={busy || maintSaving}
-                onChange={(e) => setMaintAlertNote(e.target.value)}
-              />
-              <button
-                type="button"
-                className="rg-btn rg-btn--primary rg-btn--compact"
-                disabled={busy || maintSaving || !selection?.zip}
-                onClick={() => void handleCreateMaintenanceSubscription()}
-              >
-                {maintSaving ? "Saving…" : "Add maintenance subscription"}
-              </button>
-            </div>
-            {maintenanceLoading ? (
-              <p className="field-hint">Loading subscriptions…</p>
-            ) : maintenanceSubs.length === 0 ? (
-              <p className="field-hint">No maintenance subscriptions yet.</p>
-            ) : (
-              <ul className="rg-maintenance-list">
-                {maintenanceSubs.map((s) => (
-                  <li key={s.id} className="rg-maintenance-list__item">
-                    <div className="rg-maintenance-list__head">
-                      <strong>{s.project_name}</strong>
-                      <span className="field-hint">
-                        {" "}
-                        ZIP {s.zip}
-                        {s.maintenance_mode_enabled !== false ? (
-                          <span className="rg-maintenance-on"> — Maintenance Mode on</span>
-                        ) : (
-                          <span className="rg-maintenance-off"> — paused</span>
-                        )}
-                      </span>
-                    </div>
-                    {s.alert_threshold_note ? (
-                      <p className="rg-maintenance-list__note">{s.alert_threshold_note}</p>
-                    ) : null}
-                    <label className="rg-maintenance-toggle">
-                      <input
-                        type="checkbox"
-                        checked={s.maintenance_mode_enabled !== false}
-                        onChange={(e) => void handleToggleMaintenanceMode(s.id, e.target.checked)}
-                      />{" "}
-                      Sensor alerts active
-                    </label>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
-
-          <div className="rg-actions">
-            <button
-              type="button"
-              className="rg-btn rg-btn--primary"
-              aria-label="Run compliance research"
-              title={`${getBackendOrigin()} · ${getRunResearchAbsoluteUrl()}`}
-              onClick={() => void runResearch()}
-            >
-              Run compliance research
-            </button>
-            <button
-              type="button"
-              className="rg-btn rg-btn--ghost"
-              onClick={resetOutput}
-            >
-              Clear results
-            </button>
-          </div>
-        </section>
-
-        <section className="rg-panel rg-results-panel">
-          <header className="rg-results-panel__header">
-            <h2 id="rg-results-heading">Results</h2>
-          </header>
-
-          {showHydratedCacheBanner ? (
-            <div className="rg-banner rg-banner--muted" role="status" aria-live="polite">
-              <strong>Cached research</strong>
-              {busy ? (
-                <span> — showing your last saved results while Reg Guard reconnects to the API.</span>
-              ) : (
-                <span>
-                  {" "}
-                  — last saved session for this address is shown above. Tap <strong>Run compliance research</strong> to pull a
-                  fresh stream if the automatic refresh did not finish.
-                </span>
-              )}
-            </div>
-          ) : null}
-
-          {dallasPermitsFixture ? (
-            <div
-              className="rg-banner rg-banner--muted"
-              role="region"
-              aria-label="Dallas permits fixture from local Flask"
-            >
-              <strong>Dallas permits (local Flask)</strong>
-              <span className="field-hint">
-                {" "}
-                — API {getBackendOrigin()} · permits {getRunResearchAbsoluteUrl()}
-              </span>
-              {dallasPermitsFixture.fetchError ? (
-                <p style={{ marginTop: 8 }}>{dallasPermitsFixture.fetchError}</p>
-              ) : (
-                <pre className="vision-snippet" style={{ marginTop: 8, whiteSpace: "pre-wrap" }}>
-                  {JSON.stringify(dallasPermitsFixture.permits, null, 2)}
-                </pre>
-              )}
-              {!dallasPermitsFixture.fetchError && dallasPermitsFixture.source ? (
-                <p className="field-hint">source: {dallasPermitsFixture.source}</p>
-              ) : null}
-            </div>
-          ) : null}
-
-          {phase === "Complete" && projectValueMetrics ? (
-            <div className="rg-project-value-card" aria-labelledby="rg-project-value-heading">
-              <div id="rg-project-value-heading" className="rg-project-value-card__title">
-                Project Value Protected
-              </div>
-              <dl className="rg-project-value-card__stats">
-                <div className="rg-project-value-card__stat">
-                  <dt>Research Value</dt>
-                  <dd>
-                    {projectValueMetrics.researchValueUsd.toLocaleString(undefined, {
-                      style: "currency",
-                      currency: "USD",
-                      minimumFractionDigits: 2,
-                      maximumFractionDigits: 2,
-                    })}
-                  </dd>
-                </div>
-                <div className="rg-project-value-card__stat">
-                  <dt>Estimated Liability Avoided</dt>
-                  <dd>
-                    {projectValueMetrics.estimatedLiabilityAvoidedUsd.toLocaleString(undefined, {
-                      style: "currency",
-                      currency: "USD",
-                      minimumFractionDigits: 0,
-                      maximumFractionDigits: 0,
-                    })}
-                  </dd>
-                </div>
-              </dl>
-            </div>
-          ) : null}
-
-          {phase === "Complete" && moratoriumStateAlert ? (
-            <div
-              className="rg-bottom-line-moratorium-alert"
-              role="alert"
-              aria-labelledby="rg-moratorium-alert-heading"
-            >
-              <div id="rg-moratorium-alert-heading" className="rg-bottom-line-moratorium-alert__title">
-                RED ALERT — The Bottom Line
-              </div>
-              <p className="rg-bottom-line-moratorium-alert__text">{moratoriumStateAlert.text}</p>
-            </div>
-          ) : null}
-
-          {visualAudit != null &&
-          typeof visualAudit.bottom_line === "string" &&
-          visualAudit.bottom_line.trim() ? (
-            <div
-              className="rg-bottom-line-box"
-              role="region"
-              aria-labelledby="rg-bottom-line-label"
-            >
-              <div id="rg-bottom-line-label" className="rg-bottom-line-box__label">
-                The Bottom Line
-              </div>
-              <p className="rg-bottom-line-box__text">{visualAudit.bottom_line.trim()}</p>
-            </div>
-          ) : null}
-
-          {reasoningStep ? (
-            <p className="rg-reasoning-step rg-reasoning-step--in-results" aria-live="polite">
-              <span className="rg-reasoning-step__label">Reasoning:</span> {reasoningStep}
-            </p>
-          ) : null}
-
-          {!busy && agentStatusLine ? (
-            <p className="rg-agent-status" aria-live="polite">
-              {agentStatusLine}
-            </p>
-          ) : null}
-
-          {busy ? (
-            <div className="rg-phase rg-phase--with-reasoning" aria-live="polite">
-              <span className="rg-dot-pulse" aria-hidden />
-              <div className="rg-phase-text">
-                <span className="rg-phase-primary">{agentStatusLine || phase}</span>
-              </div>
-              {sseConnectionLive ? (
-                <span className="rg-sse-live" title="Event stream connected">
-                  <span className="rg-sse-live__dot" aria-hidden />
-                  Connection active
-                </span>
-              ) : null}
-            </div>
-          ) : null}
-
-          {!busy && phase === "Complete" ? (
-            <div className="rg-banner rg-banner--muted" role="status">
-              Stream finished.{meta?.zip ? ` ZIP ${meta.zip}.` : ""}
-              {meta?.city ? ` ${meta.city},` : ""}
-              {meta?.county ? ` ${meta.county}` : ""}
-            </div>
-          ) : null}
-
-          {error ? (
-            <div className="rg-banner rg-banner--warn" role="alert">
-              {error}
-            </div>
-          ) : null}
-
-          {streamBroken && !busy ? (
-            <div className="rg-banner rg-banner--muted" role="status">
-              <span>The research stream stopped before completion. Partial results may appear above.</span>{" "}
-              <button
-                type="button"
-                className="rg-btn rg-btn--primary rg-btn--compact"
-                onClick={() => void runResearch()}
-              >
-                Resume Research
-              </button>
-            </div>
-          ) : null}
-
-          {steps.length > 0 ? (
-            <ul className="rg-step-log" aria-label="Research pipeline steps">
-              {steps.map((s) => (
-                <li key={s} className="done">
-                  {s}
-                </li>
-              ))}
-            </ul>
-          ) : null}
-
-          {visionText ? (
+    <>
+      <style>{styles()}</style>
+      <div className="rg-shell">
+        <header className="rg-header">
+          <div className="rg-brand">
+            <Shield size={18} color="#38bdf8" />
             <div>
-              <strong className="rg-subheading">Vision (streaming)</strong>
-              <div className="vision-snippet">{visionText}</div>
+              <div className="rg-title">Reg Guard · Universal Scout</div>
+              <div className="rg-sub">Trusted-domain SERP discovery → digest → streamed Contractor Action Plan</div>
             </div>
-          ) : null}
-
-          {futureRiskAlert?.active ? (
-            <div className="rg-future-risk-alert" role="alert" aria-live="polite">
-              <div className="rg-future-risk-alert__title">{futureRiskAlert.banner ?? "FUTURE RISK ALERT"}</div>
-              <p className="rg-future-risk-alert__lead">
-                Scout flagged a <strong>future code edition or adoption-cycle signal</strong> for this jurisdiction (for
-                example <strong>2026 NEC</strong> or a pending ordinance). Confirm effective dates and amendments with
-                the AHJ before locking scope.
-              </p>
-              {futureRiskAlert.notes ? (
-                <p className="rg-future-risk-alert__notes">{futureRiskAlert.notes}</p>
-              ) : null}
-              {(futureRiskAlert.hits ?? []).length > 0 ? (
-                <ul className="rg-future-risk-alert__hits">
-                  {(futureRiskAlert.hits ?? []).map((h, i) => (
-                    <li key={`${h.url ?? h.title ?? "hit"}-${i}`}>
-                      {h.url ? (
-                        <a href={h.url} target="_blank" rel="noreferrer noopener">
-                          {h.title?.trim() || h.url}
-                        </a>
-                      ) : (
-                        <span>{h.title ?? "Source"}</span>
-                      )}
-                      {h.snippet?.trim() ? (
-                        <span className="rg-future-risk-alert__snippet"> — {h.snippet.trim()}</span>
-                      ) : null}
-                    </li>
-                  ))}
-                </ul>
-              ) : null}
-            </div>
-          ) : null}
-
-          {communityInspectorFeedback?.notes?.length ? (
-            <div className="rg-community-scout-alert" role="status" aria-live="polite">
-              <div className="rg-community-scout-alert__title">COMMUNITY ALERT: Recent Inspector Feedback</div>
-              <p className="rg-community-scout-alert__meta">
-                ZIP <strong>{communityInspectorFeedback.zip}</strong> — crowdsourced field notes (verify with your AHJ).
-              </p>
-              <ul className="rg-community-scout-alert__list">
-                {communityInspectorFeedback.notes.map((n, i) => (
-                  <li key={`${n.created_at ?? "note"}-${i}`}>{n.text}</li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-
-          <div className="rg-results-tabs" role="tablist" aria-label="Results views">
-            <button
-              type="button"
-              role="tab"
-              className={`rg-results-tab${resultsTab === "plan" ? " rg-results-tab--active" : ""}`}
-              aria-selected={resultsTab === "plan"}
-              id="rg-tab-plan"
-              aria-controls="rg-tab-panel-plan"
-              onClick={() => setResultsTab("plan")}
-            >
-              Contractor action plan
-            </button>
-            <button
-              type="button"
-              role="tab"
-              className={`rg-results-tab${resultsTab === "visual" ? " rg-results-tab--active" : ""}`}
-              aria-selected={resultsTab === "visual"}
-              id="rg-tab-visual"
-              aria-controls="rg-tab-panel-visual"
-              disabled={!photoObjectUrl}
-              title={
-                photoObjectUrl
-                  ? "Photo overlay from Reality Capture Audit"
-                  : "Attach a job-site photo to enable Visual Audit"
-              }
-              onClick={() => setResultsTab("visual")}
-            >
-              Visual Audit
-            </button>
           </div>
+          <div className="rg-pill">
+            <Radar size={14} />
+            Firecrawl passes stream live · <span className="rg-ok">.gov / Municode / OpenGov</span>
+          </div>
+        </header>
 
-          <div
-            id="rg-tab-panel-plan"
-            role="tabpanel"
-            aria-labelledby="rg-tab-plan"
-            hidden={resultsTab !== "plan"}
-            className="rg-results-tab-panel"
-          >
-          <div id="contractor-action-plan">
-            {planParts.bottomLine ? (
-              <div
-                className="rg-bottom-line-box rg-bottom-line-box--memo"
-                role="region"
-                aria-labelledby="rg-memo-bottom-line-label"
-              >
-                <div id="rg-memo-bottom-line-label" className="rg-bottom-line-box__label">
-                  The Bottom Line
+        <div className="rg-main">
+          <section className="rg-panel">
+            <div className="rg-panel-hd">
+              <MapPin size={16} />
+              Job context
+            </div>
+            <div className="rg-panel-bd">
+              <label className="rg-lbl" htmlFor="addr">
+                U.S. site address (Google Places)
+              </label>
+              <input
+                id="addr"
+                ref={(el) => {
+                  addressRef.current = el;
+                  if (el && placesReady && !acRef.current) attachAutocomplete();
+                }}
+                className="rg-input"
+                placeholder="Start typing — pick a suggestion"
+                value={siteAddress}
+                onChange={(e) => setSiteAddress(e.target.value)}
+                onFocus={() => {
+                  if (placesReady) attachAutocomplete();
+                }}
+                autoComplete="off"
+              />
+              {!placesReady ? (
+                <div className="rg-small rg-warn" style={{ marginTop: 8 }}>
+                  Google Maps JS not loaded — set <code>VITE_GOOGLE_MAPS_API_KEY</code> in <code>frontend/.env</code>.
                 </div>
-                <p className="rg-bottom-line-box__text">{planParts.bottomLine}</p>
-              </div>
-            ) : null}
-            {planParts.proceedPreview ? (
-              <div className="rg-proceed-intent" role="region" aria-labelledby="rg-proceed-intent-label">
-                <div id="rg-proceed-intent-label" className="rg-proceed-intent__label">
-                  Proceed — intent preview
+              ) : null}
+
+              <div className="rg-row2">
+                <div>
+                  <label className="rg-lbl" htmlFor="zip">
+                    ZIP (5 digits)
+                  </label>
+                  <input
+                    id="zip"
+                    className="rg-input"
+                    value={zipCode}
+                    onChange={(e) => setZipCode(e.target.value)}
+                    inputMode="numeric"
+                    placeholder="75025"
+                  />
                 </div>
-                <p className="rg-proceed-intent__text">{planParts.proceedPreview}</p>
+                <div>
+                  <label className="rg-lbl" htmlFor="city">
+                    Client city (optional)
+                  </label>
+                  <input
+                    id="city"
+                    className="rg-input"
+                    value={clientCity}
+                    onChange={(e) => setClientCity(e.target.value)}
+                    placeholder="From Places or override"
+                  />
+                </div>
               </div>
-            ) : null}
-            {needsPdfFriction && phase === "Complete" ? (
-              <label className="rg-pdf-friction-ack">
+
+              <label className="rg-lbl" htmlFor="jd">
+                Job description / voice capture
+              </label>
+              <textarea
+                id="jd"
+                className="rg-ta"
+                value={jobDescription}
+                onChange={(e) => setJobDescription(e.target.value)}
+                placeholder="Describe scope — panel upgrade, data hall fit-out, AHJ questions…"
+              />
+
+              <div className="rg-row2">
+                <div>
+                  <label className="rg-lbl" htmlFor="lim">
+                    SERP rows / pass (1–20)
+                  </label>
+                  <input
+                    id="lim"
+                    className="rg-input"
+                    type="number"
+                    min={1}
+                    max={20}
+                    value={searchLimit}
+                    onChange={(e) => setSearchLimit(Number(e.target.value))}
+                  />
+                </div>
+                <div>
+                  <label className="rg-lbl" htmlFor="vert">
+                    Scout vertical
+                  </label>
+                  <select
+                    id="vert"
+                    className="rg-select"
+                    value={vertical}
+                    onChange={(e) => setVertical(e.target.value as ScoutVertical)}
+                  >
+                    <option value="building">Building (default)</option>
+                    <option value="infrastructure">Infrastructure / critical</option>
+                    <option value="data_center">Data center / colo</option>
+                  </select>
+                </div>
+              </div>
+
+              <label className="rg-lbl">Scout trades augment</label>
+              <div className="rg-chips">
+                {TRADE_OPTIONS.map((t) => (
+                  <button
+                    key={t.id}
+                    type="button"
+                    className={`rg-chip ${trades.has(t.id) ? 'on' : ''}`}
+                    onClick={() => toggleTrade(t.id)}
+                  >
+                    {t.label}
+                  </button>
+                ))}
+              </div>
+
+              <label className="rg-lbl" style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
                 <input
                   type="checkbox"
-                  checked={pdfFrictionAck}
-                  onChange={(e) => setPdfFrictionAck(e.target.checked)}
+                  checked={missionCriticalDc}
+                  onChange={(e) => setMissionCriticalDc(e.target.checked)}
                 />
-                <span>
-                  <strong>Confirm & Acknowledge</strong> — This run flags a <strong>moratorium</strong> or{" "}
-                  <strong>permit conflict</strong>. I have reviewed the Bottom Line before exporting PDFs.
-                </span>
+                Mission-critical data center cues (Tier III/IV, liquid cooling)
               </label>
-            ) : null}
-            <div id="rg-action-plan-header" className="rg-action-plan-header">
-              <strong className="rg-subheading">Contractor action plan</strong>
-              <span className="rg-plan-actions">
-                <button
-                  id="rg-expert-accept-plan"
-                  type="button"
-                  className="rg-btn rg-btn--primary rg-btn--compact rg-plan-action-btn rg-plan-action-btn--accept"
-                  title="Copy the full Contractor Action Plan to your clipboard"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    void handleAcceptActionPlan();
-                  }}
-                >
-                  Accept
-                </button>
-                <button
-                  type="button"
-                  className="rg-btn rg-btn--primary rg-btn--compact rg-plan-action-btn rg-plan-action-btn--package"
-                  title="POST a Dallas-formatted permit worksheet (722 Munger: setback, May 2025 parking reform, Oncor, $167.00 2026 sync)"
-                  disabled={pdfExportBlocked || permitPackageBusy}
-                  onClick={handleGeneratePermitPackage}
-                >
-                  {permitPackageBusy ? (
-                    <>
-                      <span className="rg-spinner rg-spinner--btn" aria-hidden />
-                      Generating…
-                    </>
-                  ) : (
-                    "Generate Permit Package"
-                  )}
-                </button>
-                <button
-                  type="button"
-                  className="rg-btn rg-btn--ghost rg-btn--compact rg-plan-action-btn"
-                  title="Share a quick inspector gotcha for this job-site ZIP (visible to other contractors on the next scout)"
-                  disabled={!selection?.zip || busy}
-                  onClick={() => setInspectorNoteModalOpen(true)}
-                >
-                  Add Inspector Note
-                </button>
-                <button
-                  type="button"
-                  className="rg-btn rg-btn--ghost rg-btn--compact rg-plan-action-btn rg-plan-action-btn--pdf"
-                  title="Download the punch list as a printable PDF"
-                  disabled={pdfExportBlocked}
-                  onClick={handleDownloadPunchListPdf}
-                >
-                  Download Punch List as PDF
-                </button>
-                <button
-                  type="button"
-                  className="rg-btn rg-btn--ghost rg-btn--compact rg-plan-action-btn"
-                  title="Scroll to the plan and highlight this panel"
-                  onClick={(e) => {
-                    e.preventDefault();
-                    e.stopPropagation();
-                    handleReviewActionPlan();
-                  }}
-                >
-                  Review
-                </button>
-              </span>
-            </div>
-            {permitPackageBusy ? (
-              <div className="rg-permit-package-loading" role="status" aria-live="polite">
-                <span className="rg-spinner rg-spinner--md" aria-hidden />
-                <span>Building Dallas permit package — waiting for PDF from the API…</span>
-              </div>
-            ) : null}
-            {permitPackageReady && permitPackageDownloadUrl ? (
-              <div className="rg-permit-package-ready" role="status" aria-live="polite">
-                <span className="rg-permit-package-ready__badge">Package ready</span>
-                <a
-                  className="rg-permit-package-ready__link"
-                  href={permitPackageDownloadUrl}
-                  download={permitPackageDownloadFilename()}
-                >
-                  Download permit package PDF
-                </a>
-              </div>
-            ) : null}
-            {planToolbarMsg ? (
-              <div className="rg-plan-toolbar-msg" role="status">
-                {planToolbarMsg}
-              </div>
-            ) : null}
-            <div ref={actionPlanPanelRef} className="rg-summary rg-summary--md">
-              {actionPlan.trim() ? (
-                <ReactMarkdown remarkPlugins={[remarkGfm]}>{planParts.bodyMarkdown}</ReactMarkdown>
-              ) : (
-                <p className="rg-plan-placeholder">Results will stream here during research.</p>
-              )}
-            </div>
-          </div>
 
-          {sourceUrls.length > 0 ? (
-            <div className="rg-sources">
-              <h3>Sources</h3>
-              <ul>
-                {sourceUrls.map((u) => (
-                  <li key={u}>
-                    <a href={u} target="_blank" rel="noreferrer noopener">
-                      {u}
-                    </a>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          ) : null}
-          </div>
+              <label className="rg-lbl" htmlFor="bim">
+                Optional BIM bridge JSON (POST /bim/import payload)
+              </label>
+              <textarea
+                id="bim"
+                className="rg-ta"
+                style={{ minHeight: 70 }}
+                value={bimJson}
+                onChange={(e) => setBimJson(e.target.value)}
+                placeholder="{ … }"
+              />
 
-          <div
-            id="rg-tab-panel-visual"
-            role="tabpanel"
-            aria-labelledby="rg-tab-visual"
-            hidden={resultsTab !== "visual"}
-            className="rg-results-tab-panel"
-          >
-            {!photoObjectUrl ? (
-              <p className="field-hint">Attach a photo on the left to use Visual Audit.</p>
-            ) : (
-              <>
-                <p className="field-hint rg-visual-audit-intro">
-                  Bounding boxes from Reality Capture (Gemini). On supported pilot corridors, Reg Guard runs a
-                  gas-meter versus electrical clearance heuristic when labels include a gas meter; red / green reflect
-                  spacing heuristics on paired equipment, amber when ambiguous.
-                </p>
-                <div className="rg-visual-audit-frame">
-                  <img src={photoObjectUrl} alt="Job-site photo for visual audit" className="rg-visual-audit-img" />
-                  {visualAudit?.detections?.length ? (
-                    <svg
-                      className="rg-visual-audit-svg"
-                      viewBox="0 0 1000 1000"
-                      preserveAspectRatio="none"
-                      aria-hidden
-                    >
-                      {visualAudit.detections.map((det, i) => {
-                        const [ymin, xmin, ymax, xmax] = det.box_2d;
-                        const bw = Math.max(0, xmax - xmin);
-                        const bh = Math.max(0, ymax - ymin);
-                        const strokeClass =
-                          det.status === "violation"
-                            ? "rg-vbox--bad"
-                            : det.status === "ok"
-                              ? "rg-vbox--ok"
-                              : "rg-vbox--unknown";
-                        return (
-                          <g key={`${det.label}-${i}`}>
-                            <rect
-                              x={xmin}
-                              y={ymin}
-                              width={bw}
-                              height={bh}
-                              className={`rg-vbox ${strokeClass}`}
-                            />
-                            <text x={xmin + 6} y={ymin + 22} className="rg-vbox-label">
-                              {det.label}
-                              {det.match_confidence_pct != null ? ` · ${det.match_confidence_pct}%` : ""}
-                            </text>
-                          </g>
-                        );
-                      })}
-                    </svg>
-                  ) : null}
-                </div>
-                {visualAudit?.austin_clearance?.applies ? (
-                  <div className="rg-visual-audit-clearance" role="status">
-                    <strong>Gas-meter clearance (pilot corridor)</strong>
-                    {visualAudit.austin_clearance.edge_distance_px != null ? (
-                      <span>
-                        {" "}
-                        — edge distance ≈ {String(visualAudit.austin_clearance.edge_distance_px)} px
-                      </span>
-                    ) : null}
-                    {visualAudit.austin_clearance.estimated_clearance_inches != null ? (
-                      <span>
-                        {" "}
-                        (~{String(visualAudit.austin_clearance.estimated_clearance_inches)} in heuristic vs 36 in
-                        rule)
-                      </span>
-                    ) : null}
-                    {visualAudit.austin_clearance.violates_36_in_rule === true ? (
-                      <span className="rg-visual-flag"> — Flagged: likely under 36 in.</span>
-                    ) : null}
-                    {visualAudit.austin_clearance.violates_36_in_rule === false ? (
-                      <span className="rg-visual-ok"> — Heuristic spacing OK.</span>
-                    ) : null}
-                    {visualAudit.austin_clearance.notes ? (
-                      <p className="rg-visual-audit-notes">{visualAudit.austin_clearance.notes}</p>
-                    ) : null}
+              <label className="rg-lbl" htmlFor="img">
+                Optional site photo (Gemini Reality Capture when API keys are set)
+              </label>
+              <input
+                id="img"
+                type="file"
+                accept="image/*"
+                className="rg-input"
+                onChange={(e) => setImageFile(e.target.files?.[0] ?? null)}
+              />
+
+              <div className="rg-actions">
+                <button type="button" className="rg-btn" disabled={running} onClick={runResearch}>
+                  {running ? <Loader2 className="spin" size={16} /> : <Sparkles size={16} />}
+                  {running ? 'Scouting…' : 'Run Universal Scout'}
+                </button>
+                <button type="button" className="rg-btn rg-btn2" disabled={!running} onClick={cancelRun}>
+                  Cancel
+                </button>
+                <button type="button" className="rg-btn rg-btn2" onClick={downloadPermitPackage}>
+                  <Download size={16} />
+                  Permit PDF
+                </button>
+              </div>
+
+              <div className="rg-small" style={{ marginTop: 12 }}>
+                Backend: <code>/api/research</code> (multipart SSE). Start API on <code>127.0.0.1:8000</code> with Vite proxy.
+              </div>
+            </div>
+          </section>
+
+          <section className="rg-panel rg-split">
+            <div>
+              <div className="rg-panel-hd">
+                <CheckCircle2 size={16} />
+                Live run
+                {jurisdictionLabel ? <span className="rg-pill">{jurisdictionLabel}</span> : null}
+              </div>
+              <div className="rg-panel-bd">
+                {futureRisk && typeof futureRisk === 'object' && (futureRisk as { active?: boolean }).active ? (
+                  <div className="rg-warn" style={{ display: 'flex', gap: 8, alignItems: 'flex-start', marginBottom: 10 }}>
+                    <AlertTriangle size={16} />
+                    <div>
+                      <strong>Future risk alert</strong>
+                      <div className="rg-small">Code-cycle signals detected in scout snippets — verify AHJ adoption dates.</div>
+                    </div>
                   </div>
-                ) : visualAudit ? (
-                  <p className="field-hint">
-                    No pilot gas-meter clearance readout for this run (ZIP outside pilot corridor, no gas meter label, or
-                    incomplete geometry).
-                  </p>
-                ) : (
-                  <p className="field-hint">
-                    No structured overlay yet — finish research with <code>GEMINI_API_KEY</code> on the server (photos use Gemini only).
-                  </p>
-                )}
-                {visualAudit?.model_id ? (
-                  <p className="field-hint rg-visual-model-id">Model: {visualAudit.model_id}</p>
                 ) : null}
-              </>
-            )}
-          </div>
 
-          <FollowUpActions
-            suggestions={followUpSuggestions}
-            disabled={busy || !selection?.zip}
-            onSelect={handleFollowUpChip}
-          />
-        </section>
-      </div>
+                {communityNotes && communityNotes.length > 0 ? (
+                  <div className="rg-small" style={{ marginBottom: 10 }}>
+                    <strong>Community inspector notes</strong> ({communityNotes.length}) loaded for this ZIP.
+                  </div>
+                ) : null}
 
-      {backendStale ? (
-        <div className="rg-update-toast" role="status" aria-live="polite">
-          <div className="rg-update-toast-inner">
-            <span>A newer API build was detected.{autoRefreshSec !== null ? ` Refreshing in ${autoRefreshSec}s…` : ""}</span>
-            <span className="rg-update-actions">
-              <button type="button" className="rg-btn rg-btn--primary rg-btn--compact" onClick={() => window.location.reload()}>
-                Reload now
-              </button>
-              <button type="button" className="rg-btn rg-btn--ghost rg-btn--compact" onClick={dismissBackendNotice}>
-                Dismiss
-              </button>
-            </span>
-          </div>
-        </div>
-      ) : null}
-      {inspectorNoteModalOpen ? (
-        <div
-          className="rg-inspector-note-modal-overlay"
-          role="presentation"
-          onClick={(e) => {
-            if (e.target === e.currentTarget && !inspectorNoteSaving) {
-              setInspectorNoteModalOpen(false);
-            }
-          }}
-        >
-          <div
-            className="rg-inspector-note-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="rg-inspector-note-title"
-          >
-            <h3 id="rg-inspector-note-title" className="rg-inspector-note-modal__title">
-              Add inspector note
-            </h3>
-            <p className="rg-inspector-note-modal__hint">
-              Short field tip for ZIP <strong>{selection?.zip ?? "—"}</strong> (e.g. inspector preferences). Saved to the
-              community pool and shown on future research for this ZIP.
-            </p>
-            <textarea
-              className="rg-inspector-note-modal__textarea"
-              rows={4}
-              maxLength={2000}
-              value={inspectorNoteDraft}
-              placeholder='e.g. "Inspector Smith is strict on torque marks"'
-              onChange={(e) => setInspectorNoteDraft(e.target.value)}
-              disabled={inspectorNoteSaving}
-            />
-            <div className="rg-inspector-note-modal__actions">
-              <button
-                type="button"
-                className="rg-btn rg-btn--ghost rg-btn--compact"
-                disabled={inspectorNoteSaving}
-                onClick={() => {
-                  if (!inspectorNoteSaving) {
-                    setInspectorNoteModalOpen(false);
-                  }
-                }}
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                className="rg-btn rg-btn--primary rg-btn--compact"
-                disabled={inspectorNoteSaving || !selection?.zip}
-                onClick={() => void handleSubmitInspectorNote()}
-              >
-                {inspectorNoteSaving ? "Saving…" : "Save note"}
-              </button>
+                <div className="rg-lbl" style={{ marginTop: 0 }}>
+                  Reasoning trace
+                </div>
+                <div className="rg-reason">{reasoning || '— waiting for scout / audit phases —'}</div>
+
+                {visionText ? (
+                  <>
+                    <div className="rg-lbl">Vision audit stream</div>
+                    <div className="rg-reason" style={{ maxHeight: 90 }}>
+                      {visionText}
+                    </div>
+                  </>
+                ) : null}
+
+                {complete?.value_metrics ? (
+                  <div className="rg-small" style={{ marginTop: 10 }}>
+                    Research value:{' '}
+                    <strong className="rg-ok">${complete.value_metrics.research_value_usd?.toFixed(2) ?? '—'}</strong>
+                    {' · '}
+                    Liability avoided (est.):{' '}
+                    <strong className="rg-ok">
+                      ${complete.value_metrics.estimated_liability_avoided_usd?.toFixed(2) ?? '—'}
+                    </strong>
+                  </div>
+                ) : null}
+
+                {complete?.moratorium_state_alert?.active ? (
+                  <div className="rg-danger rg-small" style={{ marginTop: 8 }}>
+                    {complete.moratorium_state_alert.text || 'Moratorium / high-alert signal — review Bottom Line.'}
+                  </div>
+                ) : null}
+              </div>
+
+              <div className="rg-panel-bd" style={{ paddingTop: 0 }}>
+                <div className="rg-panel-hd" style={{ borderTop: `1px solid rgba(148,163,184,0.18)` }}>
+                  Scout steps
+                </div>
+                <div className="rg-steps" style={{ padding: 12 }}>
+                  {stepKeys.length === 0 ? (
+                    <div className="rg-small">Step payloads appear as each Firecrawl pass returns.</div>
+                  ) : (
+                    stepKeys.map((k) => {
+                      const block = steps[k] as StepBlock;
+                      const hits = Array.isArray(block?.results) ? block.results : [];
+                      const open = !!openSteps[k];
+                      const label = STEP_LABELS[k] || k;
+                      return (
+                        <div key={k} className="rg-step">
+                          <button type="button" className="rg-step-top" onClick={() => setOpenSteps((p) => ({ ...p, [k]: !open }))}>
+                            <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                              {open ? <ChevronDown size={16} /> : <ChevronRight size={16} />}
+                              {label}{' '}
+                              <span className="rg-small">
+                                ({hits.length} hit{hits.length === 1 ? '' : 's'})
+                              </span>
+                            </span>
+                            {block?.fallback_used ? <span className="rg-warn rg-small">fallback</span> : null}
+                          </button>
+                          {open ? (
+                            <div className="rg-step-body">
+                              {block?.query ? (
+                                <div className="rg-small" style={{ marginBottom: 8 }}>
+                                  <strong>Query</strong>
+                                  <div style={{ opacity: 0.9 }}>{block.query}</div>
+                                </div>
+                              ) : null}
+                              {hits.length === 0 ? (
+                                <div className="rg-small">No trusted URLs in this pass.</div>
+                              ) : (
+                                hits.map((h, i) => (
+                                  <div key={`${k}-${i}`} className="rg-hit">
+                                    <div>
+                                      <strong>{h.title || h.url || '(untitled)'}</strong>
+                                    </div>
+                                    {h.url ? (
+                                      <div className="rg-small">
+                                        <a href={h.url} target="_blank" rel="noreferrer">
+                                          {h.url}
+                                        </a>
+                                      </div>
+                                    ) : null}
+                                    {h.description ? <div className="rg-small">{h.description}</div> : null}
+                                  </div>
+                                ))
+                              )}
+                            </div>
+                          ) : null}
+                        </div>
+                      );
+                    })
+                  )}
+                </div>
+              </div>
             </div>
-          </div>
+
+            <div className="rg-panel" style={{ minHeight: 420 }}>
+              <div className="rg-panel-hd">
+                <Sparkles size={16} />
+                Contractor Action Plan
+              </div>
+              <div className="rg-md">
+                {summaryMd.trim() ? (
+                  <ReactMarkdown remarkPlugins={[remarkGfm]}>{summaryMd}</ReactMarkdown>
+                ) : (
+                  <div className="rg-small">Streaming markdown will appear here (summary_delta events).</div>
+                )}
+              </div>
+            </div>
+          </section>
         </div>
-      ) : null}
-      <ToastContainer
-        position="top-right"
-        theme="dark"
-        autoClose={3200}
-        closeOnClick={false}
-        newestOnTop
-        pauseOnHover
-        limit={5}
-      />
-    </div>
-    </DashboardErrorBoundary>
+      </div>
+      <ToastContainer position="bottom-right" theme="dark" closeOnClick pauseOnHover />
+    </>
   );
 }

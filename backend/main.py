@@ -32,6 +32,7 @@ from fastapi import Body, FastAPI, File, Form, HTTPException, Request, UploadFil
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import Response, StreamingResponse
 from starlette.concurrency import run_in_threadpool
+from starlette.middleware.base import BaseHTTPMiddleware
 
 from geocode import google_reverse_geocode_us_latlng, us_zip_from_lat_lon
 from jurisdiction import JurisdictionProfile, geocode_profile_from_address
@@ -61,7 +62,8 @@ from scraper import (
     normalize_us_zip,
 )
 from bim_sync import run_bim_sync_bridge
-from permit_package import DALLAS_MIN_TRADE_PERMIT_USD, build_permit_package_pdf
+from fast41_eligibility import detect_fast41_eligibility_from_job_description
+from permit_package import build_permit_package_pdf
 from calculations import permit_draft_calculation_response
 from community_gotchas import append_note, list_notes_for_zip
 from cost_tracking import log_api_usage
@@ -114,9 +116,6 @@ def _ensure_bottom_line_section(summary_md: str, *, ahj_hint: str = "") -> str:
     )
     return f"{text}\n\n### The Bottom Line\n\n{sentences}\n"
 
-# Sync reference: Dallas Building Inspection — minimum trade permit (incl. admin) used in digest/fallback prompts.
-_DALLAS_TX_MIN_TRADE_PERMIT_USD = float(DALLAS_MIN_TRADE_PERMIT_USD)
-
 _BACKEND_DIR = Path(__file__).resolve().parent
 _BACKEND_BOOT_ID = uuid.uuid4().hex[:10]
 
@@ -149,21 +148,23 @@ When the digest locality is **Plano, Texas**, also prioritize City of Plano amen
 
 When the digest locality is **Plano, Texas**, under **Permit Costs** include a `- [ ]` line for **Reg Guard 2026 sync**: **$75.00** total electrical permit (**$65.00** base + **$10.00** laborer) — confirm on official City of Plano fee schedule.
 
-When the digest locality is **Dallas, Texas**, under **Permit Costs** include a `- [ ]` line stating **$167.00** total minimum **trade** permit (incl. **administrative fees**); under **Technical Punch List** include **MANDATORY GOTCHA: Oncor coordination** with `- [ ]` tasks for **mandatory Oncor** notification and coordination before **service disconnect**, **meter seal** / **pull**, or other **utility-side** work. When **`dallas_field_intel_*`** keys populate the digest JSON, emit bold **FIELD INTEL:** sections (separate from Oncor) synthesized from **`dallas_field_intel_three_ft_setback`**, **`dallas_field_intel_far_duplex_25pct`**, **`dallas_field_intel_parking_reform_2025`** — AHJ‑verify setbacks / FAR worksheets / adopted **2025 parking reform** overlays (stall minima / bike tiers / curb cuts).
+When ``job_fast41_eligibility`` is **true** in the digest JSON, include **### Federal FAST-41 Eligibility** (exact title from ``required_checklist_headings``) with `- [ ]` federal coordination / counsel diligence lines tied only to FAST-41 or Permitting Council **.gov** materials present in the digest — never invent a designation.
 
-The JSON includes ``inspector_digest_directive`` and may include ``bim_clash_zones``, ``bim_scout_cross_reference``, ``community_scout_inspector_notes``, ``plano_ord_250_50_requirement``, ``plano_electrical_permit_fee_sync_usd``, ``plano_electrical_permit_fee_2026_note``, ``dallas_minimum_trade_permit_usd``, ``dallas_minimum_trade_permit_note``, ``dallas_oncor_disconnect_coordination``, ``dallas_field_intel_three_ft_setback``, ``dallas_field_intel_far_duplex_25pct``, ``dallas_field_intel_parking_reform_2025``, ``austin_design_criteria_requirement``, ``austin_development_services_fees_url``, ``austin_safety_surcharge_note``, ``austin_central_zip_service_upgrade``, and ``empty_scout_nec_2023_fallback``:
+The JSON includes ``inspector_digest_directive`` and may include ``bim_clash_zones``, ``bim_scout_cross_reference``, ``community_scout_inspector_notes``, ``job_fast41_eligibility``, ``plano_ord_250_50_requirement``, ``plano_electrical_permit_fee_sync_usd``, ``plano_electrical_permit_fee_2026_note``, ``austin_design_criteria_requirement``, ``austin_development_services_fees_url``, ``austin_safety_surcharge_note``, ``austin_central_zip_service_upgrade``, and ``empty_scout_nec_2023_fallback``:
 - **consultant_role**, **gotchas_guidance**, **fee_and_code_guidance**, **output_format**, **community_inspector_moat** (when present)
 - Obey **required_checklist_headings** exactly. If ``plano_ord_250_50_requirement`` is present, satisfy it.
 
 Output ONLY Markdown. Title:
 
-## Contractor Action Plan — Panel / service work (Plano Code Audit when applicable)
+## Contractor Action Plan — AHJ permit & code audit
 
-Then **exactly** these headings in order—only ``- [ ] `` task lines after optional one-line context per section:
+Then **exactly** the headings listed in ``required_checklist_headings`` in the digest JSON **in that order**—only ``- [ ] `` task lines after optional one-line context per section.
+
+Typical flow: **### Permit Costs**, optional **### Federal FAST-41 Eligibility** when ``job_fast41_eligibility`` is true, **### Technical Punch List**, **### Inspection Must-Haves** (plus **### Reference Links** and **### The Bottom Line** as specified below).
 
 ### Permit Costs
 ### Technical Punch List
-Place **MANDATORY GOTCHA:** lines (with supporting `- [ ]` items) for local amendments that **differ** from national NEC when the digest supports it—for Plano, **250.50 / dual 8 ft rods / 20 ft apart / 2/0 AWG bond** between rods is mandatory; for **Austin**, **Design Criteria** (gas relief **36-inch**, **225A**/ **200A** solar-ready bus on upgrades); for **Dallas**, combine **FIELD INTEL:** (**three-ft setback regimes**, **25% FAR duplex spreadsheets**, **2025 parking reform**) with **Oncor** sequencing; other examples: exterior disconnect labeling, stricter working space, etc. Do not fabricate ordinance text.
+Place **MANDATORY GOTCHA:** lines (with supporting `- [ ]` items) for local amendments that **differ** from national NEC when the digest supports it—for Plano, **250.50 / dual 8 ft rods / 20 ft apart / 2/0 AWG bond** between rods is mandatory; for **Austin**, **Design Criteria** (gas relief **36-inch**, **225A**/ **200A** solar-ready bus on upgrades). Do not fabricate ordinance text.
 
 ### Inspection Must-Haves
 ### Reference Links
@@ -176,6 +177,7 @@ Rules:
 - Imperative checklist tone; **no long prose**.
 - Cite details **only** when traceable to the digest; otherwise `- [ ]` to verify on official **.gov** / **Municode**.
 - If ``empty_scout_nec_2023_fallback`` is true, the prior rule is waived **only** for the NEC-2023 model-knowledge tasks above (still tag them as verify-with-AHJ).
+- When ``scout_profile.vertical`` is **data_center** or **infrastructure**, or the digest / job targets **FAST-41**, **ERCOT**, **Batch Zero**, **utility interconnection**, or **industrial substation** scope: **omit** default residential **panel upgrade** / **200A dwelling service** language unless the digest explicitly cites that scope. Prefer **large-load permits**, **federal coordination**, and **ISO / TDSP** milestone tasks.
 """
 
 
@@ -243,8 +245,21 @@ app.add_middleware(
         "Connection",
         "Transfer-Encoding",
         "X-Accel-Buffering",
+        "X-Reg-Guard-Regulatory-Shield",
     ],
 )
+
+
+class RegulatoryShieldMiddleware(BaseHTTPMiddleware):
+    """Adds a global Regulatory Shield marker on every HTTP response for client / proxy handshake probes."""
+
+    async def dispatch(self, request, call_next):
+        response = await call_next(request)
+        response.headers["X-Reg-Guard-Regulatory-Shield"] = "active"
+        return response
+
+
+app.add_middleware(RegulatoryShieldMiddleware)
 
 
 def _research_sse_cors_headers(request: Request) -> Dict[str, str]:
@@ -277,16 +292,26 @@ def _parse_search_limit(v: int) -> int:
     return v
 
 
-def _scout_firecrawl_step_sequence(vertical: str) -> List[str]:
-    """Ordered Universal Scout step keys matching ``iter_universal_scout`` (multi-tier intelligence)."""
+def _scout_firecrawl_step_sequence(vertical: str, *, job_fast41_eligible: bool = False) -> List[str]:
+    """Universal Scout ordering (must match ``iter_universal_scout`` yields)."""
     x = (vertical or "").strip().lower().replace(" ", "_").replace("-", "_")
-    keys = ["step_jurisdiction", "step_building_permits", "step_building_codes"]
-    if x in ("infrastructure", "infra", "critical_infrastructure", "data_center", "datacenter", "dc"):
-        seq = keys + ["step_federal_fast41", "step_data_center_water"]
-        if x in ("data_center", "datacenter", "dc"):
-            seq.extend(["step_dc_state_energy", "step_dc_local_moratorium"])
-        return seq
-    return keys + ["step_residential_zoning"]
+    is_dc = x in ("data_center", "datacenter", "dc", "colocation")
+    is_infra = x in ("infrastructure", "infra", "critical_infrastructure")
+    seq: List[str] = ["step_jurisdiction", "step_building_permits", "step_building_codes"]
+    if not is_dc and not is_infra:
+        seq.append("step_residential_zoning")
+    if is_dc or is_infra or job_fast41_eligible:
+        seq.extend(
+            [
+                "step_federal_fast41",
+                "step_data_center_water",
+                "step_refrigerant_aim_act",
+                "step_water_usage_effectiveness",
+            ]
+        )
+    if is_dc:
+        seq.extend(["step_dc_state_energy", "step_dc_local_moratorium"])
+    return seq
 
 
 def _collect_source_urls(raw: Dict[str, Any]) -> List[str]:
@@ -300,6 +325,28 @@ def _collect_source_urls(raw: Dict[str, Any]) -> List[str]:
                 seen.add(u)
                 ordered.append(u)
     return ordered
+
+
+def _stemmons752_industrial_hint(raw: Dict[str, Any]) -> bool:
+    site = str(raw.get("site_address") or "").lower()
+    z = re.sub(r"\D", "", str(raw.get("zip") or ""))[:5]
+    return bool(z.startswith("752") and "stemmons" in site)
+
+
+def _fallback_memo_is_industrial_context(
+    raw: Dict[str, Any],
+    job_description: str,
+    enhanced_query: str,
+) -> bool:
+    prof = raw.get("scout_profile")
+    if isinstance(prof, dict):
+        v = str(prof.get("vertical") or "").strip().lower()
+        if v in ("data_center", "infrastructure"):
+            return True
+    if detect_fast41_eligibility_from_job_description(job_description or ""):
+        return True
+    dc = compute_data_center_intel_snapshot(raw, job_description, enhanced_query or "")
+    return bool(dc.get("vertical") == "data_center")
 
 
 def _research_action_plan_fallback_markdown(
@@ -326,6 +373,10 @@ def _research_action_plan_fallback_markdown(
         city = str(ju.get("city") or "").strip()
         state = str(ju.get("state") or ju.get("state_short") or "").strip()
 
+    industrial_ctx = _fallback_memo_is_industrial_context(
+        raw, job_description, enhanced_query
+    ) or _stemmons752_industrial_hint(raw)
+
     head = (
         f"Research context: **{site}** (US ZIP **{zip_str}**)."
         if site
@@ -337,10 +388,51 @@ def _research_action_plan_fallback_markdown(
     if not loc_short:
         loc_short = ju_line or f"ZIP {zip_str}"
 
-    permit_scope = (
-        f"Pull permits required for the **service or panel upgrade** for **{loc_short}**; "
-        "confirm exact permit type and department name on the official AHJ site or from the scout links below."
-    )
+    if industrial_ctx:
+        permit_scope = (
+            f"Coordinate **AHJ permits**, **utility / ERCOT interconnection**, and **federal diligence** for **{loc_short}**; "
+            "confirm department names and application types on official `.gov` portals from the scout links."
+        )
+        doc_title = "## Contractor Action Plan — Large-load & interconnection compliance (AHJ + federal)"
+        inspection_body = [
+            "- [ ] **Utility / grid coordination:** align **TDSP** work windows, **witness tests**, and **protection / relay** "
+            "requirements with stamped interconnect exhibits when scout sources support them.",
+            "- [ ] **Industrial substation / switchyard:** grounding, clearances, signage, and **NESC**-class items when "
+            "cited in digest results.",
+            "- [ ] **AHJ finals:** structural / fire / electrical inspections required for **occupancy** or **energization** at this scope.",
+            "",
+        ]
+        if (state or "").strip().upper() == "TX":
+            bottom_two = (
+                f"Hold **AHJ** permits and **ERCOT 2026 Batch Zero** / **FAST-41** diligence as **parallel tracks** for **{loc_short}** "
+                "until **PUCT / TDSP** and counsel align."
+            )
+        else:
+            bottom_two = (
+                f"Hold **AHJ** permits and **federal / utility interconnection** diligence as **parallel tracks** for **{loc_short}** "
+                "until the applicable utility and counsel sign off."
+            )
+    else:
+        permit_scope = (
+            f"Pull permits required for the **service or panel upgrade** for **{loc_short}**; "
+            "confirm exact permit type and department name on the official AHJ site or from the scout links below."
+        )
+        doc_title = "## Contractor Action Plan — Panel / service work (inspector punch list)"
+        inspection_body = [
+            "- [ ] **Service / Final inspection**: panel **circuit directory** complete and matches breakers; "
+            "neutrals and EGCs landed only on listed buses.",
+            "- [ ] **Torque marking**: follow manufacturer torque specs; add inspector-visible **torque marks** "
+            "where required by spec or local practice.",
+            "- [ ] **Grounding electrode** visible and accessible — verify routing and connections per **NEC 250** as adopted "
+            "locally (confirm edition in results).",
+            "- [ ] Bonding / GEC clamps tight, corrosion-resistant, and accessible for inspection.",
+            "- [ ] Working space in front of the panel clear per **NEC 110.26** (depth, width, height, free from storage).",
+            "",
+        ]
+        bottom_two = (
+            f"Pull permits and verify fees and local amendments for **{loc_short}** before rough-in or energizing equipment. "
+            "Complete utility coordination and the checklist items above so the job passes inspection without fines or costly rework."
+        )
 
     fee_fallback = (
         f"- [ ] **If scout results do not state a permit fee:** Verify exact fee with {city} Building Department."
@@ -363,36 +455,14 @@ def _research_action_plan_fallback_markdown(
             1,
             "- [ ] Scout targets: **Plano building fee schedule 2026** and **Plano TX electrical amendments 2023 NEC** — confirm figures on the official city fee table / code adoption pages.",
         )
-    if city.lower() == "dallas" and (state or "").strip().upper() == "TX":
-        permit_block.insert(
-            1,
-            f"- [ ] **Reg Guard sync (Dallas, TX):** Minimum **trade** permit **${_DALLAS_TX_MIN_TRADE_PERMIT_USD:.2f}** "
-            "including **administrative fees** (planning floor only — confirm on official Dallas permit / fee pages).",
-        )
-        permit_block.insert(
-            2,
-            "- [ ] **Oncor (Dallas):** Complete **mandatory Oncor** notification / coordination for **service disconnect**, **meter pull**, or **utility-side** work before cutting or restoring **energized** service.",
-        )
     if city.lower() == "austin" and (state or "").strip().upper() == "TX":
         permit_block.insert(
             1,
             "- [ ] **Reg Guard sync (Austin, TX):** Itemize **Development Services** permit fees and **Safety Surcharges** using **https://www.austintexas.gov/development-services/fees** (confirm against the live City of Austin schedule).",
         )
 
-    inspection_body = [
-        "- [ ] **Service / Final inspection**: panel **circuit directory** complete and matches breakers; "
-        "neutrals and EGCs landed only on listed buses.",
-        "- [ ] **Torque marking**: follow manufacturer torque specs; add inspector-visible **torque marks** "
-        "where required by spec or local practice.",
-        "- [ ] **Grounding electrode** visible and accessible — verify routing and connections per **NEC 250** as adopted "
-        "locally (confirm edition in results).",
-        "- [ ] Bonding / GEC clamps tight, corrosion-resistant, and accessible for inspection.",
-        "- [ ] Working space in front of the panel clear per **NEC 110.26** (depth, width, height, free from storage).",
-        "",
-    ]
-
     lines: List[str] = [
-        "## Contractor Action Plan — Panel / service work (inspector punch list)",
+        doc_title,
         "",
         "### Permit Costs",
         "",
@@ -409,14 +479,6 @@ def _research_action_plan_fallback_markdown(
                 "",
             ]
         )
-    elif city.lower() == "dallas" and (state or "").strip().upper() == "TX":
-        lines.extend(
-            [
-                "",
-                "- [ ] **Reg Guard sync (Dallas, TX):** Minimum **trade** permit **$167.00** total including **administrative fees** (confirm on official Dallas permit / fee pages).",
-                "",
-            ]
-        )
     elif city.lower() == "austin" and (state or "").strip().upper() == "TX":
         lines.extend(
             [
@@ -426,6 +488,42 @@ def _research_action_plan_fallback_markdown(
             ]
         )
     lines.extend(permit_block)
+
+    if industrial_ctx and (state or "").strip().upper() == "TX":
+        lines.extend(
+            [
+                "",
+                "### Texas — ERCOT & industrial substation diligence",
+                "",
+                "- [ ] **ERCOT 2026 Batch Zero / performance milestones:** review **ERCOT**, **PUCT**, and **TDSP** `.gov` "
+                "sources for **industrial substation**, **transmission**, and **large-load** requirements affecting this site.",
+                "",
+            ]
+        )
+
+    jd_fast41 = detect_fast41_eligibility_from_job_description(job_description or "")
+    if jd_fast41:
+        lines.extend(
+            [
+                "",
+                "### Federal FAST-41 Eligibility",
+                "",
+                "- [ ] **Parsed job gate:** Brief describes a **data center** with **>**100 MW load **or** **>**$500 M — open FAST-41 / Federal Permitting Council diligence with counsel (no asserted federal designation from this scaffold).",
+                "- [ ] **Cross-government alignment:** Treat federal FAST-41 context and AHJ/state utility filings as parallel tracks unless a controlling **.gov** statement says otherwise.",
+                "",
+            ]
+        )
+    elif industrial_ctx:
+        lines.extend(
+            [
+                "",
+                "### Federal FAST-41 diligence",
+                "",
+                "- [ ] **FAST-41 federal eligibility:** triage **Title 41 / Permitting Council** materials in scout hits; "
+                "treat as **counsel-led** until a controlling **.gov** statement maps a designation or coordination path.",
+                "",
+            ]
+        )
 
     if dc_intel.get("vertical") == "data_center":
         sur = dc_intel.get("infrastructure_surcharge_estimate_usd") if isinstance(dc_intel.get("infrastructure_surcharge_estimate_usd"), dict) else {}
@@ -485,23 +583,6 @@ def _research_action_plan_fallback_markdown(
             1,
             "- [ ] **Plano permit fee (2026 sync)** — Budget **$75.00** total (**$65.00** base + **$10.00** laborer); confirm against current City of Plano fee table.",
         )
-    if city.lower() == "dallas" and (state or "").strip().upper() == "TX":
-        punch_core.insert(
-            0,
-            "- [ ] **MANDATORY GOTCHA: Oncor coordination** — **Mandatory Oncor** scheduling / notification for **service disconnect**, **meter seal**, and **utility reconnect**; no **hot** service work without Oncor clearance per current contractor rules.",
-        )
-        punch_core.insert(
-            0,
-            "- [ ] **FIELD INTEL: 2025 Dallas parking reform (Dallas, TX)** — confirm adopted **effective date**, district overlays, stall minima reductions, bicycle parking tiers, and curb-cut / stacking assumptions vs any pre-reform entitlement package (**verify Planning bulletin**).",
-        )
-        punch_core.insert(
-            0,
-            "- [ ] **FIELD INTEL: Duplex FAR / ~25% worksheet trap (Dallas, TX)** — reconcile combined FAR/lot coverage for **two-unit** reuse vs SF calculators; confirm **classification** plus basement/mezzanine treatment (**Planning worksheet QA**).",
-        )
-        punch_core.insert(
-            0,
-            "- [ ] **FIELD INTEL: Three-foot setback / side-yard discipline (Dallas, TX)** — field-stake vs GIS setbacks for **district / interior-side / corner** lots before masonry or pours (~3-ft-class misconceptions) (**survey + Planning GIS**).",
-        )
     if city.lower() == "austin" and (state or "").strip().upper() == "TX":
         punch_core.insert(
             0,
@@ -510,13 +591,37 @@ def _research_action_plan_fallback_markdown(
 
     nec_200a_fallback: List[str] = []
     if scout_has_no_trusted_results(raw):
-        nec_200a_fallback = [
-            "- [ ] **Empty scout — use NEC 2023 baseline knowledge for 200A upgrade** (tag every bullet for AHJ adoption check):",
-            "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** Service **supply conductors** ampacity & **main OCPD** sizing for **200A** (incl. Art. 230, applicable tap/length rules).",
-            "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** **Grounding & bonding** — electrode system, GEC, N-G bond, **Art. 250**.",
-            "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** **Working space** clear in front of service/panel equipment — **110.26**.",
-            "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** **GFCI** / **AFCI** requirements for **dwelling** branch or feeder circuits where 2023 mandates.",
-            "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** Panelboard / equipment ratings, **EGC**s with feeders, neutral & EGC separation **200.4(B)**.",
+        if industrial_ctx:
+            nec_200a_fallback = [
+                "- [ ] **Empty scout — industrial / interconnection baseline** (tag every bullet for **AHJ + TDSP / ERCOT** checks):",
+                "- [ ] **Large-load permits** and **municipal** reviews (building, fire, grading) appropriate to the facility class described.",
+                "- [ ] **Interconnection posture** — confirm **PUCT / ERCOT / TDSP** materials match the site address and **Batch Zero** / performance-milestone narratives when cited.",
+                "",
+            ]
+        else:
+            nec_200a_fallback = [
+                "- [ ] **Empty scout — use NEC 2023 baseline knowledge for 200A upgrade** (tag every bullet for AHJ adoption check):",
+                "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** Service **supply conductors** ampacity & **main OCPD** sizing for **200A** (incl. Art. 230, applicable tap/length rules).",
+                "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** **Grounding & bonding** — electrode system, GEC, N-G bond, **Art. 250**.",
+                "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** **Working space** clear in front of service/panel equipment — **110.26**.",
+                "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** **GFCI** / **AFCI** requirements for **dwelling** branch or feeder circuits where 2023 mandates.",
+                "- [ ] **(NEC 2023 — verify adopted edition w/ AHJ)** Panelboard / equipment ratings, **EGC**s with feeders, neutral & EGC separation **200.4(B)**.",
+                "",
+            ]
+
+    if industrial_ctx:
+        tech_punch_close = [
+            "- [ ] **Medium-voltage / utility interface** — align with **NEC** and **NESC** only when digest sources support it.",
+            "- [ ] **Grounding & bonding** — coordinate **facility** grounding with **utility** demarcation requirements when cited.",
+            "- [ ] Confirm **code / standard editions** (NEC / NESC / local amendments) from AHJ / `.gov` links in the digest.",
+            "",
+        ]
+    else:
+        tech_punch_close = [
+            "- [ ] **GFCI / AFCI** — align with **adopted code + amendments** from results, not NEC alone.",
+            "- [ ] **Grounding & bonding (Art. 250)** — plus any **additive local** requirements in the digest.",
+            "- [ ] **Working space (110.26)** — plus **local clearance** changes if cited.",
+            "- [ ] Confirm **code edition and effective dates** from AHJ / Municode links in the digest.",
             "",
         ]
 
@@ -582,12 +687,8 @@ def _research_action_plan_fallback_markdown(
         + bim_header
         + nec_200a_fallback
         + punch_core
+        + tech_punch_close
         + [
-            "- [ ] **GFCI / AFCI** — align with **adopted code + amendments** from results, not NEC alone.",
-            "- [ ] **Grounding & bonding (Art. 250)** — plus any **additive local** requirements in the digest.",
-            "- [ ] **Working space (110.26)** — plus **local clearance** changes if cited.",
-            "- [ ] Confirm **code edition and effective dates** from AHJ / Municode links in the digest.",
-            "",
             "### Inspection Must-Haves",
             "",
         ],
@@ -601,10 +702,6 @@ def _research_action_plan_fallback_markdown(
     else:
         lines.append("- *(No URLs returned in this run.)*")
 
-    bottom_two = (
-        f"Pull permits and verify fees and local amendments for **{loc_short}** before rough-in or energizing equipment. "
-        "Complete utility coordination and the checklist items above so the job passes inspection without fines or costly rework."
-    )
     lines.extend(["", "### The Bottom Line", "", bottom_two])
     if dc_intel.get("vertical") == "data_center":
         rationale_bl = str(dc_intel.get("data_center_permit_conflict_rationale") or "").strip()
@@ -788,7 +885,7 @@ def permit_draft_calculations(job_description: str = "") -> Dict[str, Any]:
 
 
 class _PermitPackagePayload(BaseModel):
-    """POST body for Dallas-style permit application package PDF."""
+    """POST body for AHJ-facing permit worksheet PDF from research context."""
 
     model_config = ConfigDict(populate_by_name=True)
 
@@ -821,10 +918,10 @@ def _permit_package_sync_build(body: _PermitPackagePayload) -> bytes:
 @app.post("/permit-package")
 async def permit_package_pdf(body: _PermitPackagePayload) -> Response:
     """
-    Build a Dallas Building Inspection-style permit worksheet PDF from research context (address, scope, fees, trade).
+    Build a municipality-style permit worksheet PDF from research context (address, scope, fee summary text, trade).
 
-    Rendered with **fpdf2** (``fpdf.FPDF``) via ``permit_package.build_permit_package_pdf``; fee text follows
-    ``permit_package.DALLAS_MIN_TRADE_PERMIT_USD`` (minimum trade permit incl. admin — Reg Guard planning sync).
+    Rendered with **fpdf2** via ``permit_package.build_permit_package_pdf``; **fee line items come from UI/scout-derived**
+    ``fee_summary``, not geography hard-coded fallbacks.
 
     Runs the PDF builder in a thread pool so the async event loop is not blocked (avoids dev-proxy / UI stalls).
     Returns **504** if generation exceeds ``_PERMIT_PACKAGE_BUILD_TIMEOUT_SEC``.
@@ -856,7 +953,7 @@ async def permit_package_pdf(body: _PermitPackagePayload) -> Response:
         content=pdf_bytes,
         media_type="application/pdf",
         headers={
-            "Content-Disposition": 'attachment; filename="RegGuard-Dallas-permit-application-package.pdf"',
+            "Content-Disposition": 'attachment; filename="RegGuard-permit-application-package.pdf"',
         },
     )
 
@@ -1047,7 +1144,11 @@ async def research(
     ),
     scout_vertical: str = Form(
         "building",
-        description="building | infrastructure | data_center — triggers FAST-41 pass when infrastructure or data_center",
+        description=(
+            "building | infrastructure | data_center — infrastructure/data_center tiers add FAST‑41/water/AIM‑Act/WUE passes; "
+            "job descriptions can also unlock the FAST‑41 tier for building vertical when **data center** + **>**100 MW "
+            "**or** **>**$500 M cues parse true"
+        ),
     ),
     image: Optional[UploadFile] = File(None),
 ):
@@ -1067,12 +1168,13 @@ async def research(
     ``vision_delta``,
     ``visual_audit`` (Gemini Reality Capture bounding boxes; requires ``GEMINI_API_KEY`` / ``GOOGLE_API_KEY`` when a photo is sent),
     ``context``, ``jurisdiction`` (when geocoded),
-    ``step`` (including ``step_ahj_identification`` before Universal Scout), ``step`` (scout:
-    ``step_jurisdiction``, ``step_building_permits``, ``step_building_codes``; **building** vertical adds
-    ``step_residential_zoning`` (Municode / .gov / OpenGov setbacks); **infrastructure** or **data_center** adds
-    ``step_federal_fast41`` (data-center augments with **May 2026 rescission / FAST-41 Transparency Project** keywords) and ``step_data_center_water``;
-    **data_center** alone adds ``step_dc_state_energy`` (ratepayer pledges / state riders / interconnect surcharge cues)
-    and ``step_dc_local_moratorium`` (**2026** township pause scout)),
+    ``step`` (scout:
+    ``step_jurisdiction``, ``step_building_permits``, ``step_building_codes``;
+    ``step_residential_zoning`` for **building** vertical (blank-slate setbacks — Municode / .gov / OpenGov);
+    **infrastructure**, **data_center**, or parsed **FAST-41 job gate** (**data center** + **>**100 MW **or** **>**$500 M
+    cues in ``job_description``) add ``step_federal_fast41``, ``step_data_center_water``,
+    ``step_refrigerant_aim_act`` (EPA **AIM Act** / HFC phasedown / SNAP), ``step_water_usage_effectiveness``
+    (**WUE** / reclaimed-water overlays); **data_center** alone also adds ``step_dc_state_energy`` and ``step_dc_local_moratorium``),
     ``future_risk_alert``, ``community_inspector_feedback`` (ZIP-indexed crowdsourced inspector notes when present),
     ``summary_delta``, ``complete``.
 
@@ -1094,10 +1196,12 @@ async def research(
 
     jd = (job_description or "").strip()
     site_line = (site_address or "").strip()
+    jf_gate = detect_fast41_eligibility_from_job_description(jd)
     scout_profile_payload: Dict[str, Any] = {
         "trades": (scout_trades or "").strip(),
         "mission_critical_dc": str(mission_critical_dc or "").strip().lower() in ("1", "true", "yes", "on"),
         "vertical": (scout_vertical or "").strip() or "building",
+        "job_fast41_eligible": jf_gate,
     }
 
     if not site_line:
@@ -1230,7 +1334,7 @@ async def research(
                         scout_profile=scout_profile_payload,
                     )
                 )
-                _seq = _scout_firecrawl_step_sequence(scout_vertical)
+                _seq = _scout_firecrawl_step_sequence(scout_vertical, job_fast41_eligible=jf_gate)
                 _pass_total = len(_seq)
                 _scout_labels: Dict[str, str] = {}
                 for _i, _key in enumerate(_seq, start=1):
@@ -1250,6 +1354,14 @@ async def research(
                         _scout_labels[_key] = (
                             f"pass {_i}/{_pass_total} — utility-scale cooling water / NPDES / state environmental (Firecrawl)"
                         )
+                    elif _key == "step_refrigerant_aim_act":
+                        _scout_labels[_key] = (
+                            f"pass {_i}/{_pass_total} — AIM Act refrigerant phasedown / EPA SNAP scout (Firecrawl)"
+                        )
+                    elif _key == "step_water_usage_effectiveness":
+                        _scout_labels[_key] = (
+                            f"pass {_i}/{_pass_total} — Water Usage Effectiveness (WUE) / reclaimed-water overlays (Firecrawl)"
+                        )
                     elif _key == "step_dc_state_energy":
                         _scout_labels[_key] = (
                             f"pass {_i}/{_pass_total} — state energy riders / ratepayer pledges / grid surcharge (Firecrawl)"
@@ -1259,8 +1371,6 @@ async def research(
                             f"pass {_i}/{_pass_total} — 2026 data center moratorium / township pause scout (Firecrawl)"
                         )
                 _city_label = str((scout_jurisdiction or {}).get("city") or "").strip() or "local"
-                _st_scout = str((scout_jurisdiction or {}).get("state") or "").strip().upper()
-                _dallas_tx = _city_label.strip().lower() == "dallas" and _st_scout == "TX"
                 _scout_reasoning: Dict[str, str] = {
                     "step_jurisdiction": f"Scouting {_city_label} jurisdiction, AHJ hints, and trusted .gov anchors…",
                     "step_building_permits": f"Scouting {_city_label} Building Dept — fee schedules and permit portals…",
@@ -1277,6 +1387,13 @@ async def research(
                         f"Data-center / infra tier — cross-referencing utility-scale cooling-water / NPDES / "
                         f"state EQ commission signals for {_city_label}…"
                     ),
+                    "step_refrigerant_aim_act": (
+                        f"MEP scout — AIM Act / HFC phasedown and mechanical refrigerant-compliance cues for {_city_label}…"
+                    ),
+                    "step_water_usage_effectiveness": (
+                        f"MEP scout — AHJ-facing **Water Usage Effectiveness** and reclaimed-water / conservation overlays "
+                        f"for {_city_label}…"
+                    ),
                     "step_dc_state_energy": (
                         f"Data-center tier — scanning PSC/PUC riders, **ratepayer protection** cues, and interconnect surcharge signals "
                         f"for {_city_label}…"
@@ -1286,11 +1403,6 @@ async def research(
                         f"language affecting hyperscale / AI sites near {_city_label}…"
                     ),
                 }
-                if _dallas_tx:
-                    _scout_reasoning["step_building_permits"] = (
-                        f"Scouting {_city_label} Building Dept — permits and fees; "
-                        "checking Oncor utility rules for disconnects and meter coordination…"
-                    )
                 yield _reasoning_sse_frame(
                     "scout",
                     "Scout — Running multi-tier Firecrawl passes (jurisdiction → permits → codes → vertical intelligence)…",
@@ -1325,6 +1437,8 @@ async def research(
                         "step_residential_zoning",
                         "step_federal_fast41",
                         "step_data_center_water",
+                        "step_refrigerant_aim_act",
+                        "step_water_usage_effectiveness",
                         "step_dc_state_energy",
                         "step_dc_local_moratorium",
                     ):
