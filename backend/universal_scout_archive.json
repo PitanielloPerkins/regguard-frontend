@@ -376,23 +376,25 @@
     }
   },
   "75207": {
-    "updated_at": "2026-05-13T00:57:06.358242+00:00",
+    "updated_at": "2026-05-14T20:05:23.881999+00:00",
     "raw": {
       "zip": "75207",
-      "site_address": "1900 N Stemmons Fwy, Dallas, TX 75207, USA",
+      "site_address": "N Stemmons Fwy, Dallas, TX 75207, USA",
       "jurisdiction": {
         "mode": "city",
         "zip": "75207",
-        "street_line": "1900 North Stemmons Freeway",
+        "street_line": "North Stemmons Freeway",
         "city": "Dallas",
         "county": "Dallas",
         "state": "TX",
         "state_long": "Texas",
-        "formatted_address": "1900 N Stemmons Fwy, Dallas, TX 75207, USA",
+        "formatted_address": "N Stemmons Fwy, Dallas, TX 75207, USA",
         "label": "Incorporated / municipal — Dallas, TX 75207 (city building department)"
       },
       "scout_profile": {
-        "trades": [],
+        "trades": [
+          "general_contractor"
+        ],
         "vertical": "building",
         "mission_critical_dc": false,
         "job_fast41_eligible": false
@@ -422,28 +424,22 @@
         "Universal Scout 1 — Jurisdiction: city/county AHJ hints (trusted hosts).",
         "Universal Scout 2 — Permits: **city** or **county** building department (steered from address).",
         "Universal Scout 3 — Building codes: **city-specific** (incorporated) or **county-specific** (unincorporated) adopted codes and amendments, plus **Code-Change Monitoring** cues (upcoming adoptions / council minutes keywords).",
-        "Scout profile — **Trades**: none selected; **vertical**: building; **mission-critical DC scout**: off; **job FAST-41 gate**: off.",
+        "Scout profile — **Trades**: general_contractor; **vertical**: building; **mission-critical DC scout**: off; **job FAST-41 gate**: off.",
         "**Intelligence tier — Residential / building vertical:** Municode / `.gov` / **OpenGov** portal discovery for **setbacks**, yard lines, and codified zoning chapters."
       ],
       "step_jurisdiction": {
-        "query": "Dallas, TX: Job site 1900 N Stemmons Fwy, Dallas, TX 75207, USA — incorporated Dallas, TX (ZIP 75207). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | LOCALITY_STRICT City of Dallas Dallas County Texas NOT Lake Dallas Denton County municipal boundary | Stemmons Freeway Dallas 752xx official city permits NOT Lake Dallas | Site/job context: [Job description (voice or typed)] 250 MW AI Data Center. Investm… (site:gov OR site:municode.com)",
-        "results": [
-          {
-            "url": "https://records.wylietexas.gov/WebLink/DocView.aspx?id=1031505&dbid=0&repo=City-of-Wylie",
-            "title": "02-08-2022 (City Council) Agenda Packet - IIS Windows Server",
-            "description": "Press Alt + R to read the document text or Alt + P to download or print. Laserfiche WebLink. My WebLink. More. Help; About; Sign Out. City-of-Wylie."
-          }
-        ],
-        "fallback_used": false,
-        "fallback_query": null,
+        "query": "Dallas, TX: Job site N Stemmons Fwy, Dallas, TX 75207, USA — incorporated Dallas, TX (ZIP 75207). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | LOCALITY_STRICT City of Dallas Dallas County Texas NOT Lake Dallas Denton County municipal boundary | Stemmons Freeway Dallas 752xx official city permits NOT Lake Dallas | Site/job context: [Job description (voice or typed)] 250 MW AI Data Center. Investment: … (site:gov OR site:municode.com)",
+        "results": [],
+        "fallback_used": true,
+        "fallback_query": "Dallas, TX: Job site N Stemmons Fwy, Dallas, TX 75207, USA — incorporated Dallas, TX (ZIP 75207). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Dallas, TX official city code and building permits | LOCALITY_STRICT City of Dallas Dallas County Texas NOT Lake Dallas Denton County municipal boundary | Stemmons Freeway Dallas 752xx official city permits NOT Lake Dallas | Site/job context: [Job description (voice or typed)] 250 MW AI Data Center. Investment: … city government landing page (site:gov OR site:municode.com)",
         "firecrawl_mode": "search_web_serp_only",
         "firecrawl_limit": 5
       },
       "step_building_permits": {
-        "query": "Dallas, TX: Dallas TX building department permits plan check electrical official — ZIP 75207 | LOCALITY_LOCK Dallas, TX official city code and building permits | LOCALITY_STRICT City of Dallas Dallas County Texas NOT Lake Dallas Denton County municipal boundary | Stemmons Freeway Dallas 752xx official city permits NOT Lake Dallas | Dallas, TX official building permit fees 2026 Context from web: 02-08-2022 (City Council) Agenda Packet - IIS Windows Server (site:gov OR site:municode.com)",
+        "query": "Dallas, TX: Dallas TX building department permits plan check electrical official — ZIP 75207 | LOCALITY_LOCK Dallas, TX official city code and building permits | LOCALITY_STRICT City of Dallas Dallas County Texas NOT Lake Dallas Denton County municipal boundary | Stemmons Freeway Dallas 752xx official city permits NOT Lake Dallas | Dallas, TX official building permit fees 2026 | Dallas, TX general contractor superintendent IBC OSHA multi-trade permit sequencing inspection hold points — ZIP 75207 (site:gov OR site:municode.com)",
         "results": [],
         "fallback_used": true,
-        "fallback_query": "Dallas, TX: Dallas TX building department permits plan check electrical official — ZIP 75207 | LOCALITY_LOCK Dallas, TX official city code and building permits | LOCALITY_STRICT City of Dallas Dallas County Texas NOT Lake Dallas Denton County municipal boundary | Stemmons Freeway Dallas 752xx official city permits NOT Lake Dallas | Dallas, TX official building permit fees 2026 Context from web: 02-08-2022 (City Council) Agenda Packet - IIS Windows Server city government landing page (site:gov OR site:municode.com)",
+        "fallback_query": "Dallas, TX: Dallas TX building department permits plan check electrical official — ZIP 75207 | LOCALITY_LOCK Dallas, TX official city code and building permits | LOCALITY_STRICT City of Dallas Dallas County Texas NOT Lake Dallas Denton County municipal boundary | Stemmons Freeway Dallas 752xx official city permits NOT Lake Dallas | Dallas, TX official building permit fees 2026 | Dallas, TX general contractor superintendent IBC OSHA multi-trade permit sequencing inspection hold points — ZIP 75207 city government landing page (site:gov OR site:municode.com)",
         "firecrawl_mode": "search_web_serp_only",
         "firecrawl_limit": 5
       },
@@ -456,16 +452,10 @@
         "firecrawl_limit": 5
       },
       "step_residential_zoning": {
-        "query": "1900 N Stemmons Fwy, Dallas, TX 75207, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75207 | Site/job context: [Job description (voice or typed)] 250 MW AI Data Center. Investment: $850M. Industrial substation + liquid cooling. (site:gov OR site:municode.com OR site:opengov.com)",
-        "results": [
-          {
-            "url": "https://library.municode.com/tx/lake_dallas",
-            "title": "Code of Ordinances | Lake Dallas, TX - Municode Library",
-            "description": "The listing below includes all legislation received by Municipal Code since the last update (printed or electronic) to the Code of Ordinances."
-          }
-        ],
+        "query": "N Stemmons Fwy, Dallas, TX 75207, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75207 | Site/job context: [Job description (voice or typed)] 250 MW AI Data Center. Investment: $850M. Industrial substation + liquid cooling. (site:gov OR site:municode.com OR site:opengov.com)",
+        "results": [],
         "fallback_used": true,
-        "fallback_query": "1900 N Stemmons Fwy, Dallas, TX 75207, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75207 | Site/job context: [Job description (voice or typed)] 250 MW AI Data Center. Investment: $850M. Industrial substation + liquid cooling. official city government landing page (site:gov OR site:municode.com OR site:opengov.com)",
+        "fallback_query": "N Stemmons Fwy, Dallas, TX 75207, USA Dallas, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75207 | Site/job context: [Job description (voice or typed)] 250 MW AI Data Center. Investment: $850M. Industrial substation + liquid cooling. official city government landing page (site:gov OR site:municode.com OR site:opengov.com)",
         "firecrawl_mode": "search_web_serp_only",
         "firecrawl_limit": 5
       },
@@ -475,8 +465,172 @@
         "state": "TX",
         "mode": "city",
         "zip": "75207",
-        "formatted_address": "1900 N Stemmons Fwy, Dallas, TX 75207, USA",
+        "formatted_address": "N Stemmons Fwy, Dallas, TX 75207, USA",
         "label": "Incorporated / municipal — Dallas, TX 75207 (city building department)"
+      }
+    }
+  },
+  "75035": {
+    "updated_at": "2026-05-16T02:25:19.068328+00:00",
+    "raw": {
+      "zip": "75035",
+      "site_address": "State Hwy 121, Frisco, TX 75035, USA",
+      "jurisdiction": {
+        "mode": "city",
+        "zip": "75035",
+        "street_line": "State 121",
+        "city": "Frisco",
+        "county": "",
+        "state": "TX",
+        "state_long": "Texas",
+        "formatted_address": "State Hwy 121, Frisco, TX 75035, USA",
+        "label": "Incorporated / municipal — Frisco, TX 75035 (city building department)"
+      },
+      "scout_profile": {
+        "trades": [
+          "general_contractor"
+        ],
+        "vertical": "building",
+        "mission_critical_dc": false,
+        "job_fast41_eligible": false
+      },
+      "scout": {
+        "mode": "search_web",
+        "search_domain_scope": "(site:gov OR site:municode.com)",
+        "search_domain_scope_zoning_residential": "(site:gov OR site:municode.com OR site:opengov.com)",
+        "trust_policy": "hostname ends with .gov, hostname contains municode, or hostname under .opengov.com (SERP scoped per step)",
+        "sources": [
+          "web"
+        ],
+        "scrape_options": null,
+        "max_depth_note": "N/A — Universal Scout does not call Firecrawl crawl/map; depth 1 crawl would use max_discovery_depth on /v2/crawl, not used here.",
+        "exclude_external_links_note": "N/A for SERP-only search. For crawl, omit following off-domain links via allow_external_links=False.",
+        "page_limit_per_search": {
+          "min": 3,
+          "max": 5
+        },
+        "bundled_single_page_scrape_options": "disabled — SERP snippets only; see SEARCH_BUNDLED_SCRAPE_OPTIONS if re-enabled (markdown only, fast_mode, no links format, exclude_tags strips media/CSS).",
+        "fallback": "If a scoped step returns zero trusted URLs, Universal Scout runs a follow-up search that still appends (site:gov OR site:municode.com) and biases keywords toward *official* / *city government* (no fully unscoped web search)."
+      },
+      "enhanced_context_used": true,
+      "agentic_workflow": [
+        "AHJ identification — **City**: Frisco; **County**: — (municipal/city building-code steering, ZIP 75035).",
+        "Fallback — If a scoped step returns no trusted URLs: follow-up search **retains** the step’s **site:** scope (see ``scout.search_domain_scope`` / zoning ``OPENGOV`` extension) and adds *official* / *city government landing page*.",
+        "Universal Scout 1 — Jurisdiction: city/county AHJ hints (trusted hosts).",
+        "Universal Scout 2 — Permits: **city** or **county** building department (steered from address).",
+        "Universal Scout 3 — Building codes: **city-specific** (incorporated) or **county-specific** (unincorporated) adopted codes and amendments, plus **Code-Change Monitoring** cues (upcoming adoptions / council minutes keywords).",
+        "Scout profile — **Trades**: general_contractor; **vertical**: building; **mission-critical DC scout**: off; **job FAST-41 gate**: off.",
+        "**Intelligence tier — Residential / building vertical:** Municode / `.gov` / **OpenGov** portal discovery for **setbacks**, yard lines, and codified zoning chapters."
+      ],
+      "step_jurisdiction": {
+        "query": "Frisco, TX: Job site State Hwy 121, Frisco, TX 75035, USA — incorporated Frisco, TX (ZIP 75035). The **city** is typically the AHJ for building permits at this address. | LOCALITY_LOCK Frisco, TX official city code and building permits | Site/job context: [Job description (voice or typed)] 50 MW Data Center expansion. Requires massive cooling tower installation near residential boundary line. (site:gov OR site:municode.com)",
+        "results": [
+          {
+            "url": "https://www.friscotexas.gov/1669/Plans-Permits",
+            "title": "Plans & Permits | Frisco, TX - Official Website",
+            "description": "Gateway for online permit services available for: Land Development, Residential Permits and Commercial Permits."
+          },
+          {
+            "url": "https://www.friscotexas.gov/493/Apply-For",
+            "title": "Apply For | Frisco, TX - Official Website",
+            "description": "The Frisco Building Inspections Division reviews plans, issues permits, inspects, provides building code requirements and other information for new and ..."
+          },
+          {
+            "url": "https://www.friscotexas.gov/395/Building-Inspections",
+            "title": "Building Inspections Division | Frisco, TX - Official Website",
+            "description": "Applications for all building permits must be submitted online using the Plans and Permits portal."
+          },
+          {
+            "url": "https://www.friscotexas.gov/401/Permit-Applications-Plan-Review-Forms",
+            "title": "Permit Applications, Plan Review & Forms - FriscoTexas.gov",
+            "description": "Contact a plans examiner or permit technician at 972-292-5301 with any questions. Permit Fee Schedule (PDF). Contractors must be registered and up to date ..."
+          },
+          {
+            "url": "https://www.friscotexas.gov/1696/Residential-Permits",
+            "title": "Apply for Residential Permits | Frisco, TX - Official Website",
+            "description": "Please reference required documents to review all plans and documents you will need for the permitting process. Review the Roadmap to a permit approval."
+          }
+        ],
+        "fallback_used": false,
+        "fallback_query": null,
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_building_permits": {
+        "query": "Frisco, TX: Frisco TX building department permits plan check electrical official — ZIP 75035 | LOCALITY_LOCK Frisco, TX official city code and building permits | Frisco, TX official building permit fees 2026 | Frisco, TX general contractor superintendent IBC OSHA multi-trade permit sequencing inspection hold points — ZIP 75035 Context from web: Plans & Permits | Frisco, TX - Official Website | Site/job context: [Job description (voice or typed)] 50 MW Data Center expansion. Requires massive coo… (site:gov OR site:municode.com)",
+        "results": [
+          {
+            "url": "https://www.friscotexas.gov/1669/Plans-Permits",
+            "title": "Plans & Permits | Frisco, TX - Official Website",
+            "description": "This service provides 24/7 access to: Submit applications and electronic plans with all required documents. View plan review comments and status updates; Pay ..."
+          },
+          {
+            "url": "https://www.friscotexas.gov/401/Permit-Applications-Plan-Review-Forms",
+            "title": "Permit Applications, Plan Review & Forms - FriscoTexas.gov",
+            "description": "Contact a plans examiner or permit technician at 972-292-5301 with any questions. Permit Fee Schedule (PDF). Contractors must be registered and up to date ..."
+          },
+          {
+            "url": "https://www.friscotexas.gov/DocumentCenter/View/864/Permit-Fee-Schedule-PDF?bidId=",
+            "title": "[PDF] Permit, Inspection and Miscellaneous Consolidated Fee Schedule",
+            "description": "$2,590 for the first 7000 SQFT plus $0.26 for each additional 1 SQFT or fraction thereof. Non-Refundable Application Fee. Inspection outside of normal business ..."
+          }
+        ],
+        "fallback_used": false,
+        "fallback_query": null,
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_building_codes": {
+        "query": "Frisco, TX: Building codes adopted for Frisco TX: municipal amendments IBC IRC — ZIP 75035 | LOCALITY_LOCK Frisco, TX official city code and building permits | Frisco, TX NEC 2023 amendments | Frisco, TX upcoming building code adoption NEC NFPA 70 effective date transition council workshop — ZIP 75035 | Frisco, TX city council agenda minutes ordinance building code amendment hearing first reading — ZIP 75035 | Frisco, TX general contractor superintendent IBC OSHA multi-trade permit sequencing in (site:gov OR site:municode.com)",
+        "results": [
+          {
+            "url": "https://www.friscotexas.gov/397/Adopted-Codes",
+            "title": "Adopted Codes - FriscoTexas.gov",
+            "description": "Adopted codes establish provisions that adequately protect public health, safety, and welfare. The Codes address structural strength, means of egress, ..."
+          },
+          {
+            "url": "https://www.friscotexas.gov/1669/Plans-Permits",
+            "title": "Plans & Permits | Frisco, TX - Official Website",
+            "description": "Gateway for online permit services available for: Land Development, Residential Permits and Commercial Permits."
+          },
+          {
+            "url": "https://www.friscotexas.gov/1806/Ordinances-Standards",
+            "title": "Ordinances & Standards | Frisco, TX - Official Website",
+            "description": "A list of current ordinances, standards, and plans."
+          }
+        ],
+        "fallback_used": false,
+        "fallback_query": null,
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_residential_zoning": {
+        "query": "State Hwy 121, Frisco, TX 75035, USA Frisco, TX zoning ordinance setback front yard side yard rear yard lot line residential single-family R-1 Chapter 150 Municode codified GIS open data portal — ZIP 75035 | Site/job context: [Job description (voice or typed)] 50 MW Data Center expansion. Requires massive cooling tower installation near residential boundary line. (site:gov OR site:municode.com OR site:opengov.com)",
+        "results": [
+          {
+            "url": "https://www.friscotexas.gov/1806/Ordinances-Standards",
+            "title": "Ordinances & Standards | Frisco, TX - Official Website",
+            "description": "A list of current ordinances, standards, and plans."
+          },
+          {
+            "url": "https://www.friscotexas.gov/168/GIS",
+            "title": "GIS | Frisco, TX - Official Website",
+            "description": "GIS compiles data from various sources including plans, ordinances and field research into a centralized database for easy access. The GIS division also ..."
+          }
+        ],
+        "fallback_used": false,
+        "fallback_query": null,
+        "firecrawl_mode": "search_web_serp_only",
+        "firecrawl_limit": 5
+      },
+      "step_ahj_identification": {
+        "city": "Frisco",
+        "county": "",
+        "state": "TX",
+        "mode": "city",
+        "zip": "75035",
+        "formatted_address": "State Hwy 121, Frisco, TX 75035, USA",
+        "label": "Incorporated / municipal — Frisco, TX 75035 (city building department)"
       }
     }
   }
