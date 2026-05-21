@@ -8,6 +8,7 @@ import {
   Download,
   Loader2,
   MapPin,
+  Mic,
   Radar,
   Shield,
   Sparkles,
@@ -15,7 +16,12 @@ import {
   DollarSign,
   TrendingUp
 } from 'lucide-react';
-import { useCallback, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import {
+  clearDictationSilenceTimer,
+  DICTATION_SILENCE_MS,
+  scheduleDictationSilenceStop,
+} from './speech-recognition';
 import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'react-toastify';
@@ -115,6 +121,17 @@ function pickCityFromPlace(place: google.maps.places.PlaceResult): string {
   return '';
 }
 
+function speechRecognitionCtor(): (new () => SpeechRecognition) | undefined {
+  if (typeof window === 'undefined') return undefined;
+  return window.SpeechRecognition ?? window.webkitSpeechRecognition;
+}
+
+async function warmMicrophonePermission(): Promise<void> {
+  if (!navigator.mediaDevices?.getUserMedia) return;
+  const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  for (const track of stream.getTracks()) track.stop();
+}
+
 function styles(): string {
   return `
     :root {
@@ -201,6 +218,30 @@ function styles(): string {
     @keyframes pulse { 0% { opacity: 0.3; } 50% { opacity: 1; } 100% { opacity: 0.3; } }
     .finops-card { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; margin-bottom: 12px; }
     .finops-metric { background: rgba(7,10,16,0.4); border: 1px solid var(--stroke); border-radius: 12px; padding: 12px; }
+    .rg-job-desc-head { display: flex; flex-wrap: wrap; align-items: center; justify-content: space-between; gap: 8px; margin: 10px 0 6px; }
+    .rg-job-desc-head .rg-lbl { margin: 0; }
+    .rg-mic-btn {
+      min-width: 2.5rem; padding: 8px 10px; border-radius: 10px;
+      border: 1px solid var(--stroke); background: rgba(7,10,16,0.55);
+      color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
+      transition: border-color 0.15s, color 0.15s, background 0.15s;
+    }
+    .rg-mic-btn:not(:disabled):hover { border-color: rgba(56,189,248,0.45); color: var(--accent); background: rgba(56,189,248,0.1); }
+    .rg-mic-btn:disabled { opacity: 0.4; cursor: not-allowed; }
+    .rg-mic-btn--active { border-color: rgba(56,189,248,0.55); color: var(--accent); background: rgba(56,189,248,0.14); }
+    .rg-mic-btn--processing { border-color: var(--stroke); color: var(--accent); }
+    .rg-mic-pulse {
+      width: 10px; height: 10px; border-radius: 50%; background: var(--bad);
+      animation: rg-mic-throb 0.85s ease-in-out infinite;
+    }
+    @keyframes rg-mic-throb {
+      0%, 100% { opacity: 0.45; transform: scale(0.92); }
+      50% { opacity: 1; transform: scale(1.08); }
+    }
+    .rg-ta--dictating {
+      box-shadow: inset 0 0 0 1px rgba(56,189,248,0.45), 0 0 0 3px rgba(56,189,248,0.12);
+    }
+    .rg-speech-hint { font-size: 0.78rem; color: var(--bad); margin: 0 0 6px; }
   `;
 }
 
@@ -212,6 +253,21 @@ export default function App() {
   const [zipCode, setZipCode] = useState('');
   const [clientCity, setClientCity] = useState('');
   const [jobDescription, setJobDescription] = useState('');
+  const [dictationActive, setDictationActive] = useState(false);
+  const [speechHint, setSpeechHint] = useState<string | null>(null);
+
+  const dictationAnchorRef = useRef('');
+  const dictationFinalAccumRef = useRef('');
+  const listeningRef = useRef(false);
+  const dictationSilenceTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const recognitionRef = useRef<SpeechRecognition | null>(null);
+  const setJobDescriptionRef = useRef(setJobDescription);
+  setJobDescriptionRef.current = setJobDescription;
+
+  const speechCtor = useMemo(() => speechRecognitionCtor(), []);
+  const speechSupported = Boolean(speechCtor);
+  const voiceMicProcessing = speechHint === 'Processing…';
+
   const [vertical, setVertical] = useState<ScoutVertical>('building');
   const [missionCriticalDc, setMissionCriticalDc] = useState(false);
   const [trades, setTrades] = useState<Set<TradeToken>>(new Set());
@@ -234,6 +290,188 @@ export default function App() {
   const [complete, setOpenComplete] = useState<SseEnvelope | null>(null);
 
   const placesReady = useMemo(() => typeof window !== 'undefined' && !!window.google?.maps?.places, []);
+
+  useEffect(() => {
+    if (!speechCtor) {
+      recognitionRef.current = null;
+      return;
+    }
+
+    const transcriptFor = (r: SpeechRecognitionResult): string => {
+      try {
+        const a = typeof r.item === 'function' ? r.item(0) : undefined;
+        const alt = (a ?? r[0]) as SpeechRecognitionAlternative | undefined;
+        return typeof alt?.transcript === 'string' ? alt.transcript : '';
+      } catch {
+        return '';
+      }
+    };
+
+    const rec = new speechCtor();
+    rec.continuous = true;
+    rec.interimResults = true;
+    rec.lang = 'en-US';
+
+    rec.onresult = (ev: SpeechRecognitionEvent) => {
+      let newFinalChunk = '';
+      let interimChunk = '';
+      for (let i = ev.resultIndex; i < ev.results.length; i++) {
+        const r = ev.results[i];
+        const txt = transcriptFor(r);
+        if (r.isFinal) newFinalChunk += txt;
+        else interimChunk += txt;
+      }
+      dictationFinalAccumRef.current += newFinalChunk;
+      const nextText =
+        dictationAnchorRef.current + dictationFinalAccumRef.current + interimChunk;
+      setJobDescriptionRef.current(nextText);
+
+      scheduleDictationSilenceStop({
+        timerRef: dictationSilenceTimerRef,
+        silenceMs: DICTATION_SILENCE_MS,
+        isListening: () => listeningRef.current,
+        stopRecognition: () => {
+          listeningRef.current = false;
+          const r = recognitionRef.current;
+          if (!r) return;
+          try {
+            r.stop();
+          } catch {
+            try {
+              r.abort();
+            } catch {
+              /* noop */
+            }
+          }
+        },
+        onSilenceStop: () => {
+          setDictationActive(false);
+          setSpeechHint('Processing…');
+        },
+      });
+    };
+
+    rec.onerror = (ev: SpeechRecognitionErrorEvent) => {
+      clearDictationSilenceTimer(dictationSilenceTimerRef);
+      if (ev.error === 'audio-capture' || ev.error === 'not-allowed') {
+        toast.error(
+          `Speech recognition: ${ev.error}. ${(ev.message && String(ev.message).trim()) || 'Microphone unavailable or blocked for this site.'}`,
+        );
+      }
+      if (ev.error === 'aborted' || ev.error === 'no-speech') return;
+      if (ev.error === 'not-allowed') {
+        setSpeechHint(
+          'Microphone permission denied. Allow microphone access for this site, then try again.',
+        );
+      } else if (ev.error === 'audio-capture') {
+        setSpeechHint('No microphone found or it is busy in another app.');
+      } else {
+        setSpeechHint(`Voice input paused (${ev.error}). You can keep typing.`);
+      }
+      listeningRef.current = false;
+      setDictationActive(false);
+    };
+
+    rec.onend = () => {
+      if (!listeningRef.current) {
+        setDictationActive(false);
+        return;
+      }
+      try {
+        recognitionRef.current?.start();
+      } catch {
+        listeningRef.current = false;
+        setDictationActive(false);
+      }
+    };
+
+    recognitionRef.current = rec;
+    return () => {
+      listeningRef.current = false;
+      clearDictationSilenceTimer(dictationSilenceTimerRef);
+      try {
+        rec.abort();
+      } catch {
+        /* noop */
+      }
+      recognitionRef.current = null;
+    };
+  }, [speechCtor]);
+
+  const toggleDictation = useCallback(() => {
+    if (!speechCtor) {
+      setSpeechHint('Voice dictation is not supported in this browser. Try Chrome or Edge.');
+      return;
+    }
+    const rec = recognitionRef.current;
+    if (!rec) {
+      setSpeechHint('Speech engine is not ready yet. Reload the page and try again.');
+      return;
+    }
+
+    if (listeningRef.current) {
+      clearDictationSilenceTimer(dictationSilenceTimerRef);
+      listeningRef.current = false;
+      try {
+        rec.stop();
+      } catch {
+        rec.abort();
+      }
+      setDictationActive(false);
+      setSpeechHint(null);
+      return;
+    }
+
+    setSpeechHint(null);
+    void (async () => {
+      try {
+        await warmMicrophonePermission();
+      } catch {
+        setSpeechHint(
+          'Microphone warmup was blocked—you may still get a browser prompt; choose Allow to dictate.',
+        );
+      }
+
+      dictationAnchorRef.current = jobDescription;
+      dictationFinalAccumRef.current = '';
+      listeningRef.current = true;
+
+      try {
+        rec.continuous = true;
+        rec.interimResults = true;
+        rec.lang = 'en-US';
+        rec.start();
+        setDictationActive(true);
+        scheduleDictationSilenceStop({
+          timerRef: dictationSilenceTimerRef,
+          silenceMs: DICTATION_SILENCE_MS,
+          isListening: () => listeningRef.current,
+          stopRecognition: () => {
+            listeningRef.current = false;
+            const r = recognitionRef.current;
+            if (!r) return;
+            try {
+              r.stop();
+            } catch {
+              try {
+                r.abort();
+              } catch {
+                /* noop */
+              }
+            }
+          },
+          onSilenceStop: () => {
+            setDictationActive(false);
+            setSpeechHint('Processing…');
+          },
+        });
+      } catch {
+        listeningRef.current = false;
+        setSpeechHint('Could not start the microphone. Confirm permissions and try again.');
+        setDictationActive(false);
+      }
+    })();
+  }, [jobDescription, speechCtor]);
 
   const attachAutocomplete = useCallback(() => {
     const input = addressRef.current;
@@ -580,15 +818,60 @@ export default function App() {
                 </div>
               </div>
 
-              <label className="rg-lbl" htmlFor="jd">
-                Job description / voice capture
-              </label>
+              <div className="rg-job-desc-head">
+                <label className="rg-lbl" htmlFor="jd">
+                  Job description / voice capture
+                </label>
+                <button
+                  type="button"
+                  className={`rg-mic-btn${dictationActive ? ' rg-mic-btn--active' : ''}${voiceMicProcessing ? ' rg-mic-btn--processing' : ''}`}
+                  title={
+                    dictationActive
+                      ? 'Listening (stops after 6s silence)'
+                      : voiceMicProcessing
+                        ? 'Processing…'
+                        : 'Dictate with microphone'
+                  }
+                  aria-label={
+                    dictationActive
+                      ? 'Stop voice dictation'
+                      : voiceMicProcessing
+                        ? 'Voice processing'
+                        : 'Start voice dictation'
+                  }
+                  aria-pressed={dictationActive}
+                  disabled={running || !speechSupported}
+                  onClick={() => toggleDictation()}
+                >
+                  {dictationActive ? (
+                    <span className="rg-mic-pulse" aria-hidden />
+                  ) : voiceMicProcessing ? (
+                    <span style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.12em' }} aria-hidden>
+                      ⋯
+                    </span>
+                  ) : (
+                    <Mic size={18} strokeWidth={2} aria-hidden />
+                  )}
+                </button>
+              </div>
+              {!speechSupported ? (
+                <p className="rg-small" style={{ margin: '0 0 6px' }}>
+                  Voice dictation requires Chrome or Edge (Web Speech API).
+                </p>
+              ) : null}
+              {speechHint ? (
+                <p id="jd-speech-hint" className="rg-speech-hint" role="status">
+                  {speechHint}
+                </p>
+              ) : null}
               <textarea
                 id="jd"
-                className="rg-ta"
+                className={`rg-ta${dictationActive ? ' rg-ta--dictating' : ''}`}
                 value={jobDescription}
+                disabled={running}
                 onChange={(e) => setJobDescription(e.target.value)}
-                placeholder="Describe scope — panel upgrade, data hall fit-out, AHJ questions…"
+                placeholder="Type or tap the mic: trades, scope, timelines, AHJ questions…"
+                aria-describedby={speechHint ? 'jd-speech-hint' : undefined}
               />
 
               <label className="rg-lbl" htmlFor="vert">
