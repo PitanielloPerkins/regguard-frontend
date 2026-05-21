@@ -1,39 +1,28 @@
-import path from 'node:path';
-import { fileURLToPath } from 'node:url';
+import { defineConfig } from 'vite'
+import react from '@vitejs/plugin-react'
+import { VitePWA } from 'vite-plugin-pwa'
 
-import react from '@vitejs/plugin-react';
-import { defineConfig, loadEnv } from 'vite';
-
-const frontendRoot = path.dirname(fileURLToPath(import.meta.url));
-
-export default defineConfig(({ mode }) => {
-  loadEnv(mode, frontendRoot, '');
-  /** Handshake: Vite dev proxy must target the local Flask API only. */
-  const backendOrigin = 'http://127.0.0.1:8000';
-
-  return {
-    root: frontendRoot,
-    envDir: frontendRoot,
-    plugins: [react()],
-    /** `jspdf` → `fast-png`; a bad/empty `PngDecoder.js.map` can crash esbuild during dep scan. */
-    optimizeDeps: {
-      exclude: ['jspdf'],
-    },
-    server: {
-      /** Bind all interfaces; avoids some local port/firewall edge cases when 127.0.0.1 stalls. */
-      host: true,
-      port: 5173,
-      /** If 5173 is busy, Vite picks the next free port instead of failing. */
-      strictPort: false,
-      proxy: {
-        '/api': {
-          target: backendOrigin,
-          changeOrigin: true,
-          rewrite: (reqPath) => reqPath.replace(/^\/api/, ''),
-          timeout: 600_000,
-          proxyTimeout: 600_000,
-        },
-      },
-    },
-  };
-});
+export default defineConfig({
+  plugins: [
+    react(),
+    VitePWA({
+      registerType: 'autoUpdate',
+      manifest: {
+        name: 'Reg Guard Agent',
+        short_name: 'RegGuard',
+        description: 'Autonomous regulatory domain orchestration agent framework',
+        theme_color: '#0f172a', // Clean dark slate theme matching your desktop UI
+        background_color: '#0f172a',
+        display: 'standalone', // ⚠️ Crucial: This hides the Safari browser navigation bar to make it a true app window!
+        orientation: 'portrait',
+        icons: [
+          {
+            src: 'favicon.ico',
+            sizes: '64x64 32x32 24x24 16x16',
+            type: 'image/x-icon'
+          }
+        ]
+      }
+    })
+  ]
+})
