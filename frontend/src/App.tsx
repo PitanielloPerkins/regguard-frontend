@@ -26,6 +26,8 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'react-toastify';
 import { ToastContainer } from 'react-toastify';
+import { getBackendOrigin } from './env';
+import { fetchWithTimeout } from './fetchWithTimeout';
 
 /* ─── Google Places (loaded via index.html) ───────────────────────────────── */
 
@@ -498,52 +500,74 @@ export default function App() {
     acRef.current = ac;
   }, []);
 
-  const autoDetectLocation = () => {
-    if (!navigator.geolocation) {
-      toast.error('Geolocation is not supported by your browser profile.');
+  const autoDetectLocation = useCallback(() => {
+    if (!navigator.geolocation?.getCurrentPosition) {
+      toast.error('Geolocation is not supported by your browser.');
       return;
     }
+
     setDetecting(true);
     navigator.geolocation.getCurrentPosition(
       async (pos) => {
         try {
           const { latitude, longitude } = pos.coords;
-          const res = await axios.get(`https://maps.googleapis.com/maps/api/geocode/json?latlng=${latitude},${longitude}`);
-          if (res.data?.results?.[0]) {
-            const result = res.data.results[0];
-            setSiteAddress(result.formatted_address || '');
-            
-            const comps = result.address_components || [];
-            for (const c of comps) {
-              if (c.types.includes('postal_code')) setZipCode(c.short_name || '');
-              if (c.types.includes('locality')) setClientCity(c.long_name || '');
+          const q = new URLSearchParams({
+            latitude: String(latitude),
+            longitude: String(longitude),
+          });
+          const res = await fetchWithTimeout(
+            `${getBackendOrigin()}/reverse-geocode-address?${q}`,
+            { cache: 'no-store', timeoutMs: 12_000 },
+          );
+          if (!res.ok) {
+            let detail = `Reverse geocode failed (HTTP ${res.status}).`;
+            try {
+              const body = (await res.json()) as { detail?: string };
+              if (typeof body.detail === 'string' && body.detail.trim()) {
+                detail = body.detail.trim();
+              }
+            } catch {
+              /* non-JSON body */
             }
-            toast.success('Location auto-detected successfully');
-          } else {
-            setSiteAddress('State Highway 121, Frisco, TX 75035');
-            setZipCode('75035');
-            setClientCity('Frisco');
-            toast.info('Using proximate sandbox coordinates');
+            toast.error(detail);
+            return;
           }
-        } catch {
-          setSiteAddress('State Highway 121, Frisco, TX 75035');
-          setZipCode('75035');
-          setClientCity('Frisco');
-          toast.info('Coordinates resolved via sandbox container defaults');
+          const data = (await res.json()) as {
+            formatted_address?: string;
+            zip?: string;
+            city?: string;
+          };
+          const formatted = (data.formatted_address ?? '').trim();
+          const zip = (data.zip ?? '').trim();
+          if (!formatted || zip.length !== 5) {
+            toast.error('Could not decode your GPS fix into a U.S. street address with ZIP.');
+            return;
+          }
+          setSiteAddress(formatted);
+          setZipCode(zip);
+          if (data.city?.trim()) setClientCity(data.city.trim());
+          toast.success('Location detected from GPS');
+        } catch (e) {
+          const msg = e instanceof Error ? e.message : String(e);
+          toast.error(msg || 'Could not resolve GPS coordinates to an address.');
         } finally {
           setDetecting(false);
         }
       },
-      () => {
-        setSiteAddress('State Highway 121, Frisco, TX 75035');
-        setZipCode('75035');
-        setClientCity('Frisco');
-        toast.info('Location access restricted - mapping sandbox testing bounds');
+      (err) => {
         setDetecting(false);
+        const msg = err.message?.trim()
+          ? `Location unavailable: ${err.message}`
+          : 'Location permission denied or timed out. Allow location access, then try Auto-Detect again.';
+        toast.warning(msg);
       },
-      { timeout: 6000 }
+      {
+        enableHighAccuracy: true,
+        timeout: 15_000,
+        maximumAge: 0,
+      },
     );
-  };
+  }, []);
 
   const toggleTrade = (t: TradeToken) => {
     setTrades((prev) => {
