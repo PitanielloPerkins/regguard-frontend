@@ -1,0 +1,10 @@
+.env
+node_modules/
+dist/
+__pycache__/
+*.pyc
+.venv/
+venv/
+api_usage_log.jsonl
+.cursor/vite-dev.log
+frontend/.npm-cache/
