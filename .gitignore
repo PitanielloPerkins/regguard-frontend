@@ -8,3 +8,4 @@ venv/
 api_usage_log.jsonl
 .cursor/vite-dev.log
 frontend/.npm-cache/
+.vercel
