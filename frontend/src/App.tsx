@@ -26,7 +26,7 @@ import ReactMarkdown from 'react-markdown';
 import remarkGfm from 'remark-gfm';
 import { toast } from 'react-toastify';
 import { ToastContainer } from 'react-toastify';
-import { getBackendOrigin } from './env';
+import { backendUrl } from './env';
 import { fetchWithTimeout } from './fetchWithTimeout';
 
 /* ─── Google Places (loaded via index.html) ───────────────────────────────── */
@@ -131,7 +131,30 @@ function speechRecognitionCtor(): (new () => SpeechRecognition) | undefined {
 async function warmMicrophonePermission(): Promise<void> {
   if (!navigator.mediaDevices?.getUserMedia) return;
   const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
-  for (const track of stream.getTracks()) track.stop();
+  try {
+    for (const track of stream.getTracks()) {
+      try {
+        track.stop();
+      } catch {
+        /* hardware may already be released */
+      }
+    }
+  } finally {
+    /* ensure warmup promise settles even if stop() throws */
+  }
+}
+
+function stopRecognitionSafe(rec: SpeechRecognition | null): void {
+  if (!rec) return;
+  try {
+    rec.stop();
+  } catch {
+    try {
+      rec.abort();
+    } catch {
+      /* noop */
+    }
+  }
 }
 
 function styles(): string {
@@ -256,6 +279,8 @@ export default function App() {
   const [clientCity, setClientCity] = useState('');
   const [jobDescription, setJobDescription] = useState('');
   const [dictationActive, setDictationActive] = useState(false);
+  const [dictationBusy, setDictationBusy] = useState(false);
+  const [micProcessing, setMicProcessing] = useState(false);
   const [speechHint, setSpeechHint] = useState<string | null>(null);
 
   const dictationAnchorRef = useRef('');
@@ -268,8 +293,6 @@ export default function App() {
 
   const speechCtor = useMemo(() => speechRecognitionCtor(), []);
   const speechSupported = Boolean(speechCtor);
-  const voiceMicProcessing = speechHint === 'Processing…';
-
   const [vertical, setVertical] = useState<ScoutVertical>('building');
   const [missionCriticalDc, setMissionCriticalDc] = useState(false);
   const [trades, setTrades] = useState<Set<TradeToken>>(new Set());
@@ -309,171 +332,220 @@ export default function App() {
       }
     };
 
-    const rec = new speechCtor();
-    rec.continuous = true;
-    rec.interimResults = true;
-    rec.lang = 'en-US';
+    let rec: SpeechRecognition;
+    try {
+      rec = new speechCtor();
+      rec.continuous = true;
+      rec.interimResults = true;
+      rec.lang = 'en-US';
+    } catch (e) {
+      recognitionRef.current = null;
+      const msg = e instanceof Error ? e.message : String(e);
+      console.error('[RegGuard speech] engine init failed', msg);
+      return;
+    }
 
     rec.onresult = (ev: SpeechRecognitionEvent) => {
-      let newFinalChunk = '';
-      let interimChunk = '';
-      for (let i = ev.resultIndex; i < ev.results.length; i++) {
-        const r = ev.results[i];
-        const txt = transcriptFor(r);
-        if (r.isFinal) newFinalChunk += txt;
-        else interimChunk += txt;
-      }
-      dictationFinalAccumRef.current += newFinalChunk;
-      const nextText =
-        dictationAnchorRef.current + dictationFinalAccumRef.current + interimChunk;
-      setJobDescriptionRef.current(nextText);
-
-      scheduleDictationSilenceStop({
-        timerRef: dictationSilenceTimerRef,
-        silenceMs: DICTATION_SILENCE_MS,
-        isListening: () => listeningRef.current,
-        stopRecognition: () => {
-          listeningRef.current = false;
-          const r = recognitionRef.current;
-          if (!r) return;
-          try {
-            r.stop();
-          } catch {
-            try {
-              r.abort();
-            } catch {
-              /* noop */
-            }
-          }
-        },
-        onSilenceStop: () => {
-          setDictationActive(false);
-          setSpeechHint('Processing…');
-        },
-      });
-    };
-
-    rec.onerror = (ev: SpeechRecognitionErrorEvent) => {
-      clearDictationSilenceTimer(dictationSilenceTimerRef);
-      if (ev.error === 'audio-capture' || ev.error === 'not-allowed') {
-        toast.error(
-          `Speech recognition: ${ev.error}. ${(ev.message && String(ev.message).trim()) || 'Microphone unavailable or blocked for this site.'}`,
-        );
-      }
-      if (ev.error === 'aborted' || ev.error === 'no-speech') return;
-      if (ev.error === 'not-allowed') {
-        setSpeechHint(
-          'Microphone permission denied. Allow microphone access for this site, then try again.',
-        );
-      } else if (ev.error === 'audio-capture') {
-        setSpeechHint('No microphone found or it is busy in another app.');
-      } else {
-        setSpeechHint(`Voice input paused (${ev.error}). You can keep typing.`);
-      }
-      listeningRef.current = false;
-      setDictationActive(false);
-    };
-
-    rec.onend = () => {
-      if (!listeningRef.current) {
-        setDictationActive(false);
-        return;
-      }
       try {
-        recognitionRef.current?.start();
-      } catch {
-        listeningRef.current = false;
-        setDictationActive(false);
-      }
-    };
+        let newFinalChunk = '';
+        let interimChunk = '';
+        for (let i = ev.resultIndex; i < ev.results.length; i++) {
+          const r = ev.results[i];
+          const txt = transcriptFor(r);
+          if (r.isFinal) newFinalChunk += txt;
+          else interimChunk += txt;
+        }
+        dictationFinalAccumRef.current += newFinalChunk;
+        const nextText =
+          dictationAnchorRef.current + dictationFinalAccumRef.current + interimChunk;
+        setJobDescriptionRef.current(nextText);
 
-    recognitionRef.current = rec;
-    return () => {
-      listeningRef.current = false;
-      clearDictationSilenceTimer(dictationSilenceTimerRef);
-      try {
-        rec.abort();
-      } catch {
-        /* noop */
-      }
-      recognitionRef.current = null;
-    };
-  }, [speechCtor]);
-
-  const toggleDictation = useCallback(() => {
-    if (!speechCtor) {
-      setSpeechHint('Voice dictation is not supported in this browser. Try Chrome or Edge.');
-      return;
-    }
-    const rec = recognitionRef.current;
-    if (!rec) {
-      setSpeechHint('Speech engine is not ready yet. Reload the page and try again.');
-      return;
-    }
-
-    if (listeningRef.current) {
-      clearDictationSilenceTimer(dictationSilenceTimerRef);
-      listeningRef.current = false;
-      try {
-        rec.stop();
-      } catch {
-        rec.abort();
-      }
-      setDictationActive(false);
-      setSpeechHint(null);
-      return;
-    }
-
-    setSpeechHint(null);
-    void (async () => {
-      try {
-        await warmMicrophonePermission();
-      } catch {
-        setSpeechHint(
-          'Microphone warmup was blocked—you may still get a browser prompt; choose Allow to dictate.',
-        );
-      }
-
-      dictationAnchorRef.current = jobDescription;
-      dictationFinalAccumRef.current = '';
-      listeningRef.current = true;
-
-      try {
-        rec.continuous = true;
-        rec.interimResults = true;
-        rec.lang = 'en-US';
-        rec.start();
-        setDictationActive(true);
         scheduleDictationSilenceStop({
           timerRef: dictationSilenceTimerRef,
           silenceMs: DICTATION_SILENCE_MS,
           isListening: () => listeningRef.current,
           stopRecognition: () => {
             listeningRef.current = false;
-            const r = recognitionRef.current;
-            if (!r) return;
-            try {
-              r.stop();
-            } catch {
-              try {
-                r.abort();
-              } catch {
-                /* noop */
-              }
-            }
+            stopRecognitionSafe(recognitionRef.current);
           },
           onSilenceStop: () => {
             setDictationActive(false);
+            setMicProcessing(true);
             setSpeechHint('Processing…');
           },
         });
-      } catch {
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[RegGuard speech] onresult failed', msg);
+      }
+    };
+
+    rec.onerror = (ev: SpeechRecognitionErrorEvent) => {
+      try {
+        clearDictationSilenceTimer(dictationSilenceTimerRef);
+        if (ev.error === 'audio-capture' || ev.error === 'not-allowed') {
+          toast.error(
+            `Speech recognition: ${ev.error}. ${(ev.message && String(ev.message).trim()) || 'Microphone unavailable or blocked for this site.'}`,
+          );
+        }
+        if (ev.error === 'aborted' || ev.error === 'no-speech') {
+          return;
+        }
+        if (ev.error === 'not-allowed') {
+          setSpeechHint(
+            'Microphone permission denied. Allow microphone access for this site, then try again.',
+          );
+        } else if (ev.error === 'audio-capture') {
+          setSpeechHint('No microphone found or it is busy in another app.');
+        } else {
+          setSpeechHint(`Voice input paused (${ev.error}). You can keep typing.`);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[RegGuard speech] onerror handler failed', msg);
+      } finally {
         listeningRef.current = false;
-        setSpeechHint('Could not start the microphone. Confirm permissions and try again.');
         setDictationActive(false);
+        setDictationBusy(false);
+        setMicProcessing(false);
+      }
+    };
+
+    rec.onend = () => {
+      try {
+        if (!listeningRef.current) {
+          return;
+        }
+        try {
+          recognitionRef.current?.start();
+        } catch {
+          listeningRef.current = false;
+          setDictationActive(false);
+        }
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        console.error('[RegGuard speech] onend failed', msg);
+      } finally {
+        if (!listeningRef.current) {
+          setDictationActive(false);
+          setDictationBusy(false);
+        }
+      }
+    };
+
+    recognitionRef.current = rec;
+    return () => {
+      try {
+        listeningRef.current = false;
+        clearDictationSilenceTimer(dictationSilenceTimerRef);
+        stopRecognitionSafe(rec);
+      } catch {
+        /* noop */
+      } finally {
+        recognitionRef.current = null;
+        setDictationActive(false);
+        setDictationBusy(false);
+        setMicProcessing(false);
+      }
+    };
+  }, [speechCtor]);
+
+  const toggleDictation = useCallback(() => {
+    if (dictationBusy) {
+      return;
+    }
+
+    if (!speechCtor) {
+      setSpeechHint('Voice dictation is not supported in this browser. Try Chrome or Edge.');
+      setDictationActive(false);
+      setMicProcessing(false);
+      return;
+    }
+    const rec = recognitionRef.current;
+    if (!rec) {
+      setSpeechHint('Speech engine is not ready yet. Reload the page and try again.');
+      setDictationActive(false);
+      setMicProcessing(false);
+      return;
+    }
+
+    if (listeningRef.current) {
+      setDictationBusy(true);
+      try {
+        clearDictationSilenceTimer(dictationSilenceTimerRef);
+        listeningRef.current = false;
+        stopRecognitionSafe(rec);
+        setSpeechHint(null);
+      } catch (e) {
+        const msg = e instanceof Error ? e.message : String(e);
+        toast.error(msg || 'Could not stop voice dictation.');
+      } finally {
+        setDictationActive(false);
+        setDictationBusy(false);
+        setMicProcessing(false);
+      }
+      return;
+    }
+
+    setDictationBusy(true);
+    setMicProcessing(false);
+    setSpeechHint(null);
+    void (async () => {
+      try {
+        try {
+          await warmMicrophonePermission();
+        } catch {
+          setSpeechHint(
+            'Microphone warmup was blocked—you may still get a browser prompt; choose Allow to dictate.',
+          );
+        }
+
+        dictationAnchorRef.current = jobDescription;
+        dictationFinalAccumRef.current = '';
+        listeningRef.current = true;
+
+        try {
+          rec.continuous = true;
+          rec.interimResults = true;
+          rec.lang = 'en-US';
+          rec.start();
+          setDictationActive(true);
+          scheduleDictationSilenceStop({
+            timerRef: dictationSilenceTimerRef,
+            silenceMs: DICTATION_SILENCE_MS,
+            isListening: () => listeningRef.current,
+            stopRecognition: () => {
+              listeningRef.current = false;
+              stopRecognitionSafe(recognitionRef.current);
+            },
+            onSilenceStop: () => {
+              setDictationActive(false);
+              setMicProcessing(true);
+              setSpeechHint('Processing…');
+            },
+          });
+        } catch (startErr) {
+          listeningRef.current = false;
+          const msg =
+            startErr instanceof Error ? startErr.message : String(startErr);
+          setSpeechHint(
+            msg.trim()
+              ? `Could not start the microphone: ${msg}`
+              : 'Could not start the microphone. Confirm permissions and try again.',
+          );
+          setDictationActive(false);
+        }
+      } catch (e) {
+        listeningRef.current = false;
+        const msg = e instanceof Error ? e.message : String(e);
+        setSpeechHint(msg || 'Voice dictation failed unexpectedly.');
+        setDictationActive(false);
+        setMicProcessing(false);
+      } finally {
+        setDictationBusy(false);
       }
     })();
-  }, [jobDescription, speechCtor]);
+  }, [dictationBusy, jobDescription, speechCtor]);
 
   const attachAutocomplete = useCallback(() => {
     const input = addressRef.current;
@@ -501,73 +573,90 @@ export default function App() {
   }, []);
 
   const autoDetectLocation = useCallback(() => {
+    if (detecting) {
+      return;
+    }
     if (!navigator.geolocation?.getCurrentPosition) {
       toast.error('Geolocation is not supported by your browser.');
+      setDetecting(false);
       return;
     }
 
     setDetecting(true);
-    navigator.geolocation.getCurrentPosition(
-      async (pos) => {
-        try {
-          const { latitude, longitude } = pos.coords;
-          const q = new URLSearchParams({
-            latitude: String(latitude),
-            longitude: String(longitude),
-          });
-          const res = await fetchWithTimeout(
-            `${getBackendOrigin()}/reverse-geocode-address?${q}`,
-            { cache: 'no-store', timeoutMs: 12_000 },
-          );
-          if (!res.ok) {
-            let detail = `Reverse geocode failed (HTTP ${res.status}).`;
-            try {
-              const body = (await res.json()) as { detail?: string };
-              if (typeof body.detail === 'string' && body.detail.trim()) {
-                detail = body.detail.trim();
+    try {
+      navigator.geolocation.getCurrentPosition(
+        async (pos) => {
+          try {
+            const { latitude, longitude } = pos.coords;
+            const q = new URLSearchParams({
+              latitude: String(latitude),
+              longitude: String(longitude),
+            });
+            const res = await fetchWithTimeout(
+              `${backendUrl('/reverse-geocode-address')}?${q}`,
+              { cache: 'no-store', timeoutMs: 12_000 },
+            );
+            if (!res.ok) {
+              let detail = `Reverse geocode failed (HTTP ${res.status}).`;
+              try {
+                const body = (await res.json()) as { detail?: string };
+                if (typeof body.detail === 'string' && body.detail.trim()) {
+                  detail = body.detail.trim();
+                }
+              } catch {
+                /* non-JSON body */
               }
-            } catch {
-              /* non-JSON body */
+              toast.error(detail);
+              return;
             }
-            toast.error(detail);
-            return;
+            const data = (await res.json()) as {
+              formatted_address?: string;
+              zip?: string;
+              city?: string;
+            };
+            const formatted = (data.formatted_address ?? '').trim();
+            const zip = (data.zip ?? '').trim();
+            if (!formatted || zip.length !== 5) {
+              toast.error('Could not decode your GPS fix into a U.S. street address with ZIP.');
+              return;
+            }
+            setSiteAddress(formatted);
+            setZipCode(zip);
+            if (data.city?.trim()) setClientCity(data.city.trim());
+            toast.success('Location detected from GPS');
+          } catch (e) {
+            const msg = e instanceof Error ? e.message : String(e);
+            toast.error(msg || 'Could not resolve GPS coordinates to an address.');
+          } finally {
+            setDetecting(false);
           }
-          const data = (await res.json()) as {
-            formatted_address?: string;
-            zip?: string;
-            city?: string;
-          };
-          const formatted = (data.formatted_address ?? '').trim();
-          const zip = (data.zip ?? '').trim();
-          if (!formatted || zip.length !== 5) {
-            toast.error('Could not decode your GPS fix into a U.S. street address with ZIP.');
-            return;
+        },
+        (err) => {
+          try {
+            const msg = err.message?.trim()
+              ? `Location unavailable: ${err.message}`
+              : 'Location permission denied or timed out. Allow location access, then try Auto-Detect again.';
+            toast.warning(msg);
+          } catch (handlerErr) {
+            const msg =
+              handlerErr instanceof Error ? handlerErr.message : String(handlerErr);
+            toast.error(msg || 'Geolocation failed unexpectedly.');
+          } finally {
+            setDetecting(false);
           }
-          setSiteAddress(formatted);
-          setZipCode(zip);
-          if (data.city?.trim()) setClientCity(data.city.trim());
-          toast.success('Location detected from GPS');
-        } catch (e) {
-          const msg = e instanceof Error ? e.message : String(e);
-          toast.error(msg || 'Could not resolve GPS coordinates to an address.');
-        } finally {
-          setDetecting(false);
-        }
-      },
-      (err) => {
-        setDetecting(false);
-        const msg = err.message?.trim()
-          ? `Location unavailable: ${err.message}`
-          : 'Location permission denied or timed out. Allow location access, then try Auto-Detect again.';
-        toast.warning(msg);
-      },
-      {
-        enableHighAccuracy: true,
-        timeout: 15_000,
-        maximumAge: 0,
-      },
-    );
-  }, []);
+        },
+        {
+          enableHighAccuracy: true,
+          timeout: 15_000,
+          maximumAge: 0,
+        },
+      );
+    } catch (e) {
+      const msg = e instanceof Error ? e.message : String(e);
+      toast.error(msg || 'Could not start geolocation.');
+      setDetecting(false);
+    }
+  }, [detecting]);
 
   const toggleTrade = (t: TradeToken) => {
     setTrades((prev) => {
@@ -681,7 +770,7 @@ export default function App() {
     };
 
     try {
-      await fetchEventSource('/api/research', {
+      await fetchEventSource(backendUrl('/research'), {
         method: 'POST',
         body: fd,
         signal,
@@ -730,7 +819,7 @@ export default function App() {
       'See Contractor Action Plan — permit fees section.';
     try {
       const res = await axios.post<Blob>(
-        '/api/permit-package',
+        backendUrl('/permit-package'),
         {
           site_address: (c.site_address as string) || siteAddress,
           scope: (jobDescription || 'Electrical / panel scope — see memo.').slice(0, 4000),
@@ -848,28 +937,28 @@ export default function App() {
                 </label>
                 <button
                   type="button"
-                  className={`rg-mic-btn${dictationActive ? ' rg-mic-btn--active' : ''}${voiceMicProcessing ? ' rg-mic-btn--processing' : ''}`}
+                  className={`rg-mic-btn${dictationActive ? ' rg-mic-btn--active' : ''}${micProcessing || dictationBusy ? ' rg-mic-btn--processing' : ''}`}
                   title={
                     dictationActive
                       ? 'Listening (stops after 6s silence)'
-                      : voiceMicProcessing
+                      : micProcessing || dictationBusy
                         ? 'Processing…'
                         : 'Dictate with microphone'
                   }
                   aria-label={
                     dictationActive
                       ? 'Stop voice dictation'
-                      : voiceMicProcessing
+                      : micProcessing || dictationBusy
                         ? 'Voice processing'
                         : 'Start voice dictation'
                   }
                   aria-pressed={dictationActive}
-                  disabled={running || !speechSupported}
+                  disabled={running || !speechSupported || dictationBusy}
                   onClick={() => toggleDictation()}
                 >
                   {dictationActive ? (
                     <span className="rg-mic-pulse" aria-hidden />
-                  ) : voiceMicProcessing ? (
+                  ) : micProcessing || dictationBusy ? (
                     <span style={{ fontSize: '0.75rem', fontWeight: 700, letterSpacing: '0.12em' }} aria-hidden>
                       ⋯
                     </span>
