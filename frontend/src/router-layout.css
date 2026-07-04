@@ -1,0 +1,143 @@
+.router-page {
+  min-height: 100vh;
+  background: #f9fafb;
+}
+
+.dc-page-header {
+  background: white;
+  border-bottom: 1px solid #e5e7eb;
+  padding: 16px 0;
+  sticky top: 0;
+  z-index: 100;
+}
+
+.dc-header-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+}
+
+.dc-logo {
+  font-size: 16px;
+  font-weight: 600;
+  color: #2a5298;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.dc-logo:hover {
+  color: #1e3c72;
+}
+
+.dc-nav {
+  display: flex;
+  gap: 20px;
+}
+
+.dc-nav-link {
+  font-size: 14px;
+  color: #666;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.dc-nav-link:hover {
+  color: #2a5298;
+}
+
+.admin-page-header {
+  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+  padding: 32px 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.admin-header-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+}
+
+.admin-logo {
+  font-size: 14px;
+  font-weight: 600;
+  color: rgba(255, 255, 255, 0.8);
+  text-decoration: none;
+  transition: color 0.2s;
+  white-space: nowrap;
+}
+
+.admin-logo:hover {
+  color: white;
+}
+
+.admin-title h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: white;
+  margin: 0;
+}
+
+.admin-title p {
+  font-size: 14px;
+  color: rgba(255, 255, 255, 0.9);
+  margin: 4px 0 0 0;
+}
+
+.queue-page-header {
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  padding: 16px 0;
+  border-bottom: 1px solid #ddd;
+}
+
+.queue-header-container {
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 0 20px;
+  display: flex;
+  align-items: center;
+  gap: 16px;
+}
+
+.queue-logo {
+  font-size: 14px;
+  font-weight: 600;
+  color: white;
+  text-decoration: none;
+  transition: color 0.2s;
+}
+
+.queue-logo:hover {
+  color: rgba(255, 255, 255, 0.8);
+}
+
+@media (max-width: 768px) {
+  .dc-page-header {
+    padding: 12px 0;
+  }
+
+  .dc-header-container {
+    flex-direction: column;
+    gap: 12px;
+    align-items: flex-start;
+  }
+
+  .admin-page-header {
+    padding: 20px 0;
+  }
+
+  .admin-header-container {
+    flex-direction: column;
+    gap: 16px;
+    align-items: flex-start;
+  }
+
+  .admin-title h1 {
+    font-size: 22px;
+  }
+}

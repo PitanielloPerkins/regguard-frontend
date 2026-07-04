@@ -11,6 +11,10 @@ export default defineConfig({
         rewrite: (path) => path.replace(/^\/api/, ''),
       },
     },
+    strictPort: false,
+  },
+  optimizeDeps: {
+    include: ['react-router-dom'],
   },
   plugins: [
     react(),

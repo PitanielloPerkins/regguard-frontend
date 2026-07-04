@@ -33,13 +33,34 @@ function buildPdfFooterDisclaimer(asOfDate: string): string {
   );
 }
 
+/** Long URLs have no whitespace for splitTextToSize to break on, so they clip the right margin.
+ *  Clamp anything starting with http and longer than 45 chars to a brief domain-based label. */
+const MAX_URL_LEN = 45;
+
+function shortenUrlAnchor(url: string): string {
+  // Drop wrapping/trailing punctuation — slashes, brackets, commas, periods, semicolons — so a
+  // trailing-slash URL (e.g. "https://www.epa.gov/enforcement/") collapses to a clean "[epa.gov]".
+  const clean = url.trim().replace(/[)>\].,;:/]+$/, "");
+  const host = clean
+    .replace(/^https?:\/\//i, "")
+    .split(/[/?#]/)[0]
+    .replace(/^www\./i, "")
+    .replace(/[/.,;:]+$/, "");
+  return `[${host || "link"}]`;
+}
+
 function stripInlineMd(line: string): string {
   let s = line;
   s = s.replace(/\*\*([^*]+)\*\*/g, "$1");
   s = s.replace(/__([^_]+)__/g, "$1");
   s = s.replace(/\*([^*]+)\*/g, "$1");
   s = s.replace(/`([^`]+)`/g, "$1");
-  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, "$1 — $2");
+  // Markdown links: keep the human label; append the raw URL only when short enough to wrap cleanly.
+  s = s.replace(/\[([^\]]+)\]\(([^)]+)\)/g, (_m, label: string, url: string) =>
+    url.length > MAX_URL_LEN ? label : `${label} — ${url}`,
+  );
+  // Bare long URLs: replace the unbreakable string with a width-bounded domain label.
+  s = s.replace(/https?:\/\/\S+/gi, (m) => (m.length > MAX_URL_LEN ? shortenUrlAnchor(m) : m));
   return s;
 }
 
@@ -137,6 +158,38 @@ function isDallasTexas(options: { city?: string | null; siteAddress?: string | n
   return /\bdallas\b/.test(addr) && /\b(tx|texas)\b/.test(addr);
 }
 
+/**
+ * Extract a short scope label from job description text.
+ * Looks for patterns like "Data Center", "HVAC", "Electrical", "Infrastructure", etc.
+ */
+function extractScopeFromJobDescription(jobDescription?: string | null): string {
+  if (!jobDescription?.trim()) {
+    return "Project Scope";
+  }
+  const text = jobDescription.toLowerCase();
+  
+  // Priority-ordered keywords with normalized labels
+  const scopePatterns: Array<[RegExp, string]> = [
+    [/\bdata\s*center/i, "Data Center"],
+    [/\bbattery\s*(?:storage|energy)/i, "Battery Energy Storage"],
+    [/\bcrypto\s*mining|compute\s*cluster/i, "Compute Infrastructure"],
+    [/\binfrastructure|critical\s*infra/i, "Infrastructure"],
+    [/\bhvac|cooling|climate/i, "HVAC System"],
+    [/\belectrical|electrician|service\s*upgrade/i, "Electrical Service"],
+    [/\bplumbing|water|sewer/i, "Plumbing System"],
+    [/\bstructural|foundation|frame/i, "Structural Work"],
+    [/\brenovat|remodel|retrofit/i, "Renovation"],
+  ];
+  
+  for (const [pattern, label] of scopePatterns) {
+    if (pattern.test(text)) {
+      return label;
+    }
+  }
+  
+  return "Project Scope";
+}
+
 /** Hard-coded field sync — keep in lockstep with ``backend/research_memo.py``. */
 const REG_GUARD_PLANO_PERMIT_TOTAL_USD = "75.00";
 const REG_GUARD_DALLAS_MIN_TRADE_PERMIT_TOTAL_USD = "167.00";
@@ -180,7 +233,8 @@ function findFirstTechnicalSectionIndex(lines: string[]): number {
 }
 
 function markdownForPdfBody(raw: string): string {
-  let text = stripWorkflowTraceSection(raw);
+  // Strip escaped-currency backslashes (\$75.00 -> $75.00) before the jsPDF string-building loop.
+  let text = stripWorkflowTraceSection(raw).replace(/\\\$/g, "$");
   const lines = text.split(/\r?\n/).filter((ln) => !shouldDropPdfLine(ln));
   const start = findFirstTechnicalSectionIndex(lines);
   const bodyLines = start >= 0 ? lines.slice(start) : lines;
@@ -306,6 +360,7 @@ export async function downloadPermitPackagePdf(options: {
   visualAudit: PermitVisionOverlay;
   photoObjectUrl: string | null;
   ahjLabel: string | null;
+  companyName?: string | null;
 }): Promise<void> {
   const [calculations, annotatedPhotoDataUrl] = await Promise.all([
     fetchPermitDraftCalculations(options.jobDescription),
@@ -317,6 +372,8 @@ export async function downloadPermitPackagePdf(options: {
     zip: options.zip,
     city: options.city,
     county: options.county,
+    jobDescription: options.jobDescription,
+    companyName: options.companyName,
     permitPackage: {
       calculations,
       annotatedPhotoDataUrl,
@@ -331,6 +388,8 @@ export function downloadActionPlanPdf(options: {
   zip?: string | null;
   city?: string | null;
   county?: string | null;
+  jobDescription?: string | null;
+  companyName?: string | null;
   permitPackage?: {
     calculations: PermitDraftCalculations;
     annotatedPhotoDataUrl: string | null;
@@ -645,55 +704,13 @@ export function downloadActionPlanPdf(options: {
     y += 6;
   }
 
-  /* ----- Body: balanced two columns for readability (headings full width) ----- */
-  const bodyColGap = 5;
-  const bodyColW = (innerW - bodyColGap) / 2;
-  const bodyX0 = margin;
-  const bodyX1 = margin + bodyColW + bodyColGap;
-  let yCol0 = y;
-  let yCol1 = y;
-
-  const contentBottomY = () => pageH - footerReserve - disclaimerMinReserve;
-
-  const syncBodyY = () => {
-    y = Math.max(yCol0, yCol1);
-  };
-
-  const bodyNewPage = () => {
-    startContinuedPage();
-    yCol0 = y;
-    yCol1 = y;
-  };
-
-  const fullWidthEnsure = (needMm: number) => {
-    syncBodyY();
-    if (y + needMm > contentBottomY()) {
-      bodyNewPage();
+  /* ----- Body: full-width single column layout (no side-by-side columns) ----- */
+  const emitBodyLineFullWidth = (ln: string, lineHeight: number) => {
+    if (y + lineHeight > contentBottomY()) {
+      startContinuedPage();
     }
-  };
-
-  const emitBodyLineBalanced = (ln: string, lineHeight: number) => {
-    let col: 0 | 1 = yCol0 <= yCol1 ? 0 : 1;
-    let cy = col === 0 ? yCol0 : yCol1;
-    if (cy + lineHeight > contentBottomY()) {
-      const alt: 0 | 1 = col === 0 ? 1 : 0;
-      const ay = alt === 0 ? yCol0 : yCol1;
-      if (ay + lineHeight <= contentBottomY()) {
-        col = alt;
-        cy = ay;
-      } else {
-        bodyNewPage();
-        col = 0;
-        cy = yCol0;
-      }
-    }
-    const x = col === 0 ? bodyX0 : bodyX1;
-    pdf.text(ln, x, cy);
-    if (col === 0) {
-      yCol0 = cy + lineHeight;
-    } else {
-      yCol1 = cy + lineHeight;
-    }
+    pdf.text(ln, margin, y);
+    y += lineHeight;
   };
 
   const rawLines = trimmed.split(/\r?\n/);
@@ -702,37 +719,34 @@ export function downloadActionPlanPdf(options: {
     const t = line.trim();
 
     if (t === "---" || t === "***") {
-      fullWidthEnsure(10);
-      syncBodyY();
+      if (y + 10 > contentBottomY()) {
+        startContinuedPage();
+      }
       y += 2;
       pdf.setDrawColor(210, 215, 222);
       pdf.setLineWidth(0.2);
       pdf.line(margin, y, pageW - margin, y);
       y += 5;
-      yCol0 = yCol1 = y;
       continue;
     }
 
     if (!t) {
       const g = 2.8;
-      yCol0 += g;
-      yCol1 += g;
-      syncBodyY();
+      y += g;
       continue;
     }
 
     if (t.startsWith("# ") && !t.startsWith("##")) {
-      fullWidthEnsure(10);
-      syncBodyY();
-      y = Math.max(yCol0, yCol1);
+      if (y + 10 > contentBottomY()) {
+        startContinuedPage();
+      }
       pdf.setFont(PDF_SANS, "bold");
       pdf.setFontSize(15);
       pdf.setTextColor(...RG_NAVY);
       const lines2 = pdf.splitTextToSize(stripInlineMd(t.slice(2)), innerW);
       for (const ln of lines2) {
         if (y + 7 > contentBottomY()) {
-          bodyNewPage();
-          y = Math.max(yCol0, yCol1);
+          startContinuedPage();
         }
         pdf.text(ln, margin, y);
         y += 7;
@@ -740,22 +754,20 @@ export function downloadActionPlanPdf(options: {
       pdf.setFont(PDF_SANS, "normal");
       pdf.setTextColor(...RG_BODY_TEXT);
       y += 1.2;
-      yCol0 = yCol1 = y;
       continue;
     }
 
     if (t.startsWith("## ") && !t.startsWith("###")) {
-      fullWidthEnsure(8);
-      syncBodyY();
-      y = Math.max(yCol0, yCol1);
+      if (y + 8 > contentBottomY()) {
+        startContinuedPage();
+      }
       pdf.setFont(PDF_SANS, "bold");
       pdf.setFontSize(12.5);
       pdf.setTextColor(...RG_NAVY);
       const lines2 = pdf.splitTextToSize(stripInlineMd(t.slice(3)), innerW);
       for (const ln of lines2) {
         if (y + 5.8 > contentBottomY()) {
-          bodyNewPage();
-          y = Math.max(yCol0, yCol1);
+          startContinuedPage();
         }
         pdf.text(ln, margin, y);
         y += 5.8;
@@ -763,22 +775,20 @@ export function downloadActionPlanPdf(options: {
       pdf.setFont(PDF_SANS, "normal");
       pdf.setTextColor(...RG_BODY_TEXT);
       y += 1.5;
-      yCol0 = yCol1 = y;
       continue;
     }
 
     if (t.startsWith("### ")) {
-      fullWidthEnsure(7);
-      syncBodyY();
-      y = Math.max(yCol0, yCol1);
+      if (y + 7 > contentBottomY()) {
+        startContinuedPage();
+      }
       pdf.setFont(PDF_SANS, "bold");
       pdf.setFontSize(10.6);
       pdf.setTextColor(55, 65, 80);
       const lines2 = pdf.splitTextToSize(stripInlineMd(t.slice(4)), innerW);
       for (const ln of lines2) {
         if (y + 5.2 > contentBottomY()) {
-          bodyNewPage();
-          y = Math.max(yCol0, yCol1);
+          startContinuedPage();
         }
         pdf.text(ln, margin, y);
         y += 5.2;
@@ -786,7 +796,6 @@ export function downloadActionPlanPdf(options: {
       pdf.setFont(PDF_SANS, "normal");
       pdf.setTextColor(...RG_BODY_TEXT);
       y += 1;
-      yCol0 = yCol1 = y;
       continue;
     }
 
@@ -794,15 +803,16 @@ export function downloadActionPlanPdf(options: {
     pdf.setFontSize(9.5);
     pdf.setTextColor(...RG_BODY_TEXT);
     const plain = stripInlineMd(t);
-    const wrapped = pdf.splitTextToSize(plain, bodyColW);
+    const wrapped = pdf.splitTextToSize(plain, innerW);
     const lineHeight = 4.55;
     for (const ln of wrapped) {
-      emitBodyLineBalanced(ln, lineHeight);
+      emitBodyLineFullWidth(ln, lineHeight);
     }
   }
 
-  syncBodyY();
-  y = Math.max(yCol0, yCol1);
+  if (y > contentBottomY()) {
+    startContinuedPage();
+  }
 
   if (permitPkg) {
     startContinuedPage();
@@ -817,8 +827,15 @@ export function downloadActionPlanPdf(options: {
     pdf.setFont(PDF_SANS, "normal");
     pdf.setFontSize(8.8);
     pdf.setTextColor(...RG_BODY_TEXT);
-    const ahjLine = `Authority Having Jurisdiction (scout): ${(permitPkg.ahjLabel || "").trim() || "_______________________________"}`;
-    for (const ln of pdf.splitTextToSize(ahjLine, innerW)) {
+    
+    // Dynamic permit package header: "Permit Package for [Scope] at [Address], presented by [Company Name]"
+    const scope = extractScopeFromJobDescription(options.jobDescription);
+    const displayAddress = (options.siteAddress || "").trim() || 
+      ((options.city ? `${options.city}${options.zip ? `, ${options.zip}` : ""}` : options.zip) || "Site Address");
+    const displayCompany = (options.companyName || "").trim() || "Bondale Contractors Inc";
+    const permitPackageHeader = `Permit Package for ${scope} at ${displayAddress}, presented by ${displayCompany}`;
+    
+    for (const ln of pdf.splitTextToSize(permitPackageHeader, innerW)) {
       pdf.text(ln, margin, wy);
       wy += 4.2;
     }

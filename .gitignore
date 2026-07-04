@@ -9,3 +9,7 @@ api_usage_log.jsonl
 .cursor/vite-dev.log
 frontend/.npm-cache/
 .vercel
+*.egg-info/
+dist/
+build/
+.DS_Store

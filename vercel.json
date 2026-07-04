@@ -1,44 +1,29 @@
 {
-  "$schema": "https://openapi.vercel.sh/vercel.json",
-  "version": 2,
-  "installCommand": "cd frontend && npm ci",
-  "builds": [
-    {
-      "src": "package.json",
-      "use": "@vercel/static-build",
-      "config": {
-        "distDir": "frontend/dist"
-      }
-    },
-    {
-      "src": "backend/main.py",
-      "use": "@vercel/python",
-      "config": {
-        "includeFiles": "backend/**",
-        "maxLambdaSize": "50mb"
-      }
+  "buildCommand": "cd frontend && npm install && npm run build",
+  "outputDirectory": "frontend/dist",
+  "framework": "vite",
+  "regions": ["sfo1"],
+  "env": {
+    "VITE_BACKEND_ORIGIN": "@vite_backend_origin",
+    "VITE_GOOGLE_MAPS_API_KEY": "@vite_google_maps_api_key"
+  },
+  "functions": {
+    "api/index.py": {
+      "runtime": "python3.10",
+      "maxDuration": 30,
+      "memory": 1024
     }
-  ],
+  },
   "routes": [
     {
       "src": "/api/(.*)",
-      "dest": "backend/main.py"
-    },
-    {
-      "src": "/",
-      "dest": "/frontend/dist/index.html"
-    },
-    {
-      "src": "/assets/(.*)",
-      "dest": "/frontend/dist/assets/$1"
-    },
-    {
-      "src": "/(.*\\.(?:js|css|ico|png|svg|webp|json|webmanifest|txt|map|woff2?))$",
-      "dest": "/frontend/dist/$1"
+      "dest": "/api/index.py",
+      "methods": ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"]
     },
     {
       "src": "/(.*)",
-      "dest": "/frontend/dist/index.html"
+      "dest": "/index.html",
+      "status": 200
     }
   ]
 }

@@ -1,0 +1,99 @@
+/* ========== Auth Success Page Styles ========== */
+
+.rg-auth-success-container {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  min-height: 100vh;
+  background: linear-gradient(135deg, #0d1b2a 0%, #1a2f47 100%);
+  padding: 20px;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Helvetica Neue', Arial, sans-serif;
+}
+
+.rg-auth-success-card {
+  background: #ffffff;
+  border-radius: 16px;
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
+  padding: 48px 40px;
+  max-width: 400px;
+  width: 100%;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 20px;
+}
+
+.rg-auth-spinner {
+  color: #a8c5e8;
+  animation: rgspin 1s linear infinite;
+}
+
+.rg-auth-check-icon {
+  color: #10b981;
+}
+
+.rg-auth-error-icon {
+  font-size: 48px;
+  font-weight: 700;
+  color: #ef4444;
+  width: 48px;
+  height: 48px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.rg-auth-success-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #0d1b2a;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.rg-auth-error-title {
+  font-size: 24px;
+  font-weight: 700;
+  color: #991b1b;
+  margin: 0;
+  line-height: 1.3;
+}
+
+.rg-auth-success-message {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.rg-auth-error-message {
+  font-size: 14px;
+  color: #7f1d1d;
+  margin: 0;
+  line-height: 1.5;
+}
+
+.rg-auth-retry-btn {
+  padding: 10px 20px;
+  background: #ef4444;
+  color: #ffffff;
+  font-size: 14px;
+  font-weight: 600;
+  border: none;
+  border-radius: 8px;
+  cursor: pointer;
+  transition: background 0.2s, transform 0.2s;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+  margin-top: 8px;
+}
+
+.rg-auth-retry-btn:hover {
+  background: #dc2626;
+  transform: translateY(-2px);
+}
+
+.rg-auth-retry-btn:active {
+  transform: translateY(0);
+}

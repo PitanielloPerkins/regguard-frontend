@@ -1276,7 +1276,8 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
 
 .rg-summary--md a {
   color: var(--rg-link);
-  word-break: break-all;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .rg-summary--md hr {
@@ -1323,7 +1324,8 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
 
 .rg-sources li {
   margin: 0.35rem 0;
-  word-break: break-all;
+  word-break: normal;
+  overflow-wrap: break-word;
 }
 
 .vision-snippet {
@@ -1748,3 +1750,4 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   opacity: 0.45;
   cursor: not-allowed;
 }
+

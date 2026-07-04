@@ -1,7 +1,7 @@
 import { createRoot } from 'react-dom/client';
 
-import App from './App';
+import { AppRouter } from './AppRouter';
 
 import 'react-toastify/dist/ReactToastify.css';
 
-createRoot(document.getElementById('root')!).render(<App />);
+createRoot(document.getElementById('root')!).render(<AppRouter />);
