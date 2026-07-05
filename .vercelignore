@@ -12,7 +12,7 @@ README.md
 *.md
 
 # Ignore build outputs and caches
-frontend/dist
+# NOTE: Do NOT ignore frontend/dist - Vercel builds it!
 frontend/node_modules
 backend/node_modules
 backend/venv
