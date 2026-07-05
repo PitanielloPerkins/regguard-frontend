@@ -12,4 +12,4 @@ frontend/.npm-cache/
 *.egg-info/
 dist/
 build/
-.DS_Store
+.DS_Storebackend/
