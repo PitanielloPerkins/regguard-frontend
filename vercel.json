@@ -3,13 +3,6 @@
   "outputDirectory": "frontend/dist",
   "framework": "vite",
   "regions": ["sfo1"],
-  "functions": {
-    "api/index.py": {
-      "runtime": "python3.10",
-      "maxDuration": 30,
-      "memory": 1024
-    }
-  },
   "routes": [
     {
       "src": "/api/(.*)",
