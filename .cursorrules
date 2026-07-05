@@ -8,3 +8,4 @@ This workspace is the **Reg Guard** project: an agentic compliance assistant for
 **Dev servers:** Right after a Cursor window reload or when the workspace is first opened, proactively **suggest** (or offer to run) `npm run dev` from the **repository root** so both servers start (`start.sh` clears ports 8000/5173, then launches backend and Vite). Assume the stack may be down until that runs. Vite is configured with `strictPort: false` so a busy 5173 does not hard-fail the dev server.
 
 Match existing code style, keep changes focused, and prefer extending existing patterns over one-off abstractions.
+
