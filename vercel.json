@@ -3,6 +3,11 @@
   "outputDirectory": "frontend/dist",
   "framework": "vite",
   "regions": ["sfo1"],
+  "functions": {
+    "api/*.py": {
+      "runtime": "python3.11"
+    }
+  },
   "routes": [
     {
       "src": "/api/(.*)",
