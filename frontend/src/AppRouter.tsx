@@ -11,6 +11,7 @@ import { backendUrl } from './env';
 import './router-layout.css';
 
 export function AppRouter() {
+  console.log('✅ AppRouter rendering');
   return (
     <Router>
       <Routes>
