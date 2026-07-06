@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd frontend && npm ci && npm run build && echo 'VERCEL_FORCE_REBUILD=1'",
+  "buildCommand": "cd frontend && npm ci && npm run build",
   "outputDirectory": "frontend/dist",
   "routes": [
     {
@@ -9,5 +9,3 @@
     }
   ]
 }
-# New Vercel project deployment - 1783297961
-# Deploy trigger - 1783298682
