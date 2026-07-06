@@ -1,5 +1,5 @@
 {
-  "buildCommand": "cd frontend && npm ci && npm run build",
+  "buildCommand": "cd frontend && npm ci && npm run build && echo 'VERCEL_FORCE_REBUILD=1'",
   "outputDirectory": "frontend/dist",
   "routes": [
     {
@@ -9,4 +9,3 @@
     }
   ]
 }
-# Force rebuild - 1783297583
