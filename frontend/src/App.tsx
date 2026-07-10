@@ -457,7 +457,7 @@ function styles(): string {
     .rg-bim-dropzone { display: block; cursor: pointer; margin-top: 8px; padding: 18px 14px;
       border: 2px dashed #222e50; background-color: #111a36; text-align: center; border-radius: 12px;
       color: var(--muted); transition: border-color 0.15s ease, color 0.15s ease, background-color 0.15s ease; }
-    .rg-bim-dropzone:hover { border-color: rgba(56,189,248,0.6); color: var(--text); background-color: #14203f; }
+    .rg-bim-dropzone:hover { border-color: #3d4f8f; color: var(--text); background-color: #f0f4ff; }
     .rg-bim-dropzone-text { font-size: 0.82rem; line-height: 1.4; overflow-wrap: break-word; }
     .rg-addr-reminder { margin-top: 8px; padding: 10px 12px; border-radius: 10px; font-size: 0.8rem;
       line-height: 1.4; border: 1px solid rgba(245,158,11,0.45); background: rgba(245,158,11,0.12);
@@ -466,9 +466,9 @@ function styles(): string {
     .rg-chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .rg-chip { cursor: pointer; user-select: none; border-radius: 999px; padding: 8px 10px; font-size: 0.78rem;
       border: 1px solid var(--stroke); color: var(--muted); background: rgba(7,10,16,0.45); }
-    .rg-chip.on { border-color: rgba(56,189,248,0.5); color: var(--text); background: rgba(56,189,248,0.12); }
+    .rg-chip.on { border-color: #3d4f8f; color: var(--text); background: #dfe5fa; }
     .rg-actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
-    .rg-btn { border: 1px solid rgba(56,189,248,0.45); background: linear-gradient(180deg, rgba(56,189,248,0.22), rgba(56,189,248,0.08));
+    .rg-btn { border: 1px solid #3d4f8f; background: linear-gradient(180deg, #5a6bb8, #e0e7ff);
       color: var(--text); padding: 10px 14px; border-radius: 12px; cursor: pointer; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; }
     .rg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
     @keyframes rgspin { to { transform: rotate(360deg); } }
@@ -596,9 +596,9 @@ function styles(): string {
       color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
       transition: border-color 0.15s, color 0.15s, background 0.15s;
     }
-    .rg-mic-btn:not(:disabled):hover { border-color: rgba(56,189,248,0.45); color: var(--accent); background: rgba(56,189,248,0.1); }
+    .rg-mic-btn:not(:disabled):hover { border-color: #3d4f8f; color: var(--accent); background: #e0e7ff; }
     .rg-mic-btn:disabled { opacity: 0.4; cursor: not-allowed; }
-    .rg-mic-btn--active { border-color: rgba(56,189,248,0.55); color: var(--accent); background: rgba(56,189,248,0.14); }
+    .rg-mic-btn--active { border-color: #3d4f8f; color: var(--accent); background: #d4ddf8; }
     .rg-mic-btn--processing { border-color: var(--stroke); color: var(--accent); }
     .rg-mic-pulse {
       width: 10px; height: 10px; border-radius: 50%; background: var(--bad);
@@ -609,7 +609,7 @@ function styles(): string {
       50% { opacity: 1; transform: scale(1.08); }
     }
     .rg-ta--dictating {
-      box-shadow: inset 0 0 0 1px rgba(56,189,248,0.45), 0 0 0 3px rgba(56,189,248,0.12);
+      box-shadow: inset 0 0 0 1px #3d4f8f, 0 0 0 3px #dfe5fa;
     }
     .rg-speech-hint { font-size: 0.78rem; color: var(--bad); margin: 0 0 6px; }
 
@@ -1807,7 +1807,7 @@ export default function App() {
       <div className="rg-shell" data-version="2.0.1-red-alert">
         <header className="rg-header">
           <div className="rg-brand">
-            <Shield size={18} color="#38bdf8" />
+            <Shield size={18} color="#3d4f8f" />
             <div>
               <div className="rg-title">Reg Guard Agent</div>
               <div className="rg-sub">
@@ -2074,7 +2074,7 @@ export default function App() {
                 {/* Row 1 — Premium metrics */}
                 <div className="rg-metrics-grid">
                   <div className="rg-metric-card">
-                    <span className="rg-metric-label" style={{ color: '#38bdf8' }}>
+                    <span className="rg-metric-label" style={{ color: '#3d4f8f' }}>
                       <DollarSign size={12} /> Research Value
                     </span>
                     <span className="rg-metric-value rg-metric-value--green">
@@ -2145,7 +2145,7 @@ export default function App() {
                   {streamStatus ? (
                     <div
                       className="rg-small"
-                      style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#38bdf8', marginBottom: 10 }}
+                      style={{ display: 'flex', alignItems: 'center', gap: 8, color: '#3d4f8f', marginBottom: 10 }}
                     >
                       <Loader2 className="spin" size={14} />
                       {streamStatus}
