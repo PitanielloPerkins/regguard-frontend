@@ -363,15 +363,15 @@ function stopRecognitionSafe(rec: any): void {
 function styles(): string {
   return `
     :root {
-      color-scheme: dark;
-      --bg0: #070a10;
-      --bg1: #0c111b;
-      --bg2: #121a28;
-      --stroke: rgba(148, 163, 184, 0.18);
-      --text: #e8eefc;
-      --muted: #94a3b8;
-      --accent: #38bdf8;
-      --accent2: #a78bfa;
+      color-scheme: light;
+      --bg0: #f8fafc;
+      --bg1: #f1f5f9;
+      --bg2: #e2e8f0;
+      --stroke: rgba(61, 79, 143, 0.15);
+      --text: #0f172a;
+      --muted: #6b7280;
+      --accent: #3d4f8f;
+      --accent2: #5a6bb8;
       --good: #4ade80;
       --warn: #fbbf24;
       --bad: #fb7185;
@@ -381,7 +381,7 @@ function styles(): string {
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; overflow-x: hidden; max-width: 100%; }
-    body { font-family: var(--sans); background: radial-gradient(1200px 600px at 20% -10%, rgba(56,189,248,0.14), transparent 55%),
+    body { font-family: var(--sans); background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
       radial-gradient(900px 500px at 90% 0%, rgba(167,139,250,0.12), transparent 50%), var(--bg0); color: var(--text); }
     a { color: var(--accent); word-break: break-word; }
     .rg-text-flow, .rg-md, .rg-step-body, .rg-reason {
@@ -401,7 +401,7 @@ function styles(): string {
     .rg-header {
       padding: 18px 22px;
       border-bottom: 1px solid var(--stroke);
-      background: linear-gradient(180deg, rgba(18,26,40,0.9), rgba(18,26,40,0.55));
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(241, 245, 249, 0.85));
       backdrop-filter: blur(10px);
       display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
     }
@@ -431,7 +431,7 @@ function styles(): string {
       .rg-actions .rg-btn { justify-content: center; width: 100%; }
     }
     .rg-panel {
-      background: linear-gradient(180deg, rgba(18,26,40,0.75), rgba(18,26,40,0.45));
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.85));
       border: 1px solid var(--stroke); border-radius: var(--radius); overflow: hidden;
       width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;
     }
