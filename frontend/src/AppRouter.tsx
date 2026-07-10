@@ -1,4 +1,5 @@
 import { BrowserRouter as Router, Routes, Route, Link, Navigate } from 'react-router-dom';
+import { useState } from 'react';
 import App from './App';
 import { DataCenterRequestForm } from './DataCenterRequestForm';
 import { SalesLeadsDashboard } from './SalesLeadsDashboard';
@@ -7,53 +8,71 @@ import { QueueUploadForm } from './Queue/QueueUploadForm';
 import QueueMonitorDashboard from './Queue/QueueMonitorDashboard';
 import StudyTranslator from './Queue/StudyTranslator';
 import TimelinePredictor from './Queue/TimelinePredictor';
+import { PlatformLayout, PlatformUser } from './PlatformLayout';
+import { PlatformDashboard } from './PlatformDashboard';
+import VoiceCommandSystem from './VoiceCommandSystem';
+import OnboardingSystem from './OnboardingSystem';
 import { backendUrl } from './env';
 import './router-layout.css';
 
 export function AppRouter() {
   console.log('✅ AppRouter rendering');
+  
+  // Simulated user (in production, this comes from auth context)
+  const [user] = useState<PlatformUser>({
+    name: 'Contractor',
+    email: 'contractor@regguard.com',
+    tier: 'pro',
+  });
+
+  const handleLogout = () => {
+    console.log('User logged out');
+  };
+
   return (
     <Router>
-      <Routes>
-        {/* RegGuard Queue Routes (NEW) */}
-        <Route path="/queue" element={<QueueLandingPage />} />
-        <Route path="/queue/upload" element={<QueueUploadPage />} />
-        <Route path="/queue/monitor" element={<QueueMonitorPage />} />
-        <Route path="/queue/translator" element={<TranslatorPage />} />
-        <Route path="/queue/timeline" element={<TimelinePage />} />
+      <PlatformLayout user={user} onLogout={handleLogout}>
+        <OnboardingSystem />
+        <VoiceCommandSystem />
+        
+        <Routes>
+          {/* Home Dashboard */}
+          <Route path="/" element={<PlatformDashboard />} />
 
-        {/* Data Center B2B Routes */}
-        <Route path="/data-center" element={<DataCenterPage />} />
-        <Route path="/admin/leads" element={<AdminLeadsPage />} />
+          {/* RegGuard Queue Routes */}
+          <Route path="/queue" element={<QueueLandingPage />} />
+          <Route path="/queue/upload" element={<QueueUploadPage />} />
+          <Route path="/queue/monitor" element={<QueueMonitorPage />} />
+          <Route path="/queue/translator" element={<TranslatorPage />} />
+          <Route path="/queue/timeline" element={<TimelinePage />} />
 
-        {/* Existing Compliance Routes */}
-        <Route path="/" element={<App />} />
-        <Route path="/dashboard" element={<App />} />
-        <Route path="/auth/success" element={<App />} />
-        <Route path="/signup" element={<App />} />
+          {/* Data Center B2B Routes */}
+          <Route path="/data-center" element={<DataCenterPage />} />
+          <Route path="/admin/leads" element={<AdminLeadsPage />} />
 
-        {/* Fallback */}
-        <Route path="*" element={<Navigate to="/" replace />} />
-      </Routes>
+          {/* Existing Compliance Routes (wrapped in the agent component) */}
+          <Route path="/agent" element={<App />} />
+          <Route path="/dashboard" element={<App />} />
+          <Route path="/auth/success" element={<App />} />
+          <Route path="/signup" element={<App />} />
+
+          {/* Fallback */}
+          <Route path="*" element={<Navigate to="/" replace />} />
+        </Routes>
+      </PlatformLayout>
     </Router>
   );
 }
 
 function DataCenterPage() {
   return (
-    <div className="router-page">
-      <header className="dc-page-header">
-        <div className="dc-header-container">
-          <Link to="/" className="dc-logo">
-            ← Back to RegGuard
-          </Link>
-          <nav className="dc-nav">
-            <a href="mailto:sales@regguard.com?subject=Data%20Center%20Analysis" className="dc-nav-link">
-              Questions?
-            </a>
-          </nav>
+    <div>
+      <div className="page-header">
+        <div className="page-title">
+          <h1>Data Center Permitting Analysis</h1>
+          <p>Get comprehensive risk assessment in minutes</p>
         </div>
-      </header>
+      </div>
       <DataCenterRequestForm />
     </div>
   );
@@ -61,22 +80,13 @@ function DataCenterPage() {
 
 function QueueUploadPage() {
   return (
-    <div className="router-page">
-      <header className="queue-page-header">
-        <div className="queue-header-container">
-          <Link to="/queue" className="queue-logo">
-            ← Back to Queue
-          </Link>
-          <nav className="queue-nav">
-            <a href="https://docs.regguard.io/queue" className="queue-nav-link">
-              Docs
-            </a>
-            <a href="mailto:support@regguard.com" className="queue-nav-link">
-              Support
-            </a>
-          </nav>
+    <div>
+      <div className="page-header">
+        <div className="page-title">
+          <h1>Upload Interconnection Study</h1>
+          <p>Extract key metrics and auto-fill forms</p>
         </div>
-      </header>
+      </div>
       <QueueUploadForm />
     </div>
   );
@@ -84,41 +94,31 @@ function QueueUploadPage() {
 
 function AdminLeadsPage() {
   return (
-    <div className="router-page">
-      <header className="admin-page-header">
-        <div className="admin-header-container">
-          <Link to="/" className="admin-logo">
-            ← Back to RegGuard
-          </Link>
-          <div className="admin-title">
-            <h1>Sales Pipeline</h1>
-            <p>Data Center Analysis Leads</p>
-          </div>
+    <div>
+      <div className="page-header">
+        <div className="page-title">
+          <h1>Sales Pipeline</h1>
+          <p>Data Center Analysis Leads</p>
         </div>
-      </header>
+      </div>
       <SalesLeadsDashboard backendUrl={backendUrl('')} />
     </div>
   );
 }
 
 function QueueLandingPage() {
-  return (
-    <div className="router-page">
-      <QueueLanding />
-    </div>
-  );
+  return <QueueLanding />;
 }
 
 function QueueMonitorPage() {
   return (
-    <div className="router-page">
-      <header className="queue-page-header">
-        <div className="queue-header-container">
-          <Link to="/queue" className="queue-logo">
-            ← Back to Queue
-          </Link>
+    <div>
+      <div className="page-header">
+        <div className="page-title">
+          <h1>Queue Monitor</h1>
+          <p>Track your RTO queue position</p>
         </div>
-      </header>
+      </div>
       <QueueMonitorDashboard />
     </div>
   );
@@ -126,14 +126,13 @@ function QueueMonitorPage() {
 
 function TranslatorPage() {
   return (
-    <div className="router-page">
-      <header className="queue-page-header">
-        <div className="queue-header-container">
-          <Link to="/queue" className="queue-logo">
-            ← Back to Queue
-          </Link>
+    <div>
+      <div className="page-header">
+        <div className="page-title">
+          <h1>Study Translator</h1>
+          <p>Extract interconnection study metrics</p>
         </div>
-      </header>
+      </div>
       <StudyTranslator />
     </div>
   );
@@ -141,14 +140,13 @@ function TranslatorPage() {
 
 function TimelinePage() {
   return (
-    <div className="router-page">
-      <header className="queue-page-header">
-        <div className="queue-header-container">
-          <Link to="/queue" className="queue-logo">
-            ← Back to Queue
-          </Link>
+    <div>
+      <div className="page-header">
+        <div className="page-title">
+          <h1>Timeline Predictor</h1>
+          <p>Estimate your project energization date</p>
         </div>
-      </header>
+      </div>
       <TimelinePredictor />
     </div>
   );

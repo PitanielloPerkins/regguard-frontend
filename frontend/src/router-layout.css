@@ -3,6 +3,36 @@
   background: #f9fafb;
 }
 
+/* ========== PAGE HEADER STYLES ========== */
+
+.page-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding-bottom: 24px;
+  border-bottom: 1px solid #e2e8f0;
+  margin-bottom: 32px;
+}
+
+.page-title {
+  flex: 1;
+}
+
+.page-title h1 {
+  font-size: 28px;
+  font-weight: 700;
+  color: #1e293b;
+  margin: 0 0 8px 0;
+  letter-spacing: -0.5px;
+}
+
+.page-title p {
+  font-size: 14px;
+  color: #64748b;
+  margin: 0;
+  font-weight: 500;
+}
+
 .dc-page-header {
   background: white;
   border-bottom: 1px solid #e5e7eb;
