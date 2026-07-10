@@ -363,13 +363,13 @@ function stopRecognitionSafe(rec: any): void {
 function styles(): string {
   return `
     :root {
-      color-scheme: light;
-      --bg0: #f8fafc;
-      --bg1: #f1f5f9;
-      --bg2: #e2e8f0;
-      --stroke: rgba(61, 79, 143, 0.15);
-      --text: #0f172a;
-      --muted: #6b7280;
+      color-scheme: dark;
+      --bg0: #0a1429;
+      --bg1: #0f1d38;
+      --bg2: #1a2d52;
+      --stroke: rgba(61, 79, 143, 0.4);
+      --text: #e8eef6;
+      --muted: #9ca3b8;
       --accent: #3d4f8f;
       --accent2: #5a6bb8;
       --good: #4ade80;
@@ -381,7 +381,7 @@ function styles(): string {
     }
     * { box-sizing: border-box; }
     html, body { margin: 0; overflow-x: hidden; max-width: 100%; }
-    body { font-family: var(--sans); background: linear-gradient(135deg, #f8fafc 0%, #f1f5f9 100%);
+    body { font-family: var(--sans); background: linear-gradient(135deg, #0a1429 0%, #0f1d38 100%);
       radial-gradient(900px 500px at 90% 0%, rgba(167,139,250,0.12), transparent 50%), var(--bg0); color: var(--text); }
     a { color: var(--accent); word-break: break-word; }
     .rg-text-flow, .rg-md, .rg-step-body, .rg-reason {
@@ -401,14 +401,14 @@ function styles(): string {
     .rg-header {
       padding: 18px 22px;
       border-bottom: 1px solid var(--stroke);
-      background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(240, 245, 255, 0.88));
+      background: linear-gradient(180deg, rgba(15, 29, 56, 0.95), rgba(10, 20, 41, 0.85));
       backdrop-filter: blur(10px);
       display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
     }
     .rg-brand { display: flex; align-items: center; gap: 12px; }
     .rg-title { font-weight: 800; letter-spacing: -0.02em; font-size: 1.05rem; }
     .rg-sub { font-size: 0.85rem; color: var(--muted); }
-    .rg-pill { font-size: 0.72rem; padding: 6px 12px; border-radius: 999px; border: 1px solid var(--stroke);
+    .rg-pill { font-size: 0.72rem; padding: 6px 12px; border-radius: 999px; border: 1px solid #10b981;
       color: var(--muted); display: inline-flex; align-items: center; gap: 6px; background: rgba(2,8,20,0.35); }
     .rg-main {
       flex: 1; display: grid; grid-template-columns: minmax(320px, 420px) minmax(0, 1fr);
@@ -431,7 +431,7 @@ function styles(): string {
       .rg-actions .rg-btn { justify-content: center; width: 100%; }
     }
     .rg-panel {
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(240, 245, 255, 0.92));
+      background: linear-gradient(180deg, rgba(15, 29, 56, 0.95), rgba(10, 20, 41, 0.85));
       border: 1px solid var(--stroke); border-radius: var(--radius); overflow: hidden;
       width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;
     }
@@ -466,9 +466,9 @@ function styles(): string {
     .rg-chips { display: flex; flex-wrap: wrap; gap: 8px; }
     .rg-chip { cursor: pointer; user-select: none; border-radius: 999px; padding: 8px 10px; font-size: 0.78rem;
       border: 1px solid var(--stroke); color: var(--muted); background: rgba(7,10,16,0.45); }
-    .rg-chip.on { border-color: #3d4f8f; color: var(--text); background: #dfe5fa; }
+    .rg-chip.on { border-color: #5a6bb8; color: #ffffff; background: linear-gradient(135deg, #3d4f8f, #5a6bb8); }
     .rg-actions { display: flex; gap: 10px; align-items: center; margin-top: 14px; flex-wrap: wrap; }
-    .rg-btn { border: 1px solid #3d4f8f; background: linear-gradient(180deg, #5a6bb8, #e0e7ff);
+    .rg-btn { border: 2px solid #3d4f8f; background: linear-gradient(180deg, #5a6bb8, #4555a5);
       color: var(--text); padding: 10px 14px; border-radius: 12px; cursor: pointer; font-weight: 700; display: inline-flex; align-items: center; gap: 8px; }
     .rg-btn:disabled { opacity: 0.45; cursor: not-allowed; }
     @keyframes rgspin { to { transform: rotate(360deg); } }
@@ -596,7 +596,7 @@ function styles(): string {
       color: var(--muted); cursor: pointer; display: inline-flex; align-items: center; justify-content: center;
       transition: border-color 0.15s, color 0.15s, background 0.15s;
     }
-    .rg-mic-btn:not(:disabled):hover { border-color: #3d4f8f; color: var(--accent); background: #e0e7ff; }
+    .rg-mic-btn:not(:disabled):hover { border-color: #5a6bb8; color: #ffffff; background: linear-gradient(135deg, #3d4f8f, #5a6bb8); }
     .rg-mic-btn:disabled { opacity: 0.4; cursor: not-allowed; }
     .rg-mic-btn--active { border-color: #3d4f8f; color: var(--accent); background: #d4ddf8; }
     .rg-mic-btn--processing { border-color: var(--stroke); color: var(--accent); }
