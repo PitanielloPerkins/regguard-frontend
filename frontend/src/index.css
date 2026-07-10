@@ -1,63 +1,18 @@
 :root {
-  /* Default palette — overridden by App.css (Professional Trust Suite / Midnight Indigo). */
-  --rg-bg: #040f49;
-  --rg-bg-mid: #071a5c;
-  --rg-surface: #0a1852;
-  --rg-surface-2: #0f2170;
-  --rg-border: #2a3f8f;
-  --rg-text: #e8eaf6;
-  --rg-muted: #9fa8da;
-  --rg-accent: #e8eaf6;
-  --rg-accent-dim: #c5cae9;
-  --rg-accent-strong: #5c6bc0;
-  --rg-link: #8fa2ff;
-  --rg-danger: #ff6b6b;
+  /* RegGuard 2026 — Professional Trust Suite (UPDATED INDIGO) */
+  --rg-bg: #f8fafc;
+  --rg-bg-mid: #f1f5f9;
+  --rg-surface: #ffffff;
+  --rg-surface-2: #f8fafc;
+  --rg-panel-bg: #ffffff;
+  --rg-border: #e2e8f0;
+  --rg-text: #0f172a;
+  --rg-muted: #6b7280;
+  --rg-accent: #3d4f8f;
+  --rg-accent-dim: #5a6bb8;
+  --rg-accent-strong: #2d3f7f;
+  --rg-link: #3d4f8f;
+  --rg-danger: #ef4444;
   --font-ui: "DM Sans", system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;
-}
-
-* {
-  box-sizing: border-box;
-}
-
-html,
-body {
-  margin: 0;
-  min-height: 100%;
-  font-family: var(--font-ui);
-  line-height: 1.5;
-  color: var(--rg-text);
-  background: var(--rg-bg);
-  background-image: linear-gradient(
-    165deg,
-    #040f49 0%,
-    #071a5c 45%,
-    #030a2e 100%
-  );
-}
-
-#root {
-  min-height: 100vh;
-  display: flex;
-  flex-direction: column;
-}
-
-a {
-  color: var(--rg-link);
-}
-a:hover {
-  color: var(--rg-accent);
-}
-
-/* react-toastify — match Reg Guard shell, keep above panels */
-.Toastify__toast-container {
-  z-index: 10050;
-  font-family: var(--font-ui);
-}
-
-.Toastify__toast-theme--dark {
-  background: var(--rg-surface-2);
-  color: var(--rg-text);
-  border: 1px solid var(--rg-border);
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.45);
 }
