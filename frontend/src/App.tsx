@@ -368,8 +368,8 @@ function styles(): string {
       --bg1: #0f1d38;
       --bg2: #1a2d52;
       --stroke: rgba(61, 79, 143, 0.4);
-      --text: #e8eef6;
-      --muted: #9ca3b8;
+      --text: #ffffff;
+      --muted: #b8c1d1;
       --accent: #3d4f8f;
       --accent2: #5a6bb8;
       --good: #4ade80;

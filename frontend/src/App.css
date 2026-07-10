@@ -1797,3 +1797,102 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   color: #3d4f8f;
   border-bottom: 2px solid #e0e7ff;
 }
+
+/* ========== TEXT READABILITY OPTIMIZATION ========== */
+
+/* All text elements - bright white for maximum contrast */
+.rg-title,
+.rg-sub,
+.rg-text,
+p,
+span,
+label {
+  color: #ffffff;
+  font-weight: 500;
+  letter-spacing: 0.2px;
+}
+
+/* Headers and headings */
+.rg-title {
+  color: #ffffff;
+  font-weight: 800;
+  letter-spacing: -0.02em;
+}
+
+.rg-sub {
+  color: #b8c1d1;
+  font-weight: 500;
+}
+
+/* Pill text */
+.rg-pill {
+  color: #ffffff;
+  font-weight: 600;
+}
+
+/* Panel headers */
+.rg-panel-hd {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* Button text */
+.rg-btn,
+button {
+  color: #ffffff;
+  font-weight: 600;
+  letter-spacing: 0.3px;
+}
+
+/* Input and form text */
+input,
+textarea,
+select {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+input::placeholder,
+textarea::placeholder {
+  color: #9ca3b8;
+}
+
+/* Links - make them stand out */
+a {
+  color: #5a6bb8;
+  text-decoration: none;
+  font-weight: 600;
+  transition: color 0.2s ease;
+}
+
+a:hover {
+  color: #ffffff;
+  text-decoration: underline;
+}
+
+/* Code and mono-space text */
+code,
+pre,
+.mono {
+  color: #b8c1d1;
+  background: rgba(0, 0, 0, 0.3);
+  font-family: var(--mono);
+}
+
+/* Emphasized text */
+strong,
+b {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+em,
+i {
+  color: #e8eef6;
+}
+
+/* Mark/highlight */
+mark {
+  background: rgba(61, 79, 143, 0.3);
+  color: #ffffff;
+}

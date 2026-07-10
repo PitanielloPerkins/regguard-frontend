@@ -21,8 +21,8 @@
   --bg-secondary: #0f1d38;
   --bg-tertiary: #f1f5f9;
   --border-color: rgba(61, 79, 143, 0.4);
-  --text-primary: #e8eef6;
-  --text-secondary: #9ca3b8;
+  --text-primary: #ffffff;
+  --text-secondary: #b8c1d1;
   --text-tertiary: #6b7280;
   --success: #10b981;
   --warning: #f59e0b;
@@ -502,4 +502,85 @@ body {
   .mobile-overlay {
     display: block;
   }
+}
+
+/* ========== READABILITY ENHANCEMENTS ========== */
+
+/* Main text - bright white for maximum readability */
+.platform-layout,
+.platform-sidebar,
+.platform-dashboard {
+  color: #ffffff;
+}
+
+/* Section headers */
+.nav-section-title,
+.sidebar-header,
+h1, h2, h3, h4, h5, h6 {
+  color: #ffffff;
+  font-weight: 700;
+  letter-spacing: -0.01em;
+}
+
+/* Labels and descriptions */
+label,
+.label,
+.description {
+  color: #ffffff;
+  font-weight: 500;
+}
+
+/* Secondary text - still bright but slightly muted */
+.text-secondary,
+.secondary-text,
+p {
+  color: #e8eef6;
+}
+
+/* Links - indigo for contrast */
+a {
+  color: #5a6bb8;
+  font-weight: 600;
+}
+
+a:hover {
+  color: #ffffff;
+}
+
+/* Button text - always white and bold */
+button,
+.button,
+.btn {
+  color: #ffffff !important;
+  font-weight: 600 !important;
+  letter-spacing: 0.3px;
+}
+
+/* Input labels and placeholders */
+input::placeholder,
+textarea::placeholder {
+  color: #b8c1d1;
+  opacity: 1;
+}
+
+input,
+textarea,
+select {
+  color: #ffffff;
+}
+
+/* Card headers and titles */
+.card-title,
+.panel-title,
+.feature-title {
+  color: #ffffff;
+  font-weight: 700;
+}
+
+/* Badge and tag text */
+.badge,
+.tag,
+.chip {
+  color: #ffffff;
+  font-weight: 600;
 }
