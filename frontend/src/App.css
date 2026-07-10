@@ -1751,3 +1751,49 @@ rg-place-autocomplete .rg-address-autocomplete-widget,
   cursor: not-allowed;
 }
 
+/* Make indigo accents more prominent */
+
+.nav-item.active {
+  background-color: #e0e7ff;
+  color: #3d4f8f;
+  font-weight: 700;
+  border-left: 4px solid #3d4f8f;
+  border-radius: 6px;
+}
+
+.rg-btn {
+  background-color: #3d4f8f;
+  color: white;
+  border: 1px solid #3d4f8f;
+}
+
+.rg-btn:hover {
+  background-color: #2d3f7f;
+  border-color: #2d3f7f;
+}
+
+.rg-btn2 {
+  background-color: #5a6bb8;
+  color: white;
+  border: 1px solid #5a6bb8;
+}
+
+.rg-btn2:hover {
+  background-color: #3d4f8f;
+  border-color: #3d4f8f;
+}
+
+.rg-pill {
+  border-color: #3d4f8f;
+  background: rgba(61, 79, 143, 0.08);
+  color: #3d4f8f;
+}
+
+.rg-header {
+  border-bottom: 2px solid #e0e7ff;
+}
+
+.rg-panel-hd {
+  color: #3d4f8f;
+  border-bottom: 2px solid #e0e7ff;
+}

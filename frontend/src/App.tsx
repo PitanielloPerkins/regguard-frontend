@@ -401,7 +401,7 @@ function styles(): string {
     .rg-header {
       padding: 18px 22px;
       border-bottom: 1px solid var(--stroke);
-      background: linear-gradient(180deg, rgba(248, 250, 252, 0.95), rgba(241, 245, 249, 0.85));
+      background: linear-gradient(180deg, rgba(248, 250, 252, 0.98), rgba(240, 245, 255, 0.88));
       backdrop-filter: blur(10px);
       display: flex; align-items: center; justify-content: space-between; gap: 16px; flex-wrap: wrap;
     }
@@ -431,7 +431,7 @@ function styles(): string {
       .rg-actions .rg-btn { justify-content: center; width: 100%; }
     }
     .rg-panel {
-      background: linear-gradient(180deg, rgba(255, 255, 255, 0.95), rgba(248, 250, 252, 0.85));
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.98), rgba(240, 245, 255, 0.92));
       border: 1px solid var(--stroke); border-radius: var(--radius); overflow: hidden;
       width: 100%; max-width: 100%; min-width: 0; box-sizing: border-box;
     }
