@@ -1,13 +1,13 @@
 :root {
   /* RegGuard 2026 — Professional Trust Suite (UPDATED INDIGO) */
-  --rg-bg: #f8fafc;
-  --rg-bg-mid: #f1f5f9;
-  --rg-surface: #ffffff;
+  --rg-bg: #0a1429;
+  --rg-bg-mid: #0f1d38;
+  --rg-surface: #0f1d38;
   --rg-surface-2: #f8fafc;
   --rg-panel-bg: #ffffff;
   --rg-border: #e2e8f0;
-  --rg-text: #0f172a;
-  --rg-muted: #6b7280;
+  --rg-text: #e8eef6;
+  --rg-muted: #9ca3b8;
   --rg-accent: #3d4f8f;
   --rg-accent-dim: #5a6bb8;
   --rg-accent-strong: #2d3f7f;

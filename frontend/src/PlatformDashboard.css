@@ -495,3 +495,51 @@
     font-size: 13px;
   }
 }
+/* Add to PlatformDashboard.css - Apply indigo theme to hero and all sections */
+
+.platform-dashboard {
+  background: linear-gradient(135deg, #0a1429 0%, #0f1d38 100%);
+}
+
+.dashboard-hero {
+  background: linear-gradient(135deg, #3d4f8f 0%, #5a6bb8 100%);
+  color: white;
+}
+
+.dashboard-hero h1,
+.dashboard-hero .hero-title {
+  color: white;
+  font-weight: 700;
+}
+
+.dashboard-hero p,
+.dashboard-hero .hero-description {
+  color: rgba(232, 238, 246, 0.9);
+}
+
+.feature-card {
+  background: linear-gradient(180deg, rgba(15, 29, 56, 0.95), rgba(10, 20, 41, 0.85));
+  border: 1px solid rgba(61, 79, 143, 0.4);
+  color: #e8eef6;
+}
+
+.feature-card:hover {
+  border-color: #3d4f8f;
+  background: linear-gradient(180deg, rgba(15, 29, 56, 1), rgba(10, 20, 41, 0.95));
+}
+
+.stat-card {
+  background: linear-gradient(180deg, rgba(15, 29, 56, 0.95), rgba(10, 20, 41, 0.85));
+  border: 1px solid rgba(61, 79, 143, 0.4);
+  color: #e8eef6;
+}
+
+.cta-button {
+  background: linear-gradient(135deg, #3d4f8f, #5a6bb8);
+  color: white;
+  border: none;
+}
+
+.cta-button:hover {
+  background: linear-gradient(135deg, #2d3f7f, #4555a5);
+}

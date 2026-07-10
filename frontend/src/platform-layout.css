@@ -17,12 +17,12 @@
   /* LEGACY MAPPING (for backward compatibility) */
   --primary: #3d4f8f;
   --primary-dark: #2d3f7f;
-  --bg-primary: #ffffff;
-  --bg-secondary: #f8fafc;
+  --bg-primary: #0a1429;
+  --bg-secondary: #0f1d38;
   --bg-tertiary: #f1f5f9;
-  --border-color: #e2e8f0;
-  --text-primary: #0f172a;
-  --text-secondary: #4b5563;
+  --border-color: rgba(61, 79, 143, 0.4);
+  --text-primary: #e8eef6;
+  --text-secondary: #9ca3b8;
   --text-tertiary: #6b7280;
   --success: #10b981;
   --warning: #f59e0b;
