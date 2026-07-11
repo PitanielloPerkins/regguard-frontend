@@ -1,8 +1,8 @@
-/* RegGuard Queue Upload Form Styles */
+/* RegGuard Queue Upload Form Styles - DARK INDIGO THEME */
 
 .queue-upload-form {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0a1429 0%, #0f1d38 100%);
   padding: 40px 20px;
   font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
 }
@@ -10,14 +10,15 @@
 .form-container {
   max-width: 900px;
   margin: 0 auto;
-  background: white;
+  background: rgba(15, 29, 56, 0.95);
   border-radius: 12px;
-  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(61, 79, 143, 0.4);
+  box-shadow: 0 20px 60px rgba(0, 0, 0, 0.3);
   overflow: hidden;
 }
 
 .form-header {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #5a6bb8 0%, #3d4f8f 100%);
   color: white;
   padding: 40px 30px;
   text-align: center;
@@ -32,11 +33,12 @@
 .form-header p {
   font-size: 16px;
   margin: 0;
-  opacity: 0.9;
+  opacity: 0.95;
 }
 
 .upload-form {
   padding: 40px 30px;
+  color: #ffffff;
 }
 
 .form-section {
@@ -46,7 +48,7 @@
 .form-section h3 {
   font-size: 18px;
   margin: 0 0 20px 0;
-  color: #333;
+  color: #ffffff;
   font-weight: 600;
 }
 
@@ -62,15 +64,17 @@
   display: flex;
   align-items: flex-start;
   padding: 15px;
-  border: 2px solid #e0e0e0;
+  border: 1px solid rgba(61, 79, 143, 0.4);
+  background: rgba(15, 29, 56, 0.95);
   border-radius: 8px;
   cursor: pointer;
   transition: all 0.3s ease;
+  color: #ffffff;
 }
 
 .form-type-option:hover {
-  border-color: #667eea;
-  background: #f5f7ff;
+  border-color: #5a6bb8;
+  background: rgba(90, 107, 184, 0.2);
 }
 
 .form-type-option input[type='radio'] {
@@ -79,11 +83,11 @@
   cursor: pointer;
   width: 20px;
   height: 20px;
-  accent-color: #667eea;
+  accent-color: #5a6bb8;
 }
 
 .form-type-option input[type='radio']:checked + .option-content {
-  color: #667eea;
+  color: #5a6bb8;
   font-weight: 600;
 }
 
@@ -93,13 +97,13 @@
 
 .option-label {
   font-weight: 600;
-  color: #333;
+  color: #ffffff;
   margin-bottom: 5px;
 }
 
 .option-description {
   font-size: 12px;
-  color: #999;
+  color: #6b7280;
 }
 
 /* Upload Mode Toggle */

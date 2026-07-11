@@ -1,17 +1,17 @@
 :root {
-  /* RegGuard 2026 — Professional Trust Suite (UPDATED INDIGO) */
+  /* RegGuard 2026 — Professional Trust Suite (DARK INDIGO THEME) */
   --rg-bg: #0a1429;
   --rg-bg-mid: #0f1d38;
-  --rg-surface: #0f1d38;
-  --rg-surface-2: #f8fafc;
-  --rg-panel-bg: #ffffff;
-  --rg-border: #e2e8f0;
+  --rg-surface: rgba(15, 29, 56, 0.95);
+  --rg-surface-2: rgba(10, 20, 41, 0.85);
+  --rg-panel-bg: rgba(15, 29, 56, 0.95);
+  --rg-border: rgba(61, 79, 143, 0.4);
   --rg-text: #ffffff;
   --rg-muted: #b8c1d1;
-  --rg-accent: #3d4f8f;
-  --rg-accent-dim: #5a6bb8;
-  --rg-accent-strong: #2d3f7f;
-  --rg-link: #3d4f8f;
+  --rg-accent: #5a6bb8;
+  --rg-accent-dim: #3d4f8f;
+  --rg-accent-strong: #7a8dcd;
+  --rg-link: #5a6bb8;
   --rg-danger: #ef4444;
   --font-ui: "DM Sans", system-ui, -apple-system, sans-serif;
   --font-mono: ui-monospace, "Cascadia Code", "SF Mono", Consolas, monospace;

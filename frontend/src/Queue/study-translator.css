@@ -1,6 +1,6 @@
 .study-translator {
   min-height: 100vh;
-  background: linear-gradient(135deg, #1e3c72 0%, #2a5298 100%);
+  background: linear-gradient(135deg, #0a1429 0%, #0f1d38 100%);
   padding: 40px 20px;
 }
 
@@ -10,17 +10,17 @@
 }
 
 .study-translator h1 {
-  color: white;
+  color: #ffffff;
   font-size: 2.5rem;
   margin-bottom: 10px;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .subtitle {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.95);
   font-size: 1.1rem;
   margin-bottom: 40px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.2);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 .translator-content {
@@ -31,14 +31,15 @@
 
 /* Upload Section */
 .upload-section {
-  background: white;
+  background: rgba(15, 29, 56, 0.95);
   border-radius: 12px;
   padding: 30px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.15);
+  border: 1px solid rgba(61, 79, 143, 0.4);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
 }
 
 .upload-section h2 {
-  color: #333;
+  color: #ffffff;
   margin-bottom: 25px;
   font-size: 1.5rem;
 }
@@ -55,7 +56,7 @@
 }
 
 .form-group label {
-  color: #333;
+  color: #ffffff;
   font-weight: 600;
   margin-bottom: 8px;
   font-size: 0.95rem;
@@ -64,7 +65,9 @@
 .form-group input,
 .form-group select {
   padding: 12px 15px;
-  border: 2px solid #e0e0e0;
+  border: 1px solid rgba(61, 79, 143, 0.4);
+  background: rgba(15, 29, 56, 0.95);
+  color: #ffffff;
   border-radius: 8px;
   font-size: 1rem;
   font-family: inherit;
@@ -74,8 +77,9 @@
 .form-group input:focus,
 .form-group select:focus {
   outline: none;
-  border-color: #2a5298;
-  box-shadow: 0 0 0 3px rgba(42, 82, 152, 0.1);
+  border-color: #5a6bb8;
+  box-shadow: 0 0 0 3px rgba(90, 107, 184, 0.2);
+  background: rgba(90, 107, 184, 0.1);
 }
 
 .file-upload-group {

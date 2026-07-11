@@ -1,6 +1,6 @@
 .queue-monitor-dashboard {
   min-height: 100vh;
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #0a1429 0%, #0f1d38 100%);
   padding: 40px 20px;
 }
 
@@ -10,30 +10,31 @@
 }
 
 .queue-monitor-dashboard h1 {
-  color: white;
+  color: #ffffff;
   font-size: 2.5rem;
   margin-bottom: 10px;
-  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  text-shadow: 0 2px 4px rgba(0, 0, 0, 0.3);
 }
 
 .subtitle {
-  color: rgba(255, 255, 255, 0.9);
+  color: rgba(255, 255, 255, 0.95);
   font-size: 1.1rem;
   margin-bottom: 40px;
-  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.1);
+  text-shadow: 0 1px 2px rgba(0, 0, 0, 0.3);
 }
 
 /* Add Project Section */
 .add-project-section {
-  background: white;
+  background: rgba(15, 29, 56, 0.95);
   border-radius: 12px;
   padding: 30px;
   margin-bottom: 40px;
-  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.1);
+  border: 1px solid rgba(61, 79, 143, 0.4);
+  box-shadow: 0 10px 40px rgba(0, 0, 0, 0.3);
 }
 
 .add-project-section h2 {
-  color: #333;
+  color: #ffffff;
   margin-bottom: 20px;
   font-size: 1.5rem;
 }
@@ -56,7 +57,7 @@
 }
 
 .form-group label {
-  color: #333;
+  color: #ffffff;
   font-weight: 600;
   margin-bottom: 8px;
   font-size: 0.95rem;
@@ -65,7 +66,9 @@
 .form-group input,
 .form-group select {
   padding: 12px 15px;
-  border: 2px solid #e0e0e0;
+  border: 1px solid rgba(61, 79, 143, 0.4);
+  background: rgba(15, 29, 56, 0.95);
+  color: #ffffff;
   border-radius: 8px;
   font-size: 1rem;
   transition: border-color 0.3s ease;
@@ -75,12 +78,13 @@
 .form-group input:focus,
 .form-group select:focus {
   outline: none;
-  border-color: #667eea;
-  box-shadow: 0 0 0 3px rgba(102, 126, 234, 0.1);
+  border-color: #5a6bb8;
+  box-shadow: 0 0 0 3px rgba(90, 107, 184, 0.2);
+  background: rgba(90, 107, 184, 0.1);
 }
 
 .btn-primary {
-  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  background: linear-gradient(135deg, #5a6bb8 0%, #3d4f8f 100%);
   color: white;
   border: none;
   padding: 12px 30px;
@@ -94,7 +98,7 @@
 
 .btn-primary:hover:not(:disabled) {
   transform: translateY(-2px);
-  box-shadow: 0 8px 20px rgba(102, 126, 234, 0.3);
+  box-shadow: 0 8px 20px rgba(90, 107, 184, 0.4);
 }
 
 .btn-primary:disabled {
