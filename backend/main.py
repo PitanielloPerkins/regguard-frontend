@@ -943,6 +943,43 @@ def health() -> Dict[str, Any]:
     return {"ok": True, "service": "reg-guard-api"}
 
 
+@app.get("/debug/routes")
+def debug_routes() -> Dict[str, Any]:
+    """Debug endpoint: List all registered routes (REMOVE IN PRODUCTION)."""
+    routes = []
+    for route in app.routes:
+        if hasattr(route, 'path') and hasattr(route, 'methods'):
+            routes.append({
+                "path": route.path,
+                "methods": list(route.methods) if route.methods else ["GET"]
+            })
+    return {
+        "total_routes": len(routes),
+        "routes": sorted(routes, key=lambda x: x["path"]),
+        "environment": {
+            "vercel": bool(os.getenv("VERCEL")),
+            "render": bool(os.getenv("RENDER")),
+            "python_version": sys.version.split()[0],
+        }
+    }
+
+
+@app.get("/debug/config")
+def debug_config() -> Dict[str, Any]:
+    """Debug endpoint: Check environment & startup state."""
+    return {
+        "app_instance": str(type(app).__name__),
+        "has_research_route": any("/research" in str(r) for r in app.routes),
+        "has_payment_route": any("/auth" in str(r) for r in app.routes),
+        "environment_vars_loaded": {
+            "firecrawl": bool(os.getenv("FIRECRAWL_API_KEY")),
+            "stripe_secret": bool(os.getenv("STRIPE_SECRET_KEY")),
+            "google_maps": bool(os.getenv("GOOGLE_MAPS_API_KEY")),
+            "supabase": bool(os.getenv("SUPABASE_URL")),
+        }
+    }
+
+
 # ========== Authentication & Payment Gates ==========
 
 @app.post("/auth/create-checkout-session")
