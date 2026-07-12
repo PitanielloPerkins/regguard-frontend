@@ -16,7 +16,7 @@ import { backendUrl } from './env';
 import './router-layout.css';
 
 export function AppRouter() {
-  console.log('✅ AppRouter rendering');
+  console.log('✅ AppRouter rendering - MergedDashboard v2');
   
   // Simulated user (in production, this comes from auth context)
   const [user] = useState<PlatformUser>({
