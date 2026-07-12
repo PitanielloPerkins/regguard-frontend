@@ -9,7 +9,7 @@ import QueueMonitorDashboard from './Queue/QueueMonitorDashboard';
 import StudyTranslator from './Queue/StudyTranslator';
 import TimelinePredictor from './Queue/TimelinePredictor';
 import { PlatformLayout, PlatformUser } from './PlatformLayout';
-import { PlatformDashboard } from './pages/MergedDashboard';
+import PlatformDashboard from './pages/MergedDashboard';
 import VoiceCommandSystem from './VoiceCommandSystem';
 import OnboardingSystem from './OnboardingSystem';
 import { backendUrl } from './env';
