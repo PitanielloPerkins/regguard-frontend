@@ -63,7 +63,41 @@ export function VoiceCommandSystem() {
   const [isSupported, setIsSupported] = useState(false);
   const [error, setError] = useState('');
   const [commandHistory, setCommandHistory] = useState<string[]>([]);
+  const [persistentMode, setPersistentMode] = useState(false);
   const recognitionRef = useRef<SpeechRecognitionAPI | null>(null);
+  const persistentRef = useRef(false);
+
+  // Fuzzy matching for better command recognition
+  function calculateSimilarity(str1: string, str2: string): number {
+    const longer = str1.length > str2.length ? str1 : str2;
+    const shorter = str1.length > str2.length ? str2 : str1;
+    
+    if (longer.length === 0) return 100;
+    
+    const editDistance = getEditDistance(longer, shorter);
+    return ((longer.length - editDistance) / longer.length) * 100;
+  }
+
+  function getEditDistance(s1: string, s2: string): number {
+    const costs = [];
+    for (let i = 0; i <= s1.length; i++) {
+      let lastValue = i;
+      for (let j = 0; j <= s2.length; j++) {
+        if (i === 0) {
+          costs[j] = j;
+        } else if (j > 0) {
+          let newValue = costs[j - 1];
+          if (s1.charAt(i - 1) !== s2.charAt(j - 1)) {
+            newValue = Math.min(Math.min(newValue, lastValue), costs[j]) + 1;
+          }
+          costs[j - 1] = lastValue;
+          lastValue = newValue;
+        }
+      }
+      if (i > 0) costs[s2.length] = lastValue;
+    }
+    return costs[s2.length];
+  }
 
   // Command definitions (moved before useEffect so they can be used in callbacks)
   const commands: Command[] = [
@@ -138,17 +172,34 @@ export function VoiceCommandSystem() {
   }
 
   function processCommand(transcript: string) {
-    const lowerTranscript = transcript.toLowerCase();
+    const lowerTranscript = transcript.toLowerCase().trim();
     
+    // Track best match
+    let bestMatch: { command: Command; score: number } | null = null;
+
     for (const command of commands) {
-      if (command.keywords.some(keyword => lowerTranscript.includes(keyword))) {
-        setCommandHistory(prev => [...prev, `✅ ${transcript}`]);
-        command.action(transcript);
-        return;
+      for (const keyword of command.keywords) {
+        // Check for exact substring match (highest priority)
+        if (lowerTranscript.includes(keyword)) {
+          if (!bestMatch || bestMatch.score < 100) {
+            bestMatch = { command, score: 100 };
+          }
+        } else {
+          // Fuzzy match (fallback for typos/variations)
+          const similarity = calculateSimilarity(lowerTranscript, keyword);
+          if (similarity > 70 && (!bestMatch || similarity > bestMatch.score)) {
+            bestMatch = { command, score: similarity };
+          }
+        }
       }
     }
 
-    setCommandHistory(prev => [...prev, `❓ "${transcript}" - Command not recognized`]);
+    if (bestMatch && bestMatch.score > 70) {
+      setCommandHistory(prev => [...prev, `✅ "${transcript}" → matched at ${bestMatch.score.toFixed(0)}%`]);
+      bestMatch.command.action(transcript);
+    } else {
+      setCommandHistory(prev => [...prev, `❓ "${transcript}" - Command not recognized`]);
+    }
   }
 
   // Initialize Speech Recognition
@@ -199,6 +250,14 @@ export function VoiceCommandSystem() {
       recognition.onend = () => {
         console.log('🛑 Voice recognition stopped');
         setIsListening(false);
+        
+        // Auto-restart if in persistent mode
+        if (persistentRef.current && recognitionRef.current) {
+          setTimeout(() => {
+            console.log('🔄 Restarting voice recognition (persistent mode)');
+            recognitionRef.current?.start();
+          }, 500);
+        }
       };
     }
 
@@ -214,12 +273,20 @@ export function VoiceCommandSystem() {
     if (!recognitionRef.current) return;
 
     if (isListening) {
+      persistentRef.current = false;
       recognitionRef.current.stop();
     } else {
       setTranscript('');
       setInterimTranscript('');
       recognitionRef.current.start();
     }
+  }
+
+  function togglePersistentMode() {
+    persistentRef.current = !persistentRef.current;
+    setPersistentMode(!persistentMode);
+    const mode = !persistentMode ? 'ON' : 'OFF';
+    setCommandHistory(prev => [...prev, `🔄 Persistent mode: ${mode}`]);
   }
 
   if (!isSupported) {
@@ -251,6 +318,13 @@ export function VoiceCommandSystem() {
           <div className="voice-header">
             <Volume2 size={20} className="listening-icon" />
             <span>Voice Command Active</span>
+            <button
+              onClick={togglePersistentMode}
+              className={`persistent-toggle ${persistentMode ? 'active' : ''}`}
+              title={persistentMode ? 'Persistent mode ON' : 'Persistent mode OFF'}
+            >
+              🔄
+            </button>
           </div>
 
           {/* Real-time transcript */}
