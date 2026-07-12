@@ -12,6 +12,7 @@ import { PlatformLayout, PlatformUser } from './PlatformLayout';
 import { PlatformDashboard } from './PlatformDashboard';
 import VoiceCommandSystem from './VoiceCommandSystem';
 import OnboardingSystem from './OnboardingSystem';
+import { DataCenterHub } from './pages/DataCenterHub';
 import { backendUrl } from './env';
 import './router-layout.css';
 
@@ -32,35 +33,50 @@ export function AppRouter() {
   return (
     <Router>
       <PlatformLayout user={user} onLogout={handleLogout}>
-        <OnboardingSystem />
-        <VoiceCommandSystem />
-        
         <Routes>
-          {/* Home Dashboard */}
-          <Route path="/" element={<PlatformDashboard />} />
+          {/* Landing Page - NO Sidebar/Navigation */}
+          <Route path="/" element={<DataCenterHub />} />
 
-          {/* RegGuard Queue Routes */}
-          <Route path="/queue" element={<QueueLandingPage />} />
-          <Route path="/queue/upload" element={<QueueUploadPage />} />
-          <Route path="/queue/monitor" element={<QueueMonitorPage />} />
-          <Route path="/queue/translator" element={<TranslatorPage />} />
-          <Route path="/queue/timeline" element={<TimelinePage />} />
-
-          {/* Data Center B2B Routes */}
-          <Route path="/data-center" element={<DataCenterPage />} />
-          <Route path="/admin/leads" element={<AdminLeadsPage />} />
-
-          {/* Existing Compliance Routes (wrapped in the agent component) */}
-          <Route path="/agent" element={<App />} />
-          <Route path="/dashboard" element={<App />} />
-          <Route path="/auth/success" element={<App />} />
-          <Route path="/signup" element={<App />} />
-
-          {/* Fallback */}
-          <Route path="*" element={<Navigate to="/" replace />} />
+          {/* All app routes - WITH Sidebar/Navigation */}
+          <Route
+            path="/*"
+            element={
+              <>
+                <OnboardingSystem />
+                <VoiceCommandSystem />
+                <LandingAppRoutes />
+              </>
+            }
+          />
         </Routes>
       </PlatformLayout>
     </Router>
+  );
+}
+
+function LandingAppRoutes() {
+  return (
+    <Routes>
+      {/* Platform Dashboard (post-login) */}
+      <Route path="/app" element={<PlatformDashboard />} />
+
+      {/* RegGuard Queue Routes */}
+      <Route path="/queue" element={<QueueLandingPage />} />
+      <Route path="/queue/upload" element={<QueueUploadPage />} />
+      <Route path="/queue/monitor" element={<QueueMonitorPage />} />
+      <Route path="/queue/translator" element={<TranslatorPage />} />
+      <Route path="/queue/timeline" element={<TimelinePage />} />
+
+      {/* Data Center B2B Routes */}
+      <Route path="/data-center" element={<DataCenterPage />} />
+      <Route path="/admin/leads" element={<AdminLeadsPage />} />
+
+      {/* Existing Compliance Routes */}
+      <Route path="/agent" element={<App />} />
+      <Route path="/dashboard" element={<App />} />
+      <Route path="/auth/success" element={<App />} />
+      <Route path="/signup" element={<App />} />
+    </Routes>
   );
 }
 
