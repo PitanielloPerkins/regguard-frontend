@@ -1,0 +1,12 @@
+{
+  "buildCommand": "cd frontend && npm ci && npm run build",
+  "outputDirectory": "frontend/dist",
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "rewrites": [
+    {
+      "source": "^/(?!assets/).*",
+      "destination": "/index.html"
+    }
+  ]
+}
