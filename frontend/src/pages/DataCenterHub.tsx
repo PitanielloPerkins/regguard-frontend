@@ -130,11 +130,11 @@ export function DataCenterHub() {
             </div>
             
             <h1 className="text-5xl md:text-6xl font-bold text-white leading-tight">
-              Turn <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">Electrical Chaos</span> into <span className="text-green-400">Compliance Wins</span>
+              Cut <span className="text-transparent bg-clip-text bg-gradient-to-r from-indigo-400 via-purple-400 to-pink-400">Through Red Tape</span>
             </h1>
             
             <p className="text-xl text-gray-300 max-w-3xl mx-auto">
-              AI-powered platform that automates interconnection studies, permits, and timelines for 50+ jurisdictions. From feasibility to FERC filing in days instead of months.
+              Interconnection studies that would take 18 months? We do them in 90 days. Auto-generate compliant permits for 50+ jurisdictions. Stop fighting bureaucracy. Let AI handle compliance.
             </p>
 
             <div className="flex flex-col sm:flex-row gap-4 justify-center pt-4">
