@@ -162,7 +162,7 @@ export default function SignupPage() {
         {/* Card */}
         <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/20 rounded-3xl p-8">
           <h1 className="text-3xl font-black text-white mb-2">Start Free Trial</h1>
-          <p className="text-gray-400 mb-8">14 days free. No credit card required after trial.</p>
+          <p className="text-gray-400 mb-8">14 days free. Card required but won't be charged until trial ends.</p>
 
           {error && (
             <div className="mb-6 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">

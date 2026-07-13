@@ -17,8 +17,8 @@ import { backendUrl } from './env';
 import './router-layout.css';
 
 export function AppRouter() {
-  // Force rebuild - v3 with updated DataCenterHub
-  console.log('✅ AppRouter rendering - MergedDashboard v3');
+  // Force rebuild - v4 with all critical UI/UX fixes
+  console.log('✅ AppRouter rendering - Clean landing page, no sidebar on /');
   
   // Simulated user (in production, this comes from auth context)
   const [user] = useState<PlatformUser>({
@@ -59,7 +59,6 @@ export function AppRouter() {
           <Route path="/agent" element={<App />} />
           <Route path="/dashboard" element={<App />} />
           <Route path="/auth/success" element={<App />} />
-          <Route path="/signup" element={<App />} />
 
           {/* Fallback */}
           <Route path="*" element={<Navigate to="/" replace />} />

@@ -97,6 +97,11 @@ export function PlatformLayout({
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
+  // Hide sidebar on public marketing pages for unauthenticated users
+  const isPublicPage = location.pathname === '/';
+  const isAuthenticated = user?.email && user.email !== 'contractor@regguard.com'; // Default user = not authenticated
+  const shouldShowSidebar = !isPublicPage || isAuthenticated;
+
   const isActive = (path: string) => {
     if (path === '/' && location.pathname === '/') return true;
     if (path !== '/' && location.pathname.startsWith(path)) return true;
@@ -133,7 +138,8 @@ export function PlatformLayout({
         </button>
       </div>
 
-      {/* Sidebar Navigation */}
+      {/* Sidebar Navigation - Hidden on public pages for unauthenticated users */}
+      {shouldShowSidebar && (
       <aside className={`platform-sidebar ${sidebarOpen ? 'open' : 'collapsed'} ${mobileMenuOpen ? 'mobile-open' : ''}`}>
         <div className="sidebar-header">
           <Link to="/" className="platform-logo">
@@ -203,6 +209,7 @@ export function PlatformLayout({
           </button>
         </div>
       </aside>
+      )}
 
       {/* Main Content Area */}
       <main className={`platform-main ${sidebarOpen ? '' : 'full-width'}`}>
