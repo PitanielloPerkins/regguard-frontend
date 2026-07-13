@@ -12,8 +12,7 @@
   },
   "dependencies": {
     "@microsoft/fetch-event-source": "^2.0.1",
-    "@stripe/react-stripe-js": "^2.8.0",
-    "@stripe/js": "^3.4.0",
+    "@stripe/stripe-js": "^3.4.0",
     "axios": "^1.7.9",
     "clsx": "^2.1.1",
     "lucide-react": "^0.469.0",

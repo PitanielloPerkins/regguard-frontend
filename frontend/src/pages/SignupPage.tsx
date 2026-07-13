@@ -1,17 +1,14 @@
 /**
  * RegGuard Signup & Payment Page
- * Stripe integration for free trial signup with credit card collection
+ * Stripe integration for free trial signup
  */
 
-import { useEffect, useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { loadStripe } from '@stripe/js';
-import { Elements, CardElement, useStripe, useElements } from '@stripe/react-stripe-js';
+import { loadStripe, Stripe } from '@stripe/stripe-js';
 import axios from 'axios';
 import { backendUrl } from '../env';
 import { ArrowLeft, CheckCircle } from 'lucide-react';
-
-const stripePromise = loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || 'pk_test_placeholder');
 
 interface FormData {
   email: string;
@@ -21,10 +18,11 @@ interface FormData {
   last_name: string;
 }
 
-function SignupFormContent() {
+export default function SignupPage() {
   const navigate = useNavigate();
-  const stripe = useStripe();
-  const elements = useElements();
+  const stripeRef = useRef<Stripe | null>(null);
+  const cardElementRef = useRef<any>(null);
+  
   const [formData, setFormData] = useState<FormData>({
     email: '',
     password: '',
@@ -36,6 +34,16 @@ function SignupFormContent() {
   const [error, setError] = useState('');
   const [success, setSuccess] = useState(false);
 
+  // Initialize Stripe
+  useEffect(() => {
+    const initStripe = async () => {
+      const stripe = await loadStripe(import.meta.env.VITE_STRIPE_PUBLIC_KEY || 'pk_test_placeholder');
+      stripeRef.current = stripe;
+    };
+    initStripe();
+    window.scrollTo(0, 0);
+  }, []);
+
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
@@ -46,12 +54,6 @@ function SignupFormContent() {
     setError('');
     setLoading(true);
 
-    if (!stripe || !elements) {
-      setError('Stripe not loaded. Please refresh and try again.');
-      setLoading(false);
-      return;
-    }
-
     // Validate form
     if (!formData.email || !formData.password || !formData.company_name || !formData.first_name || !formData.last_name) {
       setError('Please fill in all fields');
@@ -59,16 +61,31 @@ function SignupFormContent() {
       return;
     }
 
+    // Basic card validation
+    const cardNumber = (document.getElementById('card-number') as HTMLInputElement)?.value;
+    const cardExpiry = (document.getElementById('card-expiry') as HTMLInputElement)?.value;
+    const cardCvc = (document.getElementById('card-cvc') as HTMLInputElement)?.value;
+
+    if (!cardNumber || !cardExpiry || !cardCvc) {
+      setError('Please enter valid card details');
+      setLoading(false);
+      return;
+    }
+
     try {
-      // Get card token from Stripe
-      const cardElement = elements.getElement(CardElement);
-      if (!cardElement) {
-        setError('Card element not found');
+      if (!stripeRef.current) {
+        setError('Stripe not loaded');
         setLoading(false);
         return;
       }
 
-      const { token, error: tokenError } = await stripe.createToken(cardElement);
+      // Create payment token
+      const { token, error: tokenError } = await stripeRef.current.createToken('card', {
+        number: cardNumber,
+        exp_month: parseInt(cardExpiry.split('/')[0]),
+        exp_year: parseInt(cardExpiry.split('/')[1]),
+        cvc: cardCvc,
+      });
 
       if (tokenError) {
         setError(tokenError.message || 'Card error occurred');
@@ -82,7 +99,7 @@ function SignupFormContent() {
         return;
       }
 
-      // Send to backend to create user and start trial
+      // Send to backend
       const response = await axios.post(
         backendUrl('/auth/create-checkout-session'),
         {
@@ -96,9 +113,8 @@ function SignupFormContent() {
         }
       );
 
-      if (response.data.success) {
+      if (response.data.success || response.status === 200) {
         setSuccess(true);
-        // Redirect to dashboard after 2 seconds
         setTimeout(() => {
           navigate('/agent');
         }, 2000);
@@ -220,25 +236,38 @@ function SignupFormContent() {
               />
             </div>
 
-            {/* Card Element */}
+            {/* Card Number */}
             <div>
-              <label className="block text-sm font-semibold text-gray-300 mb-2">Payment Method</label>
-              <div className="p-4 bg-slate-900/50 border border-purple-500/20 rounded-lg">
-                <CardElement
-                  options={{
-                    style: {
-                      base: {
-                        fontSize: '16px',
-                        color: '#ffffff',
-                        '::placeholder': {
-                          color: '#6b7280',
-                        },
-                      },
-                      invalid: {
-                        color: '#ef4444',
-                      },
-                    },
-                  }}
+              <label className="block text-sm font-semibold text-gray-300 mb-2">Card Number</label>
+              <input
+                id="card-number"
+                type="text"
+                placeholder="4242 4242 4242 4242"
+                maxLength={19}
+                className="w-full px-4 py-2 bg-slate-900/50 border border-purple-500/20 rounded-lg text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none transition"
+              />
+            </div>
+
+            {/* Expiry & CVC */}
+            <div className="grid grid-cols-2 gap-4">
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-2">Expiry</label>
+                <input
+                  id="card-expiry"
+                  type="text"
+                  placeholder="MM/YY"
+                  maxLength={5}
+                  className="w-full px-4 py-2 bg-slate-900/50 border border-purple-500/20 rounded-lg text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none transition"
+                />
+              </div>
+              <div>
+                <label className="block text-sm font-semibold text-gray-300 mb-2">CVC</label>
+                <input
+                  id="card-cvc"
+                  type="text"
+                  placeholder="123"
+                  maxLength={4}
+                  className="w-full px-4 py-2 bg-slate-900/50 border border-purple-500/20 rounded-lg text-white placeholder-gray-500 focus:border-purple-500 focus:outline-none transition"
                 />
               </div>
             </div>
@@ -251,7 +280,7 @@ function SignupFormContent() {
             {/* Submit Button */}
             <button
               type="submit"
-              disabled={loading || !stripe}
+              disabled={loading}
               className="w-full px-6 py-3 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
             >
               {loading ? 'Processing...' : 'Start Free Trial'}
@@ -269,13 +298,5 @@ function SignupFormContent() {
         </div>
       </div>
     </div>
-  );
-}
-
-export default function SignupPage() {
-  return (
-    <Elements stripe={stripePromise}>
-      <SignupFormContent />
-    </Elements>
   );
 }
