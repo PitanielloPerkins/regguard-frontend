@@ -3,6 +3,7 @@ import { createRoot } from 'react-dom/client';
 import { AppRouter } from './AppRouter';
 import { loadGoogleMapsApi } from './loadGoogleMaps';
 
+import './index.css'; // Tailwind CSS + base styles
 import 'react-toastify/dist/ReactToastify.css';
 import './voice-command.css';
 import './onboarding-system.css';
