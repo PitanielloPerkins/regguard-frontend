@@ -2,6 +2,7 @@
  * RegGuard Platform Dashboard - Professional Design
  * Targets: Data Center Contractors Who Hate Red Tape
  * Styling: Premium SaaS with contractor-focused messaging
+ * Tailwind CSS: Configured and enabled ✅
  */
 
 import { useEffect, useState } from 'react';
