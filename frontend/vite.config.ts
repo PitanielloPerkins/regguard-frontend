@@ -15,6 +15,20 @@ export default defineConfig({
   optimizeDeps: {
     include: ['react-router-dom'],
   },
+  build: {
+    chunkSizeWarningLimit: 1000, // Suppress chunk size warning for this SPA
+    rollupOptions: {
+      output: {
+        manualChunks: {
+          'vendor': [
+            'react',
+            'react-dom',
+            'react-router-dom',
+          ],
+        },
+      },
+    },
+  },
   plugins: [
     react()
   ]
