@@ -6,6 +6,7 @@
  */
 
 import { useEffect, useState } from 'react';
+import { useNavigate } from 'react-router-dom';
 import {
   Shield,
   Zap,
@@ -25,6 +26,7 @@ interface DashboardStats {
 }
 
 export function PlatformDashboard() {
+  const navigate = useNavigate();
   const [stats, setStats] = useState<DashboardStats>({
     formsCompleted: 0,
     queuePositions: 0,
@@ -97,22 +99,25 @@ export function PlatformDashboard() {
 
   // Button handlers
   const handleStartAnalysis = () => {
-    console.log('Start Analysis clicked');
-    // TODO: Navigate to analysis page or show modal
+    navigate('/data-center');
   };
 
   const handleVoiceCommands = () => {
-    console.log('Voice Commands - use voice input below');
+    console.log('Voice Commands activated');
   };
 
   const handleStartTrial = () => {
-    console.log('Start Free Trial clicked');
-    // TODO: Redirect to signup
+    navigate('/queue/upload');
   };
 
   const handleFeatureClick = (title: string) => {
-    console.log(`Navigating to ${title}`);
-    // TODO: Navigate to feature page
+    if (title === 'RegGuard Agent') {
+      navigate('/agent');
+    } else if (title === 'Queue Center') {
+      navigate('/queue');
+    } else if (title === 'Study Translator') {
+      navigate('/queue/translator');
+    }
   };
 
   return (
