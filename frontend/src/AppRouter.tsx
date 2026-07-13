@@ -33,8 +33,9 @@ export function AppRouter() {
   return (
     <Router>
       <PlatformLayout user={user} onLogout={handleLogout}>
-        <OnboardingSystem />
-        <VoiceCommandSystem />
+        {/* Temporarily disabled for debugging */}
+        {/* <OnboardingSystem /> */}
+        {/* <VoiceCommandSystem /> */}
         
         <Routes>
           {/* Home Dashboard - Merged Design Focused on Data Center Pain Points */}
