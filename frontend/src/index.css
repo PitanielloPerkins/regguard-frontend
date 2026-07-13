@@ -1,3 +1,7 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
 :root {
   /* RegGuard 2026 — Professional Trust Suite (DARK INDIGO THEME) */
   --rg-bg: #0a1429;
