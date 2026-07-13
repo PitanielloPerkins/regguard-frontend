@@ -46,12 +46,19 @@ export function PlatformDashboard() {
 
   const fetchStats = async () => {
     try {
-      const response = await axios.get(`${backendUrl('/roi-stats')}`);
-      if (response.data) {
-        setStats(response.data);
+      const url = backendUrl('/roi-stats');
+      console.log('Fetching stats from:', url);
+      const response = await axios.get(url, { timeout: 5000 });
+      console.log('Stats response:', response.data);
+      if (response.data && typeof response.data === 'object') {
+        setStats(prevStats => ({
+          ...prevStats,
+          ...response.data
+        }));
       }
     } catch (error) {
-      console.log('Stats unavailable, using defaults');
+      console.log('Stats unavailable, using defaults', error);
+      // Silently fail - use default stats
     }
   };
 
@@ -305,4 +312,24 @@ export function PlatformDashboard() {
   );
 }
 
-export default PlatformDashboard;
+export default function PlatformDashboardWrapper() {
+  try {
+    return <PlatformDashboard />;
+  } catch (error) {
+    console.error('Dashboard Error:', error);
+    return (
+      <div className="min-h-screen bg-gradient-to-b from-[#0a0e27] via-[#1a1f3a] to-[#0a0e27] flex items-center justify-center">
+        <div className="text-center text-white">
+          <h1 className="text-4xl font-bold mb-4">Dashboard Loading Error</h1>
+          <p className="text-gray-300">{String(error)}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="mt-6 px-6 py-3 bg-indigo-500 hover:bg-indigo-600 rounded-lg"
+          >
+            Reload Page
+          </button>
+        </div>
+      </div>
+    );
+  }
+}
