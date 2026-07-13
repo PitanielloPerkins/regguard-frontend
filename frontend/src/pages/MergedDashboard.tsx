@@ -103,11 +103,15 @@ export function PlatformDashboard() {
   };
 
   const handleVoiceCommands = () => {
-    console.log('Voice Commands activated');
+    // Trigger the voice command system (global listener is already active)
+    // Just log to confirm it's being called
+    console.log('🎙️ Voice Commands activated - speak now!');
+    alert('🎙️ Listening... Try saying: "help", "research", or "analyze"');
   };
 
   const handleStartTrial = () => {
-    navigate('/queue/upload');
+    // Navigate to Stripe checkout/signup page
+    navigate('/signup');
   };
 
   const handleFeatureClick = (title: string) => {
@@ -153,8 +157,9 @@ export function PlatformDashboard() {
             </div>
           </div>
 
-          {/* Stats Grid - 3 Columns */}
-          <div className="grid md:grid-cols-3 gap-6">
+          {/* Stats Grid - Only show if we have real data */}
+          {(stats.formsCompleted || stats.queuePositions || stats.projectsAnalyzed) && (
+          <div className="grid md:grid-cols-3 gap-6 mb-8">
             {/* Forms Completed */}
             <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 rounded-2xl p-8 hover:border-blue-500/50 transition">
               <div className="flex items-start justify-between mb-4">
@@ -194,6 +199,7 @@ export function PlatformDashboard() {
               </div>
             </div>
           </div>
+          )}
         </div>
       </section>
 
