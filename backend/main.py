@@ -291,7 +291,7 @@ app.add_middleware(
         "http://localhost:5175",
         *_extra_cors_origins(),
     ],
-    allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$|^https://[a-zA-Z0-9][-a-zA-Z0-9]*\.vercel\.app$",
+    allow_origin_regex=r"^https?://(127\.0\.0\.1|localhost)(:\d+)?$|^https?://([a-zA-Z0-9][-a-zA-Z0-9]*\.)?vercel\.app$|^https?://app\.regguardagent\.com$|^https?://regguardagent\.com$",
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],

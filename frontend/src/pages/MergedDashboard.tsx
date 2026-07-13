@@ -182,11 +182,11 @@ export function PlatformDashboard() {
               return (
                 <div
                   key={idx}
-                  className="group bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/20 hover:border-purple-500/40 rounded-2xl p-8 transition hover:shadow-xl hover:shadow-purple-500/10"
+                  className="group bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/20 hover:border-purple-500/40 rounded-2xl p-8 transition hover:shadow-xl hover:shadow-purple-500/10 flex flex-col h-full"
                 >
                   {/* Badge */}
                   {feature.badge && (
-                    <div className="inline-block mb-6 px-3 py-1 bg-blue-500/30 border border-blue-500/50 rounded-full text-xs font-bold text-blue-300 uppercase tracking-wider">
+                    <div className="inline-block mb-6 px-3 py-1 bg-blue-500/30 border border-blue-500/50 rounded-full text-xs font-bold text-blue-300 uppercase tracking-wider w-fit">
                       {feature.badge}
                     </div>
                   )}
@@ -198,10 +198,10 @@ export function PlatformDashboard() {
 
                   {/* Title & Description */}
                   <h3 className="text-2xl font-black text-white mb-4">{feature.title}</h3>
-                  <p className="text-gray-400 text-sm mb-8 leading-relaxed h-20 overflow-hidden">{feature.description}</p>
+                  <p className="text-gray-400 text-sm mb-8 leading-relaxed flex-grow">{feature.description}</p>
 
                   {/* CTA Link */}
-                  <button className={`inline-flex items-center gap-2 text-sm font-bold ${colors.text} hover:opacity-80 transition`}>
+                  <button className={`inline-flex items-center gap-2 text-sm font-bold ${colors.text} hover:opacity-80 transition mt-auto`}>
                     {feature.cta} <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
