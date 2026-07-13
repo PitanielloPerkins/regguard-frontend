@@ -10,6 +10,7 @@ import StudyTranslator from './Queue/StudyTranslator';
 import TimelinePredictor from './Queue/TimelinePredictor';
 import { PlatformLayout, PlatformUser } from './PlatformLayout';
 import PlatformDashboard from './pages/MergedDashboard';
+import SignupPage from './pages/SignupPage';
 import VoiceCommandSystem from './VoiceCommandSystem';
 import OnboardingSystem from './OnboardingSystem';
 import { backendUrl } from './env';
@@ -39,6 +40,9 @@ export function AppRouter() {
         <Routes>
           {/* Home Dashboard - Merged Design Focused on Data Center Pain Points */}
           <Route path="/" element={<PlatformDashboard />} />
+
+          {/* Signup/Stripe Payment Page */}
+          <Route path="/signup" element={<SignupPage />} />
 
           {/* RegGuard Queue Routes */}
           <Route path="/queue" element={<QueueLandingPage />} />
