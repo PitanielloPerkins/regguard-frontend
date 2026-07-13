@@ -11,6 +11,8 @@ import TimelinePredictor from './Queue/TimelinePredictor';
 import { PlatformLayout, PlatformUser } from './PlatformLayout';
 import PlatformDashboard from './pages/MergedDashboard';
 import SignupPage from './pages/SignupPage';
+import PricingPage from './pages/PricingPage';
+import MethodologyPage from './pages/MethodologyPage';
 import VoiceCommandSystem from './VoiceCommandSystem';
 import OnboardingSystem from './OnboardingSystem';
 import { backendUrl } from './env';
@@ -38,8 +40,14 @@ export function AppRouter() {
         <VoiceCommandSystem />
         
         <Routes>
-          {/* Home Dashboard - Merged Design Focused on Data Center Pain Points */}
+          {/* Home Dashboard */}
           <Route path="/" element={<PlatformDashboard />} />
+
+          {/* Pricing */}
+          <Route path="/pricing" element={<PricingPage />} />
+
+          {/* Methodology & Trust */}
+          <Route path="/methodology" element={<MethodologyPage />} />
 
           {/* Signup/Stripe Payment Page */}
           <Route path="/signup" element={<SignupPage />} />
