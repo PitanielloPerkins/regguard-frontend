@@ -33,6 +33,11 @@ export function PlatformDashboard() {
     projectsAnalyzed: 0,
   });
 
+  // Scroll to top on mount
+  useEffect(() => {
+    window.scrollTo(0, 0);
+  }, []);
+
   useEffect(() => {
     fetchStats();
   }, []);
@@ -99,22 +104,22 @@ export function PlatformDashboard() {
 
   // Button handlers
   const handleStartAnalysis = () => {
+    window.scrollTo(0, 0);
     navigate('/data-center');
   };
 
   const handleVoiceCommands = () => {
-    // Trigger the voice command system (global listener is already active)
-    // Just log to confirm it's being called
     console.log('🎙️ Voice Commands activated - speak now!');
     alert('🎙️ Listening... Try saying: "help", "research", or "analyze"');
   };
 
   const handleStartTrial = () => {
-    // Navigate to Stripe checkout/signup page
+    window.scrollTo(0, 0);
     navigate('/signup');
   };
 
   const handleFeatureClick = (title: string) => {
+    window.scrollTo(0, 0);
     if (title === 'RegGuard Agent') {
       navigate('/agent');
     } else if (title === 'Queue Center') {
@@ -233,7 +238,7 @@ export function PlatformDashboard() {
                   </div>
 
                   {/* Title & Description */}
-                  <h3 className="text-2xl font-black text-white mb-4 h-14 flex items-start">{feature.title}</h3>
+                  <h3 className="text-2xl font-black text-white mb-4">{feature.title}</h3>
                   <p className="text-gray-400 text-sm mb-8 leading-relaxed flex-grow">{feature.description}</p>
 
                   {/* CTA Link */}
