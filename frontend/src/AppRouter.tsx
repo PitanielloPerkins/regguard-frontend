@@ -16,7 +16,8 @@ import { backendUrl } from './env';
 import './router-layout.css';
 
 export function AppRouter() {
-  console.log('✅ AppRouter rendering - MergedDashboard v2');
+  // Force rebuild - v3 with updated DataCenterHub
+  console.log('✅ AppRouter rendering - MergedDashboard v3');
   
   // Simulated user (in production, this comes from auth context)
   const [user] = useState<PlatformUser>({
