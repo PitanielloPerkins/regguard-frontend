@@ -63,6 +63,7 @@ export function AppRouter() {
       </PlatformLayout>
     </Router>
   );
+}
 
 function DataCenterPage() {
   return (
