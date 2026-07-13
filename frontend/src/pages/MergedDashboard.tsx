@@ -77,7 +77,7 @@ export function PlatformDashboard() {
     {
       icon: BookOpen,
       title: 'Study Translator',
-      badge: '',
+      badge: 'PRO',
       description: 'Extract key metrics, timelines, and constraints from interconnection study PDFs automatically',
       cta: 'Get Started',
       color: 'green',
@@ -161,52 +161,6 @@ export function PlatformDashboard() {
               </button>
             </div>
           </div>
-
-          {/* Stats Grid - Only show if we have meaningful data (>50) */}
-          {((stats.formsCompleted && stats.formsCompleted > 50) || 
-            (stats.queuePositions && stats.queuePositions > 50) || 
-            (stats.projectsAnalyzed && stats.projectsAnalyzed > 50)) && (
-          <div className="grid md:grid-cols-3 gap-6 mb-8">
-            {/* Forms Completed */}
-            <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 rounded-2xl p-8 hover:border-blue-500/50 transition">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <p className="text-xs font-bold text-blue-300 uppercase tracking-wider mb-2">Forms Completed</p>
-                  <div className="text-4xl font-black text-blue-300">{stats.formsCompleted?.toLocaleString()}</div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-blue-500/30 flex items-center justify-center">
-                  <CheckCircle className="w-6 h-6 text-blue-400" />
-                </div>
-              </div>
-            </div>
-
-            {/* Queue Positions */}
-            <div className="bg-gradient-to-br from-purple-500/20 to-purple-600/10 border border-purple-500/30 rounded-2xl p-8 hover:border-purple-500/50 transition">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <p className="text-xs font-bold text-purple-300 uppercase tracking-wider mb-2">Queue Positions Tracked</p>
-                  <div className="text-4xl font-black text-purple-300">{stats.queuePositions?.toLocaleString()}</div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-purple-500/30 flex items-center justify-center">
-                  <Gauge className="w-6 h-6 text-purple-400" />
-                </div>
-              </div>
-            </div>
-
-            {/* Projects Analyzed */}
-            <div className="bg-gradient-to-br from-emerald-500/20 to-emerald-600/10 border border-emerald-500/30 rounded-2xl p-8 hover:border-emerald-500/50 transition">
-              <div className="flex items-start justify-between mb-4">
-                <div>
-                  <p className="text-xs font-bold text-emerald-300 uppercase tracking-wider mb-2">Projects Analyzed</p>
-                  <div className="text-4xl font-black text-emerald-300">{stats.projectsAnalyzed?.toLocaleString()}</div>
-                </div>
-                <div className="w-12 h-12 rounded-lg bg-emerald-500/30 flex items-center justify-center">
-                  <Shield className="w-6 h-6 text-emerald-400" />
-                </div>
-              </div>
-            </div>
-          </div>
-          )}
         </div>
       </section>
 
