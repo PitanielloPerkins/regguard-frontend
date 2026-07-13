@@ -34,58 +34,15 @@ const PLATFORM_ROUTES = [
     path: '/',
     icon: Home,
     category: 'Main',
-    description: 'RegGuard Agent - Compliance Intelligence',
+    description: 'RegGuard Site Diligence',
   },
-  {
-    name: 'Queue Center',
-    path: '/queue',
-    icon: Zap,
-    category: 'Interconnection',
-    description: 'Auto-fill FERC forms & manage RTO queues',
-  },
-  {
-    name: 'Form Upload',
-    path: '/queue/upload',
-    icon: BookOpen,
-    category: 'Interconnection',
-    description: 'Upload interconnection studies',
-  },
-  {
-    name: 'Queue Monitor',
-    path: '/queue/monitor',
-    icon: Gauge,
-    category: 'Interconnection',
-    description: 'Track RTO queue positions',
-  },
-  {
-    name: 'Study Translator',
-    path: '/queue/translator',
-    icon: BookOpen,
-    category: 'Interconnection',
-    description: 'Extract key study metrics',
-  },
-  {
-    name: 'Timeline Predictor',
-    path: '/queue/timeline',
-    icon: Gauge,
-    category: 'Interconnection',
-    description: 'Estimate project timelines',
-  },
-  {
-    name: 'Data Center Analysis',
-    path: '/data-center',
-    icon: Database,
-    category: 'Industry',
-    description: 'Permitting & compliance analysis',
-  },
-  {
-    name: 'Sales Pipeline',
-    path: '/admin/leads',
-    icon: Users,
-    category: 'Admin',
-    description: 'Lead management & analytics',
-  },
+  // Queue, Study, Timeline, and other stubs hidden from production nav
+  // They remain in code for future development but are not marketed
 ];
+
+// Archive of hidden routes (kept for reference, not displayed):
+// Queue Center, Form Upload, Queue Monitor, Study Translator, Timeline Predictor, Data Center Analysis, Sales Pipeline
+// All of these are accessible via direct URL but not promoted in nav
 
 export function PlatformLayout({
   children,
