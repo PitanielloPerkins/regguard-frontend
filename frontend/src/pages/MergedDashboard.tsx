@@ -158,7 +158,9 @@ export function PlatformDashboard() {
           </div>
 
           {/* Stats Grid - Only show if we have meaningful data (>50) */}
-          {(stats.formsCompleted && stats.formsCompleted > 50) || (stats.queuePositions && stats.queuePositions > 50) || (stats.projectsAnalyzed && stats.projectsAnalyzed > 50) ? (
+          {((stats.formsCompleted && stats.formsCompleted > 50) || 
+            (stats.queuePositions && stats.queuePositions > 50) || 
+            (stats.projectsAnalyzed && stats.projectsAnalyzed > 50)) && (
           <div className="grid md:grid-cols-3 gap-6 mb-8">
             {/* Forms Completed */}
             <div className="bg-gradient-to-br from-blue-500/20 to-blue-600/10 border border-blue-500/30 rounded-2xl p-8 hover:border-blue-500/50 transition">
