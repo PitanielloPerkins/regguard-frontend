@@ -26,9 +26,9 @@ interface DashboardStats {
 
 export function PlatformDashboard() {
   const [stats, setStats] = useState<DashboardStats>({
-    formsCompleted: 10247,
-    queuePositions: 3891,
-    projectsAnalyzed: 1204,
+    formsCompleted: 0,
+    queuePositions: 0,
+    projectsAnalyzed: 0,
   });
 
   useEffect(() => {
@@ -95,6 +95,26 @@ export function PlatformDashboard() {
     },
   };
 
+  // Button handlers
+  const handleStartAnalysis = () => {
+    console.log('Start Analysis clicked');
+    // TODO: Navigate to analysis page or show modal
+  };
+
+  const handleVoiceCommands = () => {
+    console.log('Voice Commands - use voice input below');
+  };
+
+  const handleStartTrial = () => {
+    console.log('Start Free Trial clicked');
+    // TODO: Redirect to signup
+  };
+
+  const handleFeatureClick = (title: string) => {
+    console.log(`Navigating to ${title}`);
+    // TODO: Navigate to feature page
+  };
+
   return (
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* ===== HERO SECTION ===== */}
@@ -118,7 +138,10 @@ export function PlatformDashboard() {
                 Interconnection studies that would take 18 months? We do them in 90 days. Auto-generate compliant permits for 50+ jurisdictions. No more waiting. No more guessing.
               </p>
 
-              <button className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold text-lg rounded-xl transition shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40">
+              <button 
+                onClick={handleStartAnalysis}
+                className="inline-flex items-center gap-3 px-8 py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold text-lg rounded-xl transition shadow-lg shadow-purple-500/20 hover:shadow-purple-500/40 cursor-pointer"
+              >
                 <Play className="w-5 h-5" />
                 Start Analysis Now
               </button>
@@ -197,11 +220,14 @@ export function PlatformDashboard() {
                   </div>
 
                   {/* Title & Description */}
-                  <h3 className="text-2xl font-black text-white mb-4">{feature.title}</h3>
+                  <h3 className="text-2xl font-black text-white mb-4 h-14 flex items-start">{feature.title}</h3>
                   <p className="text-gray-400 text-sm mb-8 leading-relaxed flex-grow">{feature.description}</p>
 
                   {/* CTA Link */}
-                  <button className={`inline-flex items-center gap-2 text-sm font-bold ${colors.text} hover:opacity-80 transition mt-auto`}>
+                  <button 
+                    onClick={() => handleFeatureClick(feature.title)}
+                    className={`inline-flex items-center gap-2 text-sm font-bold ${colors.text} hover:opacity-80 transition mt-auto cursor-pointer`}
+                  >
                     {feature.cta} <ArrowRight className="w-4 h-4" />
                   </button>
                 </div>
@@ -215,7 +241,10 @@ export function PlatformDashboard() {
               <h3 className="text-2xl font-black text-white mb-2">Try Voice Commands</h3>
               <p className="text-gray-300 text-lg">Use natural voice to navigate, submit forms, and analyze data hands-free</p>
             </div>
-            <button className="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold rounded-xl transition flex items-center gap-2 whitespace-nowrap shadow-lg shadow-purple-500/20">
+            <button 
+              onClick={handleVoiceCommands}
+              className="px-8 py-3 bg-gradient-to-r from-purple-600 to-pink-600 hover:from-purple-700 hover:to-pink-700 text-white font-bold rounded-xl transition flex items-center gap-2 whitespace-nowrap shadow-lg shadow-purple-500/20 cursor-pointer"
+            >
               🎙️ Voice Commands
             </button>
           </div>
@@ -229,7 +258,10 @@ export function PlatformDashboard() {
           <p className="text-xl text-gray-300 mb-10 leading-relaxed">
             Join 1,200+ contractors cutting permitting timelines from 18 months to 90 days. Start your free trial today—no credit card required.
           </p>
-          <button className="px-10 py-4 bg-gradient-to-r from-purple-600 via-blue-600 to-purple-600 hover:from-purple-700 hover:via-blue-700 hover:to-purple-700 text-white font-bold text-lg rounded-xl transition shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50">
+          <button 
+            onClick={handleStartTrial}
+            className="px-10 py-4 bg-gradient-to-r from-purple-600 via-blue-600 to-purple-600 hover:from-purple-700 hover:via-blue-700 hover:to-purple-700 text-white font-bold text-lg rounded-xl transition shadow-lg shadow-purple-500/30 hover:shadow-purple-500/50 cursor-pointer"
+          >
             Start Free Trial (14 Days)
           </button>
         </div>
