@@ -1,10 +1,9 @@
 /**
- * RegGuard How It Works — Site Diligence Reports
- * Transparency about research quality, sources, and limitations
+ * RegGuard How It Works — Honest about what we deliver and how
  */
 
 import { useNavigate } from 'react-router-dom';
-import { ArrowLeft, Shield, AlertCircle, CheckCircle, ExternalLink } from 'lucide-react';
+import { ArrowLeft, Shield, CheckCircle, Clock } from 'lucide-react';
 
 export default function MethodologyPage() {
   const navigate = useNavigate();
@@ -16,7 +15,7 @@ export default function MethodologyPage() {
         <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-4 flex items-center">
           <button onClick={() => navigate('/')} className="flex items-center gap-2 text-purple-400 hover:text-purple-300 transition">
             <ArrowLeft className="w-4 h-4" />
-            Back to Home
+            Back
           </button>
         </div>
       </header>
@@ -26,60 +25,95 @@ export default function MethodologyPage() {
         <div className="max-w-4xl mx-auto">
           <h1 className="text-5xl font-black text-white mb-6">How RegGuard Works</h1>
           <p className="text-xl text-gray-300">
-            Transparency about what RegGuard delivers, where our data comes from, and what it's designed to do (and not do).
+            You place an order. We research. You get PDFs same-day. Here's exactly what happens inside.
           </p>
         </div>
       </section>
 
-      {/* What RegGuard Does */}
+      {/* The Process */}
       <section className="px-4 py-16 sm:px-6 lg:px-8 border-t border-purple-500/10">
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-black text-white mb-8">What RegGuard Delivers</h2>
-          
-          <div className="space-y-6">
-            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-green-500/30 rounded-xl p-6">
-              <div className="flex items-start gap-4">
-                <CheckCircle className="w-6 h-6 text-green-400 flex-shrink-0 mt-1" />
+          <h2 className="text-3xl font-black text-white mb-8">The Process (Behind the Scenes)</h2>
+
+          <div className="space-y-8">
+            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-8">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">1</div>
                 <div>
-                  <h3 className="text-lg font-bold text-white mb-2">Regulatory Research Memo (8–12 pages)</h3>
+                  <h3 className="text-lg font-bold text-white mb-2">You Submit an Order</h3>
                   <p className="text-gray-300">
-                    AHJ (Authority Having Jurisdiction) identification, interconnection process roadmap, timelines, moratorium risk flags, environmental constraints, local zoning/permitting, state-level restrictions, FERC compliance checklist.
+                    Address. Project type. Any special details. Payment via Stripe. Instant confirmation email with order ID.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-green-500/30 rounded-xl p-6">
-              <div className="flex items-start gap-4">
-                <CheckCircle className="w-6 h-6 text-green-400 flex-shrink-0 mt-1" />
+            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-8">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">2</div>
                 <div>
-                  <h3 className="text-lg font-bold text-white mb-2">RTO Application Worksheets (Drafts)</h3>
+                  <h3 className="text-lg font-bold text-white mb-2">Automated Research Engine Starts</h3>
+                  <p className="text-gray-300 mb-4">
+                    Our system scans:
+                  </p>
+                  <ul className="text-gray-300 space-y-2 ml-4">
+                    <li>• Local municipal databases (zoning, permitting history, ordinances)</li>
+                    <li>• State regulatory databases</li>
+                    <li>• Utility interconnection rules (if applicable)</li>
+                    <li>• FERC filings and orders</li>
+                    <li>• Recent permit applications in your jurisdiction</li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-8">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">3</div>
+                <div>
+                  <h3 className="text-lg font-bold text-white mb-2">AI Synthesizes + Generates PDFs</h3>
+                  <p className="text-gray-300 mb-4">
+                    Three documents are auto-generated:
+                  </p>
+                  <ul className="text-gray-300 space-y-3 ml-4">
+                    <li>
+                      <strong className="text-white">Research Memo (PDF)</strong>
+                      <p className="text-sm mt-1">Executive summary, permitting roadmap, timeline, preliminary costs, key contacts</p>
+                    </li>
+                    <li>
+                      <strong className="text-white">Contractor Punch List (PDF)</strong>
+                      <p className="text-sm mt-1">Checkbox action items: who to call, what to submit, when, in what order</p>
+                    </li>
+                    <li>
+                      <strong className="text-white">Permit Package (PDF)</strong>
+                      <p className="text-sm mt-1">Pre-filled forms, checklists, required documents for your municipality/utility</p>
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            </div>
+
+            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-8">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">4</div>
+                <div>
+                  <h3 className="text-lg font-bold text-white mb-2">Quality Check (Optional)</h3>
                   <p className="text-gray-300">
-                    Pre-populated interconnection application forms specific to your RTO (PJM, MISO, ERCOT, ISO-NE, SPP) and capacity range. Includes FERC 556/557 frameworks, one-line diagram checklists, equipment specification templates, protective relay coordination requirements.
+                    By default, we hold reports for 2–4 hours for a human review: Do the findings make sense? Are citations complete? Then we email you.
+                    <br /><br />
+                    <strong>Want it instantly?</strong> Select "instant delivery" in the order form and skip the hold.
                   </p>
                 </div>
               </div>
             </div>
 
-            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-green-500/30 rounded-xl p-6">
-              <div className="flex items-start gap-4">
-                <CheckCircle className="w-6 h-6 text-green-400 flex-shrink-0 mt-1" />
+            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-8">
+              <div className="flex items-start gap-4 mb-6">
+                <div className="w-8 h-8 rounded-full bg-green-600 flex items-center justify-center flex-shrink-0 text-white font-bold text-sm">5</div>
                 <div>
-                  <h3 className="text-lg font-bold text-white mb-2">Fully Cited Sources</h3>
+                  <h3 className="text-lg font-bold text-white mb-2">You Receive Email + Portal Access</h3>
                   <p className="text-gray-300">
-                    Every finding includes direct links to the public source (FERC orders, RTO tariffs, state law, utility interconnection guides, municipal zoning databases). You can verify independently; we're not a black box.
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-green-500/30 rounded-xl p-6">
-              <div className="flex items-start gap-4">
-                <CheckCircle className="w-6 h-6 text-green-400 flex-shrink-0 mt-1" />
-                <div>
-                  <h3 className="text-lg font-bold text-white mb-2">Action Items & Milestones</h3>
-                  <p className="text-gray-300">
-                    Next steps (pre-application meeting with utility, formal queue entry, Phase 1 study scope), estimated timeline, key decision points, and items to review with your attorney, engineer, or interconnection consultant.
+                    Email with download links to all three PDFs. Account portal where you can view all your orders and re-download anytime.
                   </p>
                 </div>
               </div>
@@ -88,196 +122,109 @@ export default function MethodologyPage() {
         </div>
       </section>
 
-      {/* What RegGuard Does NOT Do */}
+      {/* Timeline */}
       <section className="px-4 py-16 sm:px-6 lg:px-8 border-t border-purple-500/10">
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-black text-white mb-8">What RegGuard Does NOT Do</h2>
-          
-          <div className="space-y-6">
-            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-red-500/30 rounded-xl p-6">
-              <div className="flex items-start gap-4">
-                <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0 mt-1" />
-                <div>
-                  <h3 className="text-lg font-bold text-white mb-2">NOT Legal Advice</h3>
-                  <p className="text-gray-300">
-                    RegGuard reports are research summaries, not legal documents or opinions. Always have your attorney review before filing with RTOs, utilities, or regulatory bodies. We accelerate research; counsel makes final decisions.
-                  </p>
-                </div>
-              </div>
+          <h2 className="text-3xl font-black text-white mb-8">Expected Timeline</h2>
+
+          <div className="grid md:grid-cols-4 gap-4">
+            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-6 text-center">
+              <Clock className="w-8 h-8 text-blue-400 mx-auto mb-2" />
+              <p className="text-sm font-bold text-white mb-2">Order to research</p>
+              <p className="text-2xl font-black text-blue-400">5–15 min</p>
             </div>
 
-            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-red-500/30 rounded-xl p-6">
-              <div className="flex items-start gap-4">
-                <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0 mt-1" />
-                <div>
-                  <h3 className="text-lg font-bold text-white mb-2">NOT Engineering Analysis</h3>
-                  <p className="text-gray-300">
-                    We do not perform load flow studies, network impact analyses, or protective relay coordination design. Utilities (RTOs) do Phase 1, 2, and 3 studies. RegGuard research accelerates your *preparation* for those studies, not the studies themselves.
-                  </p>
-                </div>
-              </div>
+            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-6 text-center">
+              <Clock className="w-8 h-8 text-green-400 mx-auto mb-2" />
+              <p className="text-sm font-bold text-white mb-2">PDF generation</p>
+              <p className="text-2xl font-black text-green-400">1–3 min</p>
             </div>
 
-            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-red-500/30 rounded-xl p-6">
-              <div className="flex items-start gap-4">
-                <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0 mt-1" />
-                <div>
-                  <h3 className="text-lg font-bold text-white mb-2">NOT a Guarantee of Approval</h3>
-                  <p className="text-gray-300">
-                    RegGuard cannot guarantee interconnection approval, timeline, or cost. RTOs ultimately make those decisions based on system conditions, queue depth, and study results. We can flag risks and estimate timelines, but outcomes depend on the utility.
-                  </p>
-                </div>
-              </div>
+            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-6 text-center">
+              <Clock className="w-8 h-8 text-purple-400 mx-auto mb-2" />
+              <p className="text-sm font-bold text-white mb-2">Quality check</p>
+              <p className="text-2xl font-black text-purple-400">2–4 hrs</p>
+              <p className="text-xs text-gray-400 mt-2">(skip with instant delivery)</p>
             </div>
 
-            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-red-500/30 rounded-xl p-6">
-              <div className="flex items-start gap-4">
-                <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0 mt-1" />
-                <div>
-                  <h3 className="text-lg font-bold text-white mb-2">NOT a Replacement for IC Consultants</h3>
-                  <p className="text-gray-300">
-                    IC consultants bring relationships, negotiation expertise, and accountability that RegGuard does not. RegGuard accelerates intake; consultants manage Phase 1–3 and negotiate with utilities. Use both; they're complementary.
-                  </p>
-                </div>
-              </div>
+            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-green-500/30 rounded-xl p-6 text-center">
+              <Clock className="w-8 h-8 text-green-400 mx-auto mb-2" />
+              <p className="text-sm font-bold text-white mb-2">Total</p>
+              <p className="text-2xl font-black text-green-400">&lt; 24 hrs</p>
+              <p className="text-xs text-gray-400 mt-2">(most same-day)</p>
             </div>
+          </div>
 
-            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-red-500/30 rounded-xl p-6">
-              <div className="flex items-start gap-4">
-                <AlertCircle className="w-6 h-6 text-red-400 flex-shrink-0 mt-1" />
-                <div>
-                  <h3 className="text-lg font-bold text-white mb-2">NOT Real-Time Queue Tracking</h3>
-                  <p className="text-gray-300">
-                    RegGuard does not have access to internal RTO queue systems. We can help you understand the interconnection process, but you must verify queue positions directly with the RTO and your utility.
-                  </p>
-                </div>
-              </div>
-            </div>
+          <div className="mt-8 p-6 bg-green-500/10 border border-green-500/30 rounded-lg">
+            <p className="text-gray-300">
+              <strong>Reality check:</strong> Most reports generate in 10–20 minutes total. We hold for quality check to give you confidence. If you're in a hurry, request instant delivery and skip the hold.
+            </p>
           </div>
         </div>
       </section>
 
-      {/* Data Sources */}
+      {/* What We Guarantee */}
       <section className="px-4 py-16 sm:px-6 lg:px-8 border-t border-purple-500/10">
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-black text-white mb-8">Where Our Data Comes From</h2>
-          
-          <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-8">
-            <div className="space-y-6">
-              <div>
-                <h3 className="font-bold text-white mb-3">Primary Sources (Authoritative & Public)</h3>
-                <ul className="space-y-2 text-gray-300">
-                  <li>• **FERC Orders** (Order 2023, Order 888, Order 889): www.ferc.gov</li>
-                  <li>• **RTO Tariffs & Procedures** (PJM, MISO, ERCOT, ISO-NE, SPP): Public filings available on each RTO's website</li>
-                  <li>• **State PUC Regulations:** State-specific interconnection standards and timelines</li>
-                  <li>• **Utility Interconnection Guides:** Published by Oncor, Duke, NextEra, PG&E, etc.</li>
-                  <li>• **Municipal Zoning & Permitting:** County/city planning departments, online databases</li>
-                  <li>• **Environmental Databases:** USGS Wetlands, EPA superfund, state environmental agencies</li>
-                </ul>
-              </div>
+          <h2 className="text-3xl font-black text-white mb-8">What We Guarantee (and What We Don't)</h2>
 
-              <div className="pt-6 border-t border-purple-500/20">
-                <h3 className="font-bold text-white mb-3">Secondary Sources (Curated)</h3>
-                <ul className="space-y-2 text-gray-300">
-                  <li>• Industry publications and regulatory tracking databases</li>
-                  <li>• Historical project data (anonymized, aggregated, trend analysis)</li>
-                  <li>• RTO queue statistics and interconnection timelines</li>
-                </ul>
-              </div>
-
-              <div className="pt-6 border-t border-purple-500/20">
-                <h3 className="font-bold text-white mb-3">What We DON'T Use</h3>
-                <ul className="space-y-2 text-gray-300">
-                  <li>• Proprietary utility data or internal studies</li>
-                  <li>• Confidential customer or project information</li>
-                  <li>• Unverified rumors, anecdotes, or speculative claims</li>
-                  <li>• Internal RTO queue positions (only public data)</li>
-                </ul>
-              </div>
-            </div>
-          </div>
-        </div>
-      </section>
-
-      {/* Quality & Accuracy */}
-      <section className="px-4 py-16 sm:px-6 lg:px-8 border-t border-purple-500/10">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-black text-white mb-8">Research Quality & Accuracy Standards</h2>
-          
           <div className="grid md:grid-cols-2 gap-8">
-            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-6">
-              <h3 className="font-bold text-white mb-4">Regulatory Research (Factual)</h3>
-              <p className="text-gray-300 mb-4">
-                <strong>Accuracy target: 90%+</strong> on factual regulatory requirements (FERC orders, RTO procedures, state law, interconnection timelines).
-              </p>
-              <p className="text-gray-300 text-sm">
-                We cite sources so you can verify independently. If we identify ambiguity or disagreement among sources (e.g., conflicting RTO tariff interpretations), we flag it explicitly and recommend consulting your attorney.
-              </p>
+            <div>
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <CheckCircle className="w-6 h-6 text-green-400" />
+                We Guarantee
+              </h3>
+              <ul className="space-y-3 text-gray-300">
+                <li className="flex gap-2">
+                  <span className="text-green-400 font-bold">✓</span>
+                  <span>All findings cited to public sources (you can verify)</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-green-400 font-bold">✓</span>
+                  <span>PDFs are formatted and professional</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-green-400 font-bold">✓</span>
+                  <span>Punch list is actionable (step-by-step next moves)</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-green-400 font-bold">✓</span>
+                  <span>Same-day delivery (or instant if requested)</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-green-400 font-bold">✓</span>
+                  <span>7-day refund if unsatisfied</span>
+                </li>
+              </ul>
             </div>
 
-            <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-6">
-              <h3 className="font-bold text-white mb-4">RTO Worksheets (Drafts)</h3>
-              <p className="text-gray-300 mb-4">
-                <strong>Status: AI-assisted drafts.</strong> These are starting points for your attorney/engineer review. Do NOT submit directly to RTOs without professional review and sign-off.
-              </p>
-              <p className="text-gray-300 text-sm">
-                We auto-populate common fields based on your project info. We flag missing sections and required attachments. Your attorney/engineer must complete legal/technical sections before filing.
-              </p>
-            </div>
-          </div>
-
-          <div className="mt-8 p-6 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-            <p className="text-gray-300 text-sm">
-              <strong>Limitations:</strong> RegGuard research accuracy depends on the recency and completeness of public sources. 
-              RTO tariffs, FERC orders, and state laws change frequently. RegGuard reports are valid for ~3 months; regulatory updates require re-verification with primary sources.
-            </p>
-          </div>
-        </div>
-      </section>
-
-      {/* ROI & Comparison */}
-      <section className="px-4 py-16 sm:px-6 lg:px-8 border-t border-purple-500/10">
-        <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-black text-white mb-8">The RegGuard Model: Intake Acceleration</h2>
-
-          <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-8">
-            <p className="text-gray-300 mb-6">
-              RegGuard is not a replacement for law firms, engineers, or IC consultants. It's a **research acceleration layer** that makes them more efficient.
-            </p>
-
-            <div className="grid md:grid-cols-3 gap-6">
-              <div>
-                <h4 className="font-bold text-white mb-3">Before RegGuard</h4>
-                <ul className="text-sm text-gray-300 space-y-2">
-                  <li>1. Hire counsel</li>
-                  <li>2. Wait 2–4 weeks</li>
-                  <li>3. Pay $75K–$150K</li>
-                  <li>4. Get research memo</li>
-                  <li>5. Decide to proceed</li>
-                </ul>
-              </div>
-
-              <div>
-                <h4 className="font-bold text-white mb-3">With RegGuard</h4>
-                <ul className="text-sm text-gray-300 space-y-2">
-                  <li>1. Order RegGuard report</li>
-                  <li>2. Wait 48 hours</li>
-                  <li>3. Pay $15K</li>
-                  <li>4. Get research + worksheets</li>
-                  <li>5. **Kill bad sites early**</li>
-                  <li>6. For good sites: engage counsel for final review</li>
-                </ul>
-              </div>
-
-              <div>
-                <h4 className="font-bold text-white mb-3">Impact</h4>
-                <ul className="text-sm text-green-300 space-y-2">
-                  <li>✓ 88% cost savings ($15K vs $150K)</li>
-                  <li>✓ 97% faster (48 hrs vs 4 weeks)</li>
-                  <li>✓ Kill bad sites early</li>
-                  <li>✓ Counsel focuses on final review, not intake</li>
-                </ul>
-              </div>
+            <div>
+              <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
+                <span className="text-red-400 text-xl">✕</span>
+                We Don't Guarantee
+              </h3>
+              <ul className="space-y-3 text-gray-300">
+                <li className="flex gap-2">
+                  <span className="text-red-400 font-bold">✕</span>
+                  <span>Permitting approval (only your municipality decides)</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-red-400 font-bold">✕</span>
+                  <span>Exact costs (estimates only; actual quotes from utilities vary)</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-red-400 font-bold">✕</span>
+                  <span>That you won't need a lawyer (you should have counsel review)</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-red-400 font-bold">✕</span>
+                  <span>100% accuracy (we use AI; errors are rare but possible)</span>
+                </li>
+                <li className="flex gap-2">
+                  <span className="text-red-400 font-bold">✕</span>
+                  <span>Real-time RTO queue tracking (no access to proprietary systems)</span>
+                </li>
+              </ul>
             </div>
           </div>
         </div>
@@ -290,22 +237,21 @@ export default function MethodologyPage() {
             <div className="flex items-start gap-4">
               <Shield className="w-6 h-6 text-blue-400 flex-shrink-0 mt-1" />
               <div>
-                <h3 className="text-lg font-bold text-white mb-4">Important Legal Disclaimer</h3>
+                <h3 className="text-lg font-bold text-white mb-4">Important: RegGuard is a Research Tool, Not Legal Advice</h3>
                 <p className="text-gray-300 mb-4">
-                  RegGuard provides research summaries and preliminary worksheets **AS-IS**, without warranty of accuracy or fitness for any particular purpose. 
-                  RegGuard does not provide legal advice, engineering advice, or professional consulting services.
+                  RegGuard reports are research summaries and preliminary analysis. They are not legal opinions, engineering reviews, or professional advice.
                 </p>
                 <p className="text-gray-300 mb-4">
-                  <strong>You are responsible for:</strong>
+                  <strong>Before you act on a RegGuard report:</strong>
                 </p>
                 <ul className="space-y-2 text-gray-300 mb-4">
-                  <li>• Having your attorney review all regulatory findings and draft worksheets before relying on them</li>
-                  <li>• Having your engineer review all technical outputs before filing with utilities/RTOs</li>
-                  <li>• Verifying interconnection timelines and cost estimates independently with your IC consultant</li>
-                  <li>• Making business decisions based on professional advice from counsel/engineers, not RegGuard outputs alone</li>
+                  <li>• Have your attorney review all findings</li>
+                  <li>• Have your engineer review all technical recommendations</li>
+                  <li>• Verify key facts independently with municipalities/utilities</li>
+                  <li>• Get professional counsel before filing applications</li>
                 </ul>
                 <p className="text-gray-300 text-sm italic">
-                  By using RegGuard, you acknowledge that you have read this disclaimer and understand that RegGuard is not liable for damages arising from your reliance on our research without professional review.
+                  By ordering a RegGuard report, you acknowledge that it is a starting point for due diligence, not a substitute for professional legal/engineering review. RegGuard is not liable for decisions you make based on our research.
                 </p>
               </div>
             </div>
@@ -316,19 +262,16 @@ export default function MethodologyPage() {
       {/* CTA */}
       <section className="px-4 py-16 sm:px-6 lg:px-8 border-t border-purple-500/10 bg-slate-900/50">
         <div className="max-w-3xl mx-auto text-center">
-          <h2 className="text-3xl font-black text-white mb-6">Ready to Accelerate Your Site Diligence?</h2>
+          <h2 className="text-3xl font-black text-white mb-6">Ready to Get Started?</h2>
           <p className="text-gray-300 mb-8">
-            Order a RegGuard Site Diligence Report for your next site. $15,000. 48-hour turnaround. Fully cited. Ready for your team.
+            Order a report and see exactly what you get. Fast, transparent, no surprises.
           </p>
           <button
-            onClick={() => navigate('/')}
-            className="px-10 py-4 bg-gradient-to-r from-purple-600 to-blue-600 hover:from-purple-700 hover:to-blue-700 text-white font-bold text-lg rounded-xl transition shadow-lg shadow-purple-500/30 cursor-pointer mx-auto block"
+            onClick={() => navigate('/order')}
+            className="px-10 py-4 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold text-lg rounded-xl transition shadow-lg shadow-green-500/30 cursor-pointer mx-auto block"
           >
-            Order Site Diligence Report
+            Order a Report
           </button>
-          <p className="text-gray-400 text-sm mt-6">
-            Questions? Email <a href="mailto:hello@regguard.com" className="text-purple-400 hover:text-purple-300">hello@regguard.com</a>
-          </p>
         </div>
       </section>
     </div>
