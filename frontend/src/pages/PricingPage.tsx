@@ -182,6 +182,18 @@ export default function PricingPage() {
         </div>
       </section>
 
+      {/* Accuracy Guarantee */}
+      <section className="px-4 py-16 sm:px-6 lg:px-8 border-t border-purple-500/10">
+        <div className="max-w-3xl mx-auto">
+          <div className="bg-gradient-to-br from-emerald-600/20 to-green-600/20 border-2 border-emerald-500/30 rounded-xl p-8">
+            <h3 className="text-lg font-bold text-white mb-4">Our Accuracy Guarantee</h3>
+            <p className="text-gray-300">
+              <strong>If a critical finding is wrong, we refund 100% of your payment.</strong> No questions asked. We stand behind our research and cite all sources so you can verify independently. Every report is backed by this guarantee.
+            </p>
+          </div>
+        </div>
+      </section>
+
       {/* FAQ */}
       <section className="px-4 py-16 sm:px-6 lg:px-8 border-t border-purple-500/10">
         <div className="max-w-3xl mx-auto">

@@ -86,18 +86,18 @@ export function PlatformDashboard() {
           </div>
 
           {/* CTA: What to do now (StoryBrand clear call) */}
-          <div className="flex flex-col sm:flex-row gap-4">
+          <div className="flex flex-col sm:flex-row gap-4 mb-8">
             <button
-              onClick={handleOrderReport}
+              onClick={() => navigate('/free-trial')}
               className="px-10 py-4 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-black text-lg rounded-xl transition shadow-lg shadow-green-500/30 hover:shadow-green-500/50 cursor-pointer"
             >
-              Order Report — $15,000
+              Try Free (No Credit Card)
             </button>
             <button
-              onClick={() => navigate('/how-it-works')}
-              className="px-10 py-4 border border-purple-500/50 hover:border-purple-500 text-white font-bold text-lg rounded-xl transition bg-slate-900/50 hover:bg-slate-900 cursor-pointer"
+              onClick={handleOrderReport}
+              className="px-10 py-4 bg-gradient-to-r from-blue-600 to-purple-600 hover:from-blue-700 hover:to-purple-700 text-white font-bold text-lg rounded-xl transition shadow-lg shadow-blue-500/30 hover:shadow-blue-500/50 cursor-pointer"
             >
-              See how it works
+              Order Report — $15,000
             </button>
           </div>
 
@@ -187,26 +187,42 @@ export function PlatformDashboard() {
         </div>
       </section>
 
-      {/* ===== THE ROI: SUCCESS ===== */}
+      {/* ===== ROI SECTION ===== */}
       <section className="px-4 py-16 sm:px-6 lg:px-8 border-t border-purple-500/10">
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-black text-white mb-12">One report pays for itself if it kills just one bad site.</h2>
+          <h2 className="text-3xl font-black text-white mb-12">One report pays for itself immediately</h2>
 
-          <div className="grid md:grid-cols-3 gap-6">
+          <div className="grid md:grid-cols-3 gap-6 mb-12">
             <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-8 text-center">
-              <p className="text-4xl font-black text-white mb-2">$15K</p>
+              <Clock className="w-12 h-12 text-blue-400 mx-auto mb-4" />
+              <p className="text-3xl font-black text-white mb-2">$15K</p>
               <p className="text-gray-400">RegGuard report</p>
             </div>
 
             <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-8 text-center">
-              <p className="text-4xl font-black text-white mb-2">$100K+</p>
+              <p className="text-3xl font-black text-white mb-2">$100K+</p>
               <p className="text-gray-400">Saved by killing one bad site early</p>
             </div>
 
             <div className="bg-gradient-to-br from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-xl p-8 text-center">
-              <p className="text-4xl font-black text-white mb-2">+$85K</p>
+              <p className="text-3xl font-black text-white mb-2">+$85K</p>
               <p className="text-gray-400">Net ROI on first report</p>
             </div>
+          </div>
+
+          {/* Testimonial Box */}
+          <div className="bg-gradient-to-br from-blue-600/20 to-purple-600/20 border-2 border-blue-500/30 rounded-xl p-8 text-center">
+            <div className="flex justify-center gap-1 mb-4">
+              <span className="text-yellow-400 text-2xl">★</span>
+              <span className="text-yellow-400 text-2xl">★</span>
+              <span className="text-yellow-400 text-2xl">★</span>
+              <span className="text-yellow-400 text-2xl">★</span>
+              <span className="text-yellow-400 text-2xl">★</span>
+            </div>
+            <p className="text-gray-300 text-lg italic mb-4">
+              "RegGuard's punch list saved us 2 weeks of research and helped us avoid a site with a pending moratorium. We would've wasted $50K+ on that project."
+            </p>
+            <p className="text-white font-bold">— Regional Contractor, Texas</p>
           </div>
         </div>
       </section>
@@ -255,7 +271,22 @@ export function PlatformDashboard() {
         </div>
       </section>
 
-      {/* ===== FINAL CTA: URGENCY ===== */}
+      {/* ===== ACCURACY GUARANTEE ===== */}
+      <section className="px-4 py-16 sm:px-6 lg:px-8 border-t border-purple-500/10">
+        <div className="max-w-4xl mx-auto">
+          <div className="bg-gradient-to-br from-emerald-600/20 to-green-600/20 border-2 border-emerald-500/30 rounded-xl p-8">
+            <div className="flex items-start gap-4">
+              <CheckCircle className="w-8 h-8 text-emerald-400 flex-shrink-0 mt-1" />
+              <div>
+                <h3 className="text-lg font-bold text-white mb-3">Our Guarantee</h3>
+                <p className="text-gray-300">
+                  We stand behind our research. <strong>If a critical finding is wrong, we refund 100% of your payment.</strong> No questions asked. We're confident in our methodology and sources. Every report is backed by this guarantee.
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </section>
       <section className="px-4 py-20 sm:px-6 lg:px-8 border-t border-purple-500/10 bg-gradient-to-br from-green-600/20 to-emerald-600/20">
         <div className="max-w-3xl mx-auto text-center">
           <h2 className="text-4xl font-black text-white mb-6">

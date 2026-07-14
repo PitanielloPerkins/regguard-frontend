@@ -13,6 +13,8 @@ import PlatformDashboard from './pages/MergedDashboard';
 import SignupPage from './pages/SignupPage';
 import PricingPage from './pages/PricingPage';
 import MethodologyPage from './pages/MethodologyPage';
+import FreeTrialPage from './pages/FreeTrialPage';
+import SampleReportPage from './pages/SampleReportPage';
 import VoiceCommandSystem from './VoiceCommandSystem';
 import OnboardingSystem from './OnboardingSystem';
 import { backendUrl } from './env';
@@ -48,6 +50,12 @@ export function AppRouter() {
 
           {/* Methodology & Trust */}
           <Route path="/methodology" element={<MethodologyPage />} />
+
+          {/* Free Trial */}
+          <Route path="/free-trial" element={<FreeTrialPage />} />
+
+          {/* Sample Report */}
+          <Route path="/sample-report" element={<SampleReportPage />} />
 
           {/* Signup/Stripe Payment Page */}
           <Route path="/signup" element={<SignupPage />} />
