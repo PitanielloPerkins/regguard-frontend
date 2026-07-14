@@ -99,6 +99,7 @@ from research_cache_interceptor import (
 )
 from data_center_analysis import DataCenterPermittingAnalysis
 from interconnect.endpoints import router as queue_router
+from free_trial_handler import FreeTrialRequest, FreeTrialResponse, handle_free_trial
 
 # ROI calculator defaults — unit economics for admin / dashboard.
 _ROI_MANUAL_HOUR_USD = 75.0
@@ -1059,6 +1060,42 @@ async def stripe_webhook(request: Request) -> Dict[str, str]:
     
     # Acknowledge other event types
     return {"status": "acknowledged"}
+
+
+# ========== Free Trial Endpoint ==========
+
+@app.post("/free-trial")
+async def free_trial(request_body: FreeTrialRequest) -> FreeTrialResponse:
+    """
+    Handle free trial request.
+    
+    Accepts site address, generates research memo, emails to user.
+    Runs asynchronously in background.
+    
+    **No credit card required**
+    
+    Args:
+        address: Site address (e.g., "123 Main St, Austin, TX")
+        project_type: Type of project (data-center, solar, commercial, industrial, utility)
+        email: Customer email for research memo delivery
+    
+    Returns:
+        trial_id: Unique trial ID for tracking
+        status: "success" or "error"
+        message: Human-readable status message
+    
+    **Response time:** Immediate (returns while research runs in background)
+    **Research delivery:** Within 24 hours via email
+    **Cost:** Free (memo only; upgrade to $15K for PDFs)
+    """
+    response = await handle_free_trial(request_body)
+    
+    logger.info(
+        f"Free trial request processed: {request_body.email} / "
+        f"{request_body.address[:50]} / Status: {response.status}"
+    )
+    
+    return response
 
 
 # ========== Jurisdiction Cache Endpoints ==========
