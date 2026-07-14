@@ -130,51 +130,54 @@ export default function PricingPage() {
       {/* Comparison Table */}
       <section className="px-4 py-16 sm:px-6 lg:px-8 border-t border-purple-500/10">
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-black text-white mb-12">How RegGuard Compares</h2>
+          <h2 className="text-3xl font-black text-white mb-12">What You Get with RegGuard</h2>
 
-          <div className="overflow-x-auto">
-            <table className="w-full text-sm">
-              <thead>
-                <tr className="border-b border-purple-500/20">
-                  <th className="text-left py-4 px-4 text-white font-bold">Factor</th>
-                  <th className="text-center py-4 px-4 text-white font-bold">Law Firm</th>
-                  <th className="text-center py-4 px-4 text-white font-bold">RegGuard</th>
-                  <th className="text-center py-4 px-4 text-white font-bold">Savings</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr className="border-b border-purple-500/20">
-                  <td className="py-4 px-4 text-gray-300"><strong>Cost</strong></td>
-                  <td className="text-center py-4 px-4 text-gray-400">$75K–$150K</td>
-                  <td className="text-center py-4 px-4 text-gray-300 text-green-400 font-bold">$15,000</td>
-                  <td className="text-center py-4 px-4 text-green-400 font-bold">80% less</td>
-                </tr>
-                <tr className="border-b border-purple-500/20">
-                  <td className="py-4 px-4 text-gray-300"><strong>Timeline</strong></td>
-                  <td className="text-center py-4 px-4 text-gray-400">2–4 weeks</td>
-                  <td className="text-center py-4 px-4 text-gray-300 text-green-400 font-bold">Same-day</td>
-                  <td className="text-center py-4 px-4 text-green-400 font-bold">10–20x faster</td>
-                </tr>
-                <tr className="border-b border-purple-500/20">
-                  <td className="py-4 px-4 text-gray-300"><strong>Deliverables</strong></td>
-                  <td className="text-center py-4 px-4 text-gray-400">Memo only</td>
-                  <td className="text-center py-4 px-4 text-gray-300 text-green-400 font-bold">Memo + punch list + permits</td>
-                  <td className="text-center py-4 px-4 text-green-400 font-bold">Complete</td>
-                </tr>
-                <tr>
-                  <td className="py-4 px-4 text-gray-300"><strong>Best for</strong></td>
-                  <td className="text-center py-4 px-4 text-gray-400">Final legal defense</td>
-                  <td className="text-center py-4 px-4 text-gray-300 text-green-400 font-bold">Preliminary screening</td>
-                  <td className="text-center py-4 px-4 text-green-400 font-bold">Fast decisions</td>
-                </tr>
-              </tbody>
-            </table>
-          </div>
+          <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-xl p-8">
+            <div className="space-y-6">
+              <div>
+                <h3 className="text-lg font-bold text-white mb-4">Every report includes:</h3>
+                <ul className="space-y-3 text-gray-300">
+                  <li className="flex gap-3">
+                    <span className="text-green-400 font-bold">✓</span>
+                    <span><strong>Research memo (PDF)</strong> — Permitting requirements, timeline, preliminary costs</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="text-green-400 font-bold">✓</span>
+                    <span><strong>Contractor punch list (PDF)</strong> — Step-by-step action items</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="text-green-400 font-bold">✓</span>
+                    <span><strong>Permit package (PDF)</strong> — Forms and checklists ready to file</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="text-green-400 font-bold">✓</span>
+                    <span><strong>Same-day delivery</strong> — All PDFs emailed within 24 hours</span>
+                  </li>
+                </ul>
+              </div>
 
-          <div className="mt-8 p-6 bg-blue-500/10 border border-blue-500/30 rounded-lg">
-            <p className="text-gray-300 text-sm">
-              <strong>Key insight:</strong> RegGuard is for preliminary research + decision-making. Law firms are for final legal opinions. Use both: RegGuard first (fast + cheap), then counsel for final review before filing.
-            </p>
+              <div className="pt-6 border-t border-purple-500/20">
+                <h3 className="text-lg font-bold text-white mb-4">Why RegGuard works:</h3>
+                <ul className="space-y-3 text-gray-300">
+                  <li className="flex gap-3">
+                    <span className="text-blue-400 font-bold">→</span>
+                    <span>Fast decisions (same-day, not weeks)</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="text-blue-400 font-bold">→</span>
+                    <span>Clear costs ($15K, no surprises)</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="text-blue-400 font-bold">→</span>
+                    <span>Actionable output (not just analysis)</span>
+                  </li>
+                  <li className="flex gap-3">
+                    <span className="text-blue-400 font-bold">→</span>
+                    <span>Kill bad sites early, save money</span>
+                  </li>
+                </ul>
+              </div>
+            </div>
           </div>
         </div>
       </section>

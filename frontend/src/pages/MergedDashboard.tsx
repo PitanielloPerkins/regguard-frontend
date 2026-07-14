@@ -52,17 +52,14 @@ export function PlatformDashboard() {
             Permitting research shouldn't take <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-pink-300">6 weeks</span> and cost <span className="text-transparent bg-clip-text bg-gradient-to-r from-red-400 to-pink-300">$100K</span>
           </h1>
 
-          {/* Subheadline: The Guide offers a better way */}
-          <p className="text-lg text-gray-300 mb-8">
-            You're a contractor or developer. You screen a new site. Immediately, you need to know: What are the interconnection requirements? Any moratoriums? What permits do I need? 
-          </p>
+          {/* Subheadline: The Challenge */}
           <p className="text-lg text-gray-300 mb-10">
-            Today: You call a law firm. You wait 2–4 weeks. You pay $75K–$150K. Then you get a memo.
+            You're a contractor or developer. You screen a new site. Immediately, you need to know: What are the permitting requirements? Any moratoriums? What forms do I need? Usually, this takes weeks and costs a fortune.
           </p>
 
           {/* The solution (what RegGuard does) */}
           <div className="bg-gradient-to-r from-green-600/20 to-emerald-600/20 border border-green-500/30 rounded-xl p-8 mb-12">
-            <p className="text-xl text-white font-bold mb-4">RegGuard does the same research in 24 hours for $15,000. Here's what you get:</p>
+            <p className="text-xl text-white font-bold mb-4">RegGuard cuts your research time from weeks to same-day. Here's what you get:</p>
             <div className="space-y-4">
               <div className="flex items-start gap-3">
                 <FileText className="w-6 h-6 text-green-400 flex-shrink-0 mt-0.5" />
@@ -114,39 +111,39 @@ export function PlatformDashboard() {
       {/* ===== THE FAILURE: WHAT GOES WRONG WITHOUT US ===== */}
       <section className="px-4 py-16 sm:px-6 lg:px-8 border-t border-purple-500/10">
         <div className="max-w-4xl mx-auto">
-          <h2 className="text-3xl font-black text-white mb-12">Here's what happens if you skip RegGuard:</h2>
+          <h2 className="text-3xl font-black text-white mb-12">The Cost of Slow Research:</h2>
 
           <div className="grid md:grid-cols-2 gap-8">
-            {/* Scenario 1: Law firm path */}
+            {/* Scenario 1: Current path (slow) */}
             <div className="bg-gradient-to-br from-red-500/10 to-red-600/5 border border-red-500/20 rounded-xl p-8">
-              <h3 className="text-lg font-bold text-white mb-6">The Law Firm Path</h3>
+              <h3 className="text-lg font-bold text-white mb-6">Without RegGuard</h3>
               <div className="space-y-4">
                 <div className="flex gap-3">
                   <span className="text-red-400 text-2xl font-bold">❌</span>
                   <div>
-                    <p className="font-bold text-white">Cost: $75K–$150K</p>
-                    <p className="text-gray-400 text-sm">That's a lot for preliminary research.</p>
+                    <p className="font-bold text-white">Weeks of research</p>
+                    <p className="text-gray-400 text-sm">You're burning capital while waiting for answers.</p>
                   </div>
                 </div>
                 <div className="flex gap-3">
                   <span className="text-red-400 text-2xl font-bold">❌</span>
                   <div>
-                    <p className="font-bold text-white">Timeline: 2–4 weeks</p>
-                    <p className="text-gray-400 text-sm">You're burning capital while waiting.</p>
+                    <p className="font-bold text-white">High upfront costs</p>
+                    <p className="text-gray-400 text-sm">Significant money before you know if the site works.</p>
                   </div>
                 </div>
                 <div className="flex gap-3">
                   <span className="text-red-400 text-2xl font-bold">❌</span>
                   <div>
-                    <p className="font-bold text-white">Bad site discovered mid-cycle</p>
-                    <p className="text-gray-400 text-sm">You're already $100K+ deep. Now you're stuck.</p>
+                    <p className="font-bold text-white">Bad sites discovered late</p>
+                    <p className="text-gray-400 text-sm">You're already deep into due diligence when you find fatal flaws.</p>
                   </div>
                 </div>
                 <div className="flex gap-3">
                   <span className="text-red-400 text-2xl font-bold">❌</span>
                   <div>
-                    <p className="font-bold text-white">No punch list (just a memo)</p>
-                    <p className="text-gray-400 text-sm">You still have to figure out next steps yourself.</p>
+                    <p className="font-bold text-white">Unclear next steps</p>
+                    <p className="text-gray-400 text-sm">You still have to figure out what to do with the research.</p>
                   </div>
                 </div>
               </div>
@@ -154,34 +151,34 @@ export function PlatformDashboard() {
 
             {/* Scenario 2: RegGuard path */}
             <div className="bg-gradient-to-br from-green-500/10 to-emerald-600/5 border-2 border-green-500/30 rounded-xl p-8">
-              <h3 className="text-lg font-bold text-white mb-6">The RegGuard Path</h3>
+              <h3 className="text-lg font-bold text-white mb-6">With RegGuard</h3>
               <div className="space-y-4">
                 <div className="flex gap-3">
                   <span className="text-green-400 text-2xl font-bold">✓</span>
                   <div>
-                    <p className="font-bold text-white">Cost: $15,000</p>
-                    <p className="text-gray-400 text-sm">One report. No surprises. Repeatable.</p>
+                    <p className="font-bold text-white">Same-day answers</p>
+                    <p className="text-gray-400 text-sm">From question to decision in one business day.</p>
                   </div>
                 </div>
                 <div className="flex gap-3">
                   <span className="text-green-400 text-2xl font-bold">✓</span>
                   <div>
-                    <p className="font-bold text-white">Timeline: Same-day</p>
-                    <p className="text-gray-400 text-sm">Go from question to answer today.</p>
+                    <p className="font-bold text-white">Clear pricing</p>
+                    <p className="text-gray-400 text-sm">$15K per report. No surprises. Repeatable process.</p>
                   </div>
                 </div>
                 <div className="flex gap-3">
                   <span className="text-green-400 text-2xl font-bold">✓</span>
                   <div>
-                    <p className="font-bold text-white">Bad sites killed early</p>
-                    <p className="text-gray-400 text-sm">Spend $15K, save $100K. Quick decision = move on.</p>
+                    <p className="font-bold text-white">Kill bad sites fast</p>
+                    <p className="text-gray-400 text-sm">Discover fatal flaws early. Move on with confidence.</p>
                   </div>
                 </div>
                 <div className="flex gap-3">
                   <span className="text-green-400 text-2xl font-bold">✓</span>
                   <div>
-                    <p className="font-bold text-white">Action plan included</p>
-                    <p className="text-gray-400 text-sm">Not just analysis—here's what you do next.</p>
+                    <p className="font-bold text-white">Actionable punch list</p>
+                    <p className="text-gray-400 text-sm">Not just analysis—here's exactly what you do next.</p>
                   </div>
                 </div>
               </div>
