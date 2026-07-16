@@ -1,11 +1,13 @@
 """
 Free Trial API Endpoint: /free-trial
 Allows users to run RegGuard research for free and receive research memo via email
+Includes environmental screening via Firecrawl + Gemini
 """
 
 import asyncio
 import logging
 from typing import Optional
+from datetime import datetime
 from pydantic import BaseModel
 
 logger = logging.getLogger(__name__)
@@ -86,7 +88,7 @@ async def _run_research_and_email(
     project_type: str,
 ) -> None:
     """
-    Background task: Run research and send email.
+    Background task: Run research (including environmental screening) and send email.
     This runs asynchronously after the endpoint returns.
     """
     from free_trial_service import mark_memo_sent
@@ -107,21 +109,26 @@ async def _run_research_and_email(
 
         logger.info(f"Generated research memo for trial {trial_id} ({len(research_memo)} chars)")
 
-        # Step 2: Send email with research memo
+        # Step 2: Run environmental screening (new feature)
+        environmental_screening = await _run_environmental_screening(address, project_type)
+
+        # Step 3: Send email with research memo + environmental summary
         email_service = get_email_service()
         if not email_service:
             logger.error("Email service not configured")
             return
 
+        combined_memo = _combine_memo_with_environmental(research_memo, environmental_screening)
+
         success = await email_service.send_research_memo(
             to_email=email,
             address=address,
-            research_memo=research_memo,
+            research_memo=combined_memo,
             trial_id=trial_id,
         )
 
         if success:
-            # Step 3: Mark memo as sent in database
+            # Step 4: Mark memo as sent in database
             mark_memo_sent(trial_id)
             logger.info(f"Successfully sent research memo to {email} for trial {trial_id}")
         else:
@@ -215,5 +222,108 @@ RegGuard © 2026
 hello@regguard.com
 
 """
-    from datetime import datetime
     return memo.strip()
+
+
+async def _run_environmental_screening(address: str, project_type: str) -> Optional[dict]:
+    """
+    Run environmental screening using Firecrawl + Gemini
+    Returns environmental assessment or None if failed
+    """
+    try:
+        from environmental_screening import EnvironmentalScreeningService
+        from research_memo import firecrawl_client  # Existing Firecrawl client from backend
+        import google.generativeai as genai
+        import os
+
+        # Initialize Gemini client
+        gemini_api_key = os.getenv("GEMINI_API_KEY")
+        if not gemini_api_key:
+            logger.warning("GEMINI_API_KEY not configured, skipping environmental screening")
+            return None
+
+        genai.configure(api_key=gemini_api_key)
+        gemini_model = genai.GenerativeModel("gemini-1.5-flash")
+
+        # Create wrapper for Gemini client with async generate_text
+        class GeminiClientWrapper:
+            def __init__(self, model):
+                self.model = model
+
+            async def generate_text(self, prompt: str) -> str:
+                response = self.model.generate_content(prompt)
+                return response.text
+
+        gemini_wrapper = GeminiClientWrapper(gemini_model)
+
+        # Geocode to get lat/lon
+        from jurisdiction import geocode_profile_from_address
+        profile = geocode_profile_from_address(address)
+
+        if not profile:
+            logger.warning(f"Could not geocode {address} for environmental screening")
+            return None
+
+        latitude = profile.get("latitude", 0)
+        longitude = profile.get("longitude", 0)
+        city = profile.get("city", "")
+        state = profile.get("state", "")
+
+        # Run environmental screening
+        service = EnvironmentalScreeningService(
+            firecrawl_client=firecrawl_client,
+            gemini_client=gemini_wrapper
+        )
+
+        screening_result = await service.get_environmental_screening(
+            address=address,
+            city=city,
+            state=state,
+            latitude=latitude,
+            longitude=longitude,
+            project_type=project_type
+        )
+
+        logger.info(f"Environmental screening completed for {address}: {screening_result.get('risk_level', 'UNKNOWN')}")
+        return screening_result
+
+    except Exception as e:
+        logger.error(f"Environmental screening failed: {e}")
+        return None
+
+
+def _combine_memo_with_environmental(research_memo: str, environmental_data: Optional[dict]) -> str:
+    """
+    Combine research memo with environmental screening summary
+    """
+    if not environmental_data or environmental_data.get("error"):
+        return research_memo
+
+    try:
+        risk_level = environmental_data.get("risk_level", "UNKNOWN")
+        synthesis = environmental_data.get("synthesis", "No synthesis available")
+
+        environmental_section = f"""
+
+========================================
+ENVIRONMENTAL SCREENING ANALYSIS
+========================================
+
+Risk Level: {risk_level}
+
+{synthesis}
+
+Data Sources: Firecrawl + Gemini synthesis
+Wetlands: {environmental_data.get('screening_data', {}).get('wetlands', {}).get('risk_level', 'UNKNOWN')}
+Endangered Species: {environmental_data.get('screening_data', {}).get('endangered_species', {}).get('risk_level', 'UNKNOWN')}
+Flood Zones: {environmental_data.get('screening_data', {}).get('flood_zones', {}).get('risk_level', 'UNKNOWN')}
+Noise Ordinances: {environmental_data.get('screening_data', {}).get('noise_zones', {}).get('risk_level', 'UNKNOWN')}
+NEPA: {environmental_data.get('screening_data', {}).get('nepa', {}).get('risk_level', 'UNKNOWN')}
+State Requirements: {environmental_data.get('screening_data', {}).get('state_requirements', {}).get('risk_level', 'UNKNOWN')}
+
+"""
+        return research_memo + environmental_section
+
+    except Exception as e:
+        logger.error(f"Error combining memo with environmental data: {e}")
+        return research_memo
