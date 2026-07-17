@@ -23,6 +23,7 @@ def _supabase_client() -> Optional[Client]:
         from supabase import create_client
         url = os.getenv("SUPABASE_URL")
         key = os.getenv("SUPABASE_KEY")
+        logger.info(f"Supabase init: url={'set' if url else 'NOT SET'}, key={'set' if key else 'NOT SET'}")
         if not url or not key:
             logger.warning("SUPABASE_URL or SUPABASE_KEY not set")
             return None
@@ -104,7 +105,9 @@ def create_free_trial(
             return None
 
     except Exception as e:
+        import traceback
         logger.error(f"Error creating free trial: {e}")
+        logger.error(f"Traceback: {traceback.format_exc()}")
         return None
 
 
