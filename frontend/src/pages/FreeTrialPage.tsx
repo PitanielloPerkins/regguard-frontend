@@ -46,7 +46,7 @@ export default function FreeTrialPage() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
             address: `${formData.address}, ${formData.city}, ${formData.state}`,
-            projectType: formData.projectType,
+            project_type: formData.projectType,
             email: formData.email,
           }),
         }
