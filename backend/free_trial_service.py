@@ -71,13 +71,13 @@ def create_free_trial(
         return None
 
     try:
-        import uuid
-        trial_id = str(uuid.uuid4())
-        now = datetime.utcnow().isoformat()
+        from datetime import timezone
+        
+        # Let Supabase generate the ID, just provide the data
+        now = datetime.now(timezone.utc).isoformat()
 
-        # Insert into free_trials table
+        # Insert into free_trials table (Supabase will auto-generate ID)
         response = sb.table("free_trials").insert({
-            "id": trial_id,
             "email": email,
             "address": address,
             "project_type": project_type,
