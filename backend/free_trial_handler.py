@@ -159,9 +159,10 @@ async def _generate_research_memo(
 
         # Build research digest (this calls all the research modules)
         digest = build_research_digest(
+            raw=profile,
+            source_urls=[],
+            enhanced_query=f"Free trial research for {project_type} at {address}",
             job_description=f"Free trial research for {address}",
-            project_narrative=f"Project type: {project_type}\nAddress: {address}",
-            profile=profile,
         )
 
         if not digest:
