@@ -50,7 +50,7 @@ def create_free_trial(
     url = os.getenv("SUPABASE_URL")
     key = os.getenv("SUPABASE_KEY")
     
-    logger.info(f"Creating free trial: url={'set' if url else 'NOT SET'}, key={'set' if key else 'NOT SET'}")
+    logger.info(f"🔵 Creating free trial: url={'set' if url else 'NOT SET'}, key={'set' if key else 'NOT SET'}")
     
     if not url or not key:
         logger.error("❌ SUPABASE_URL or SUPABASE_KEY not set")
@@ -82,11 +82,15 @@ def create_free_trial(
             "paid_order_id": None,
         }
 
+        logger.info(f"📤 Calling Supabase API: {supabase_api_url}")
+        logger.info(f"📝 Payload: {payload}")
+
         # Make synchronous HTTP request
         with httpx.Client() as client:
             response = client.post(supabase_api_url, json=payload, headers=headers, timeout=10.0)
             
-            logger.info(f"Supabase response: {response.status_code}")
+            logger.info(f"📥 Supabase response: {response.status_code}")
+            logger.info(f"📄 Response text: {response.text[:500]}")
             
             if response.status_code in [200, 201]:
                 logger.info(f"✅ Free trial created: {trial_id}")
@@ -104,13 +108,14 @@ def create_free_trial(
                         paid_order_id=trial_data.get("paid_order_id"),
                     )
             else:
-                logger.error(f"❌ Supabase API error: {response.status_code} - {response.text}")
+                logger.error(f"❌ Supabase API error: {response.status_code}")
+                logger.error(f"❌ Response: {response.text[:500]}")
                 return None
 
     except Exception as e:
         import traceback
         logger.error(f"❌ Error creating free trial: {e}")
-        logger.error(f"Traceback: {traceback.format_exc()}")
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return None
 
 
