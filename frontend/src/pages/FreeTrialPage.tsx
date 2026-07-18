@@ -155,6 +155,7 @@ export default function FreeTrialPage() {
                     onChange={handleInputChange}
                     className="w-full px-4 py-3 bg-slate-700 border border-purple-500/30 rounded-lg text-white focus:outline-none focus:border-purple-500"
                     disabled={loading}
+                    aria-label="Project type"
                   >
                     <option value="data-center">Data Center</option>
                     <option value="renewable">Solar / Wind / Battery</option>
@@ -174,6 +175,7 @@ export default function FreeTrialPage() {
                     value={formData.email}
                     onChange={handleInputChange}
                     placeholder="you@company.com"
+                    autoComplete="email"
                     className="w-full px-4 py-3 bg-slate-700 border border-purple-500/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
                     disabled={loading}
                   />
