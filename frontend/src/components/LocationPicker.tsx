@@ -15,12 +15,14 @@ export function LocationPicker({ onLocationSelect, disabled = false }: LocationP
   const [address, setAddress] = useState('');
   const [city, setCity] = useState('');
   const [state, setState] = useState('');
+  const [zip, setZip] = useState('');
   const [lat, setLat] = useState<number | null>(null);
   const [lng, setLng] = useState<number | null>(null);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
   const [mapVisible, setMapVisible] = useState(false);
   const [useManualEntry, setUseManualEntry] = useState(false);
+  const [locationConfirmed, setLocationConfirmed] = useState(false);
   const mapContainer = useRef<HTMLDivElement>(null);
   const mapRef = useRef<any>(null);
 
@@ -63,6 +65,7 @@ export function LocationPicker({ onLocationSelect, disabled = false }: LocationP
       setAddress(data.name || addr.road || addr.house_number || `${latitude}, ${longitude}`);
       setCity(addr.city || addr.town || addr.village || '');
       setState(addr.state || '');
+      setZip(addr.postcode || '');
       setLoading(false);
     } catch (err) {
       setError('Could not determine address from coordinates');
@@ -143,12 +146,14 @@ export function LocationPicker({ onLocationSelect, disabled = false }: LocationP
   }, [mapVisible, lat, lng]);
 
   const handleConfirmLocation = () => {
-    if (!address || !city || !state || lat === null || lng === null) {
-      setError('Please select a valid location');
+    if (!address || !city || !state || !zip || lat === null || lng === null) {
+      setError('Please select a valid location with ZIP code');
       return;
     }
-    onLocationSelect(address, city, state, lat, lng);
-    setMapVisible(false);
+    // Pass full address with ZIP code to parent
+    const fullAddress = `${address}, ${city}, ${state} ${zip}`;
+    onLocationSelect(fullAddress, city, state, lat, lng);
+    setLocationConfirmed(true);
   };
 
   return (
@@ -196,7 +201,7 @@ export function LocationPicker({ onLocationSelect, disabled = false }: LocationP
               className="w-full px-4 py-3 bg-slate-700 border border-purple-500/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
             />
           </div>
-          <div className="grid grid-cols-2 gap-4">
+          <div className="grid grid-cols-3 gap-4">
             <div>
               <label className="block text-white font-bold mb-2">City *</label>
               <input
@@ -219,16 +224,28 @@ export function LocationPicker({ onLocationSelect, disabled = false }: LocationP
                 className="w-full px-4 py-3 bg-slate-700 border border-purple-500/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
               />
             </div>
+            <div>
+              <label className="block text-white font-bold mb-2">ZIP *</label>
+              <input
+                type="text"
+                value={zip}
+                onChange={(e) => setZip(e.target.value)}
+                placeholder="78701"
+                disabled={disabled}
+                className="w-full px-4 py-3 bg-slate-700 border border-purple-500/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
+              />
+            </div>
           </div>
           <button
             type="button"
             onClick={() => {
-              if (address && city && state) {
-                onLocationSelect(address, city, state, 0, 0);
-                setUseManualEntry(false);
+              if (address && city && state && zip) {
+                const fullAddress = `${address}, ${city}, ${state} ${zip}`;
+                onLocationSelect(fullAddress, city, state, 0, 0);
+                setLocationConfirmed(true);
               }
             }}
-            disabled={disabled || !address || !city || !state}
+            disabled={disabled || !address || !city || !state || !zip}
             className="w-full px-4 py-2 bg-purple-600 hover:bg-purple-700 text-white font-bold rounded-lg transition disabled:opacity-50 disabled:cursor-not-allowed"
           >
             Confirm Address
@@ -264,7 +281,7 @@ export function LocationPicker({ onLocationSelect, disabled = false }: LocationP
               />
               <p className="text-gray-400 text-sm text-center">Click on the map to select your location</p>
 
-              {address && city && state && (
+              {address && city && state && zip && (
                 <>
                   <div className="bg-slate-700/50 p-4 rounded-lg border border-purple-500/30 space-y-2">
                     <p className="text-gray-300">
@@ -276,6 +293,9 @@ export function LocationPicker({ onLocationSelect, disabled = false }: LocationP
                     <p className="text-gray-300">
                       <span className="text-gray-400">State:</span> {state}
                     </p>
+                    <p className="text-gray-300">
+                      <span className="text-gray-400">ZIP:</span> {zip}
+                    </p>
                     {lat && lng && (
                       <p className="text-gray-400 text-xs">
                         Coordinates: {lat.toFixed(4)}, {lng.toFixed(4)}
@@ -283,14 +303,22 @@ export function LocationPicker({ onLocationSelect, disabled = false }: LocationP
                     )}
                   </div>
 
-                  <button
-                    type="button"
-                    onClick={handleConfirmLocation}
-                    disabled={disabled}
-                    className="w-full px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold rounded-lg transition shadow-lg shadow-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
-                  >
-                    Confirm This Location
-                  </button>
+                  {!locationConfirmed && (
+                    <button
+                      type="button"
+                      onClick={handleConfirmLocation}
+                      disabled={disabled}
+                      className="w-full px-4 py-3 bg-gradient-to-r from-green-600 to-emerald-600 hover:from-green-700 hover:to-emerald-700 text-white font-bold rounded-lg transition shadow-lg shadow-green-500/20 disabled:opacity-50 disabled:cursor-not-allowed"
+                    >
+                      Confirm This Location
+                    </button>
+                  )}
+
+                  {locationConfirmed && (
+                    <div className="text-center text-green-400 font-bold">
+                      ✓ Location confirmed
+                    </div>
+                  )}
                 </>
               )}
             </div>
