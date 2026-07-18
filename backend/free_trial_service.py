@@ -65,8 +65,7 @@ def create_free_trial(
         # Use Supabase REST API directly (no package needed)
         supabase_api_url = f"{url}/rest/v1/free_trials"
         headers = {
-            "apikey": key,
-            "Authorization": f"Bearer {key}",
+            "apikey": key,  # This is the most important one for Supabase
             "Content-Type": "application/json",
             "Prefer": "return=representation",
         }
@@ -136,7 +135,6 @@ def mark_memo_sent(trial_id: str) -> bool:
         supabase_api_url = f"{url}/rest/v1/free_trials?id=eq.{trial_id}"
         headers = {
             "apikey": key,
-            "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
             "Prefer": "return=representation",
         }
@@ -172,7 +170,6 @@ def mark_converted_to_paid(trial_id: str, order_id: str) -> bool:
         supabase_api_url = f"{url}/rest/v1/free_trials?id=eq.{trial_id}"
         headers = {
             "apikey": key,
-            "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
             "Prefer": "return=representation",
         }
@@ -213,7 +210,6 @@ def get_free_trial(trial_id: str) -> Optional[FreeTrial]:
         supabase_api_url = f"{url}/rest/v1/free_trials?id=eq.{trial_id}"
         headers = {
             "apikey": key,
-            "Authorization": f"Bearer {key}",
             "Content-Type": "application/json",
         }
 
