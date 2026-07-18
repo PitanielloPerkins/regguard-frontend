@@ -139,7 +139,7 @@ export default function FreeTrialPage() {
             </div>
           ) : (
             <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-2xl p-12">
-              <form onSubmit={handleSubmit} className="space-y-6">
+              <form onSubmit={handleSubmit} className="space-y-6" noValidate>
                 {/* Location Picker - Map + Auto-Detect */}
                 <LocationPicker
                   onLocationSelect={handleLocationSelect}

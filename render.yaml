@@ -7,7 +7,9 @@ services:
     buildCommand: >-
       cd backend &&
       pip install --upgrade pip setuptools wheel &&
-      pip install -r requirements.txt
+      pip install --no-cache-dir -r requirements.txt &&
+      pip install --no-cache-dir --force-reinstall resend>=0.8.0 &&
+      python -c "import resend; print('✅ Resend installed successfully')" 
     startCommand: >-
       cd backend &&
       python -m uvicorn main:_backend_app --host 0.0.0.0 --port $PORT --workers 4
