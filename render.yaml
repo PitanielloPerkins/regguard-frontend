@@ -1,20 +1,25 @@
 services:
   - type: web
-    name: regguard-backend
-    env: python
-    region: oregon
+    name: regguard-api
+    runtime: python
+    pythonVersion: 3.11.10
     plan: standard
-    buildCommand: >-
+    
+    buildCommand: >
       cd backend &&
-      pip install --upgrade pip setuptools wheel &&
-      pip install --no-cache-dir -r requirements.txt &&
-      pip install --no-cache-dir --force-reinstall resend>=0.8.0 &&
-      python -c "import resend; print('✅ Resend installed successfully')" 
-    startCommand: >-
+      pip install --no-cache-dir --upgrade pip &&
+      pip install --no-cache-dir --force-reinstall "resend>=0.8.0" &&
+      pip install -r requirements.txt &&
+      python -c "import resend; print('✅ Resend verified')"
+    
+    startCommand: >
       cd backend &&
-      python -m uvicorn main:_backend_app --host 0.0.0.0 --port $PORT --workers 4
+      python -m uvicorn main:app --host 0.0.0.0 --port $PORT --workers 4
+    
     envVars:
-      - key: PYTHON_VERSION
-        value: "3.11"
-      - key: PORT
-        value: "10000"
+      - key: ENVIRONMENT
+        value: production
+      - key: DEBUG
+        value: "false"
+      - key: LOG_LEVEL
+        value: info
