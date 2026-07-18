@@ -1068,6 +1068,28 @@ async def stripe_webhook(request: Request) -> Dict[str, str]:
 
 # ========== Free Trial Endpoint ==========
 
+@app.get("/debug/test-supabase")
+async def test_supabase() -> Dict[str, Any]:
+    """Test Supabase connection and email service"""
+    try:
+        from free_trial_service import _supabase_client
+        from email_service import get_email_service
+        
+        sb = _supabase_client()
+        email_service = get_email_service()
+        
+        return {
+            "supabase_connected": sb is not None,
+            "email_service_available": email_service is not None,
+            "email_service_type": type(email_service).__name__ if email_service else None,
+        }
+    except Exception as e:
+        return {
+            "error": str(e),
+            "supabase_connected": False,
+            "email_service_available": False,
+        }
+
 @app.post("/free-trial")
 async def free_trial(request_body: FreeTrialRequest) -> FreeTrialResponse:
     """
