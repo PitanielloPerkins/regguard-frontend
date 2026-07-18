@@ -20,23 +20,30 @@ logger = logging.getLogger(__name__)
 def _supabase_client() -> Optional[Client]:
     """Initialize Supabase client"""
     try:
+        # Import outside try to see if it fails
+        import supabase
         from supabase import create_client
+        
         url = os.getenv("SUPABASE_URL")
         key = os.getenv("SUPABASE_KEY")
+        
         logger.info(f"Supabase init: url={'set' if url else 'NOT SET'}, key={'set' if key else 'NOT SET'}")
+        
         if not url or not key:
             logger.warning("SUPABASE_URL or SUPABASE_KEY not set")
             return None
         
         # Try to create client
         client = create_client(url, key)
-        logger.info("Supabase client created successfully")
+        logger.info("✅ Supabase client created successfully")
         return client
-    except ImportError:
-        logger.warning("supabase package not installed")
+        
+    except ImportError as e:
+        logger.error(f"❌ supabase package import failed: {e}")
+        logger.error("Fix: Run 'pip install supabase' on Render")
         return None
     except Exception as e:
-        logger.error(f"Failed to create Supabase client: {e}", exc_info=True)
+        logger.error(f"❌ Failed to create Supabase client: {e}", exc_info=True)
         return None
 
 
