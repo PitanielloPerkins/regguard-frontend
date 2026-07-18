@@ -246,11 +246,10 @@ async def _run_environmental_screening(address: str, project_type: str) -> Optio
             logger.warning(f"❌ Could not geocode {address} for environmental screening")
             return None
 
-        latitude = profile.get("latitude", 0)
-        longitude = profile.get("longitude", 0)
-        city = profile.get("city", "")
-        state = profile.get("state", "")
-        zip_code = profile.get("zip", "").split("-")[0]  # Extract first 5 digits
+        # JurisdictionProfile is a dataclass with attributes: zip5, city, state_short, etc.
+        zip_code = profile.zip5
+        city = profile.city
+        state = profile.state_short
 
         logger.info(f"📍 Geocoded: {city}, {state} ZIP: {zip_code}")
 
