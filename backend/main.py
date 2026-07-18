@@ -1072,14 +1072,30 @@ async def stripe_webhook(request: Request) -> Dict[str, str]:
 async def test_supabase() -> Dict[str, Any]:
     """Test Supabase connection and email service"""
     try:
-        from free_trial_service import _supabase_client
         from email_service import get_email_service
+        import httpx
         
-        sb = _supabase_client()
+        # Test Supabase REST API connection
+        url = os.getenv("SUPABASE_URL")
+        key = os.getenv("SUPABASE_KEY")
+        
+        supabase_ok = False
+        if url and key:
+            try:
+                supabase_api_url = f"{url}/rest/v1/free_trials?limit=1"
+                headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+                with httpx.Client() as client:
+                    response = client.get(supabase_api_url, headers=headers, timeout=5.0)
+                    supabase_ok = response.status_code in [200, 206]
+            except:
+                supabase_ok = False
+        
         email_service = get_email_service()
         
         return {
-            "supabase_connected": sb is not None,
+            "supabase_connected": supabase_ok,
+            "supabase_url_set": bool(url),
+            "supabase_key_set": bool(key),
             "email_service_available": email_service is not None,
             "email_service_type": type(email_service).__name__ if email_service else None,
         }
