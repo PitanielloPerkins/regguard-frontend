@@ -158,8 +158,19 @@ async def _generate_research_memo(
             return "Could not geocode address. Please verify the address and try again."
 
         # Build research digest (this calls all the research modules)
+        # profile is a JurisdictionProfile dataclass - convert to dict for compatibility
+        profile_dict = {
+            "jurisdiction": {
+                "state": profile.state_short,
+                "state_long": profile.state_long,
+                "city": profile.city,
+                "county": profile.county,
+            },
+            "scout_profile": {"vertical": "data-center"},  # Default for free tier
+        }
+        
         digest = build_research_digest(
-            raw=profile,
+            raw=profile_dict,
             source_urls=[],
             enhanced_query=f"Free trial research for {project_type} at {address}",
             job_description=f"Free trial research for {address}",
