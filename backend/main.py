@@ -199,9 +199,13 @@ if sentry_dsn:
     logger.info("✅ Sentry initialized")
 else:
     logger.warning("⚠️  SENTRY_DSN not set - error tracking disabled")
-from slowapi import Limiter
-from slowapi.util import get_remote_address
-from slowapi.errors import RateLimitExceeded
+try:
+    from slowapi import Limiter
+    from slowapi.util import get_remote_address
+    from slowapi.errors import RateLimitExceeded
+    SLOWAPI_AVAILABLE = True
+except ImportError:
+    SLOWAPI_AVAILABLE = False
 # ========== Auth Models ==========
 class SignupRequest(BaseModel):
     """User signup request with email, password, and company name."""
@@ -293,13 +297,15 @@ app = FastAPI(
 
 
 
-# Rate limiting
-limiter = Limiter(key_func=get_remote_address)
-app.state.limiter = limiter
-app.add_exception_handler(RateLimitExceeded, lambda request, exc: JSONResponse(
-    status_code=429,
-    content={"detail": "Too many requests. Please try again later."},
-))
+# Rate limiting (optional)
+if SLOWAPI_AVAILABLE:
+    limiter = Limiter(key_func=get_remote_address)
+    app.state.limiter = limiter
+    app.add_exception_handler(RateLimitExceeded, lambda request, exc: JSONResponse(
+        status_code=429,
+        content={"detail": "Too many requests. Please try again later."},
+    ))
+    logger.info("✅ Rate limiting enabled")
 
 # Global exception handlers for standardized error responses
 @app.exception_handler(Exception)
@@ -1238,7 +1244,6 @@ async def test_supabase() -> Dict[str, Any]:
             "email_service_available": False,
         }
 
-@limiter.limit("5/hour")
 @app.post("/free-trial")
 async def free_trial(request_body: FreeTrialRequest) -> FreeTrialResponse:
     """
