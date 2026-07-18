@@ -237,11 +237,13 @@ async def _run_environmental_screening(address: str, project_type: str) -> Optio
         from jurisdiction import geocode_profile_from_address
         import os
 
+        logger.info(f"🌍 Environmental screening starting for: {address}")
+        
         # Geocode to get lat/lon
         profile = geocode_profile_from_address(address)
 
         if not profile:
-            logger.warning(f"Could not geocode {address} for environmental screening")
+            logger.warning(f"❌ Could not geocode {address} for environmental screening")
             return None
 
         latitude = profile.get("latitude", 0)
@@ -250,16 +252,18 @@ async def _run_environmental_screening(address: str, project_type: str) -> Optio
         state = profile.get("state", "")
         zip_code = profile.get("zip", "").split("-")[0]  # Extract first 5 digits
 
+        logger.info(f"📍 Geocoded: {city}, {state} ZIP: {zip_code}")
+
         # **FREE TIER: USE CACHED DATA ONLY (no Firecrawl API calls)**
         # This dramatically reduces costs to essentially $0 (just database lookups)
         cached_result = _get_cached_environmental_data(zip_code, state)
         
         if cached_result:
-            logger.info(f"✓ Using cached environmental data for {zip_code}, {state} (FREE TIER - $0 Firecrawl cost)")
+            logger.info(f"✅ Using cached environmental data for {zip_code}, {state} (FREE TIER - $0 Firecrawl cost)")
             return cached_result
         
         # No cached data available, return basic disclaimer
-        logger.info(f"No cached environmental data for {zip_code}, {state}. Returning basic template.")
+        logger.info(f"⚠️  No cached environmental data for {zip_code}, {state}. Returning basic template.")
         return {
             "risk_level": "UNKNOWN",
             "synthesis": f"Environmental screening data for {zip_code}, {state} is not yet cached. This feature will be available on the premium tier.",
@@ -268,7 +272,7 @@ async def _run_environmental_screening(address: str, project_type: str) -> Optio
         }
 
     except Exception as e:
-        logger.error(f"Environmental screening failed: {e}")
+        logger.error(f"❌ Environmental screening failed: {e}")
         return None
 
 
@@ -286,7 +290,10 @@ def _get_cached_environmental_data(zip_code: str, state: str) -> Optional[dict]:
         key = os.getenv("SUPABASE_KEY")
         
         if not url or not key:
+            logger.warning(f"⚠️  Cache lookup: Missing SUPABASE credentials")
             return None
+        
+        logger.info(f"🔍 Cache lookup for ZIP: {zip_code}, State: {state}")
         
         # Query environmental_cache table by ZIP + state
         supabase_api_url = f"{url}/rest/v1/environmental_cache?zip_code=eq.{zip_code}&state=eq.{state}"
@@ -297,16 +304,22 @@ def _get_cached_environmental_data(zip_code: str, state: str) -> Optional[dict]:
         
         with httpx.Client() as client:
             response = client.get(supabase_api_url, headers=headers, timeout=5.0)
+            logger.info(f"📡 Cache API response: {response.status_code}")
             
             if response.status_code == 200:
                 data = response.json()
+                logger.info(f"📦 Cache query returned {len(data)} rows")
                 if data and len(data) > 0:
-                    logger.info(f"✓ Found cached environmental data: {zip_code}, {state}")
+                    logger.info(f"✅ Found cached environmental data: {zip_code}, {state}")
                     return data[0].get("cached_data")
+                else:
+                    logger.info(f"❌ No cache entry for {zip_code}, {state}")
+            else:
+                logger.warning(f"⚠️  Cache API error: {response.status_code} - {response.text}")
         
         return None
     except Exception as e:
-        logger.warning(f"Cache lookup failed (no problem): {e}")
+        logger.warning(f"⚠️  Cache lookup exception: {e}")
         return None
 
 
