@@ -168,8 +168,9 @@ export default function FreeTrialPage() {
 
                 {/* Email */}
                 <div>
-                  <label className="block text-white font-bold mb-2">Your Email *</label>
+                  <label htmlFor="email" className="block text-white font-bold mb-2">Your Email *</label>
                   <input
+                    id="email"
                     type="email"
                     name="email"
                     value={formData.email}
