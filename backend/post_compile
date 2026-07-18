@@ -1,0 +1,8 @@
+#!/bin/bash
+set -e
+echo "🔍 Verifying critical dependencies..."
+echo "📦 Installing resend explicitly..."
+pip install --no-cache-dir --force-reinstall "resend>=0.8.0" || exit 1
+echo "✅ Verifying resend import..."
+python -c "import resend; print('✅ Resend loaded successfully')" || exit 1
+echo "✅ All dependencies verified!"

@@ -16,3 +16,6 @@ sendgrid>=6.10.0,<7
 resend>=0.8.0,<1
 # Force rebuild on Render (dependency cache invalidation)
 # Updated: 2026-07-18 09:27 - Resend email service critical
+google-generativeai>=0.3.0,<1
+google-maps-services>=1.8.1,<2
+google-auth>=2.25.0,<3
