@@ -293,6 +293,7 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, lambda request, exc: JSONResponse(
     status_code=429,
     content={"detail": "Too many requests. Please try again later."},
+))
 
 # Global exception handlers for standardized error responses
 @app.exception_handler(Exception)
@@ -310,7 +311,6 @@ async def general_exception_handler(request, exc):
             "status_code": 500,
         }
     )
-))
 @app.on_event("startup")
 async def _log_firecrawl_key_prefix() -> None:
     k = os.getenv("FIRECRAWL_API_KEY") or ""
