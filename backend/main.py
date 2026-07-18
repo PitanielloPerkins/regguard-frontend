@@ -196,8 +196,6 @@ else:
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
-from webhook_security import verify_stripe_webhook, WebhookSecurityError
-from error_handling import RegGuardError, ValidationError, NotFoundError, create_error_response, log_error_with_context
 # ========== Auth Models ==========
 class SignupRequest(BaseModel):
     """User signup request with email, password, and company name."""
@@ -297,18 +295,21 @@ app.add_exception_handler(RateLimitExceeded, lambda request, exc: JSONResponse(
     content={"detail": "Too many requests. Please try again later."},
 
 # Global exception handlers for standardized error responses
-@app.exception_handler(RegGuardError)
-async def regguard_error_handler(request, exc):
-    """Handle RegGuard-specific errors"""
-    return create_error_response(exc)
-
 @app.exception_handler(Exception)
 async def general_exception_handler(request, exc):
     """Handle unexpected exceptions"""
-    log_error_with_context(exc, "Unhandled exception in request")
-    from error_handling import RegGuardError as RGE
-    generic_error = RGE("An unexpected error occurred", "INTERNAL_ERROR", 500)
-    return create_error_response(generic_error)
+    logger.error(f"❌ Unhandled exception: {type(exc).__name__}: {str(exc)}")
+    logger.debug(f"   Traceback: {exc}")
+    from starlette.responses import JSONResponse
+    return JSONResponse(
+        status_code=500,
+        content={
+            "ok": False,
+            "error_code": "INTERNAL_ERROR",
+            "message": "An unexpected error occurred",
+            "status_code": 500,
+        }
+    )
 ))
 @app.on_event("startup")
 async def _log_firecrawl_key_prefix() -> None:
@@ -1084,11 +1085,38 @@ async def stripe_webhook(request: Request) -> Dict[str, str]:
     body = await request.body()
     sig_header = request.headers.get("stripe-signature", "")
     
-    try:
-        verify_stripe_webhook(body, sig_header)
-    except WebhookSecurityError as e:
-        logger.warning(f"❌ Webhook verification failed: {e}")
-        raise HTTPException(status_code=401, detail="Webhook verification failed")
+    # Verify webhook signature
+    webhook_secret = os.getenv("STRIPE_WEBHOOK_SECRET")
+    if webhook_secret and sig_header:
+        try:
+            # Parse signature header: t=timestamp,v1=signature
+            sig_parts = {}
+            for part in sig_header.split(','):
+                if '=' in part:
+                    key, value = part.split('=', 1)
+                    sig_parts[key] = value
+            
+            if 't' in sig_parts and 'v1' in sig_parts:
+                timestamp = sig_parts['t']
+                signature = sig_parts['v1']
+                signed_content = f"{timestamp}.{body.decode('utf-8')}"
+                
+                expected_signature = hmac.new(
+                    webhook_secret.encode('utf-8'),
+                    signed_content.encode('utf-8'),
+                    hashlib.sha256
+                ).hexdigest()
+                
+                if not hmac.compare_digest(signature, expected_signature):
+                    logger.error("❌ Webhook signature mismatch")
+                    raise HTTPException(status_code=401, detail="Invalid signature")
+                
+                logger.info("✅ Webhook signature verified")
+        except Exception as e:
+            logger.error(f"❌ Webhook verification error: {e}")
+            raise HTTPException(status_code=401, detail="Webhook verification failed")
+    else:
+        logger.warning("⚠️  No webhook secret or signature header - skipping verification")
     
     try:
         event = json.loads(body)
