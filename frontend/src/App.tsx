@@ -27,6 +27,7 @@ import { ToastContainer } from 'react-toastify';
 import { backendUrl } from './env';
 import { fetchWithTimeout } from './fetchWithTimeout';
 import { downloadActionPlanPdf } from './downloadActionPlanPdf';
+import { ErrorBoundary } from './components/ErrorBoundary';
 
 // ========== Web Speech API Type Declarations ==========
 declare global {
@@ -935,7 +936,8 @@ export default function App() {
     };
 
     recognitionRef.current = rec;
-    return () => {
+    return (
+    <ErrorBoundary>) => {
       try {
         listeningRef.current = false;
         clearDictationSilenceTimer(dictationSilenceTimerRef);

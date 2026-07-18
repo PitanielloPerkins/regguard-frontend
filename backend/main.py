@@ -16,6 +16,9 @@ import asyncio
 import hashlib
 import json
 import logging
+import sentry_sdk
+from sentry_sdk.integrations.fastapi import FastApiIntegration
+from sentry_sdk.integrations.httpx import HttpxIntegration
 import os
 import re
 import sys
@@ -172,6 +175,27 @@ _RESEARCH_STALL_FIRECRAWL_MESSAGE = (
 
 logger = logging.getLogger("reg_guard")
 
+
+# Sentry error tracking
+sentry_dsn = os.getenv("SENTRY_DSN")
+if sentry_dsn:
+    sentry_sdk.init(
+        dsn=sentry_dsn,
+        integrations=[
+            FastApiIntegration(),
+            HttpxIntegration(),
+        ],
+        traces_sample_rate=0.1,  # 10% of transactions
+        profiles_sample_rate=0.1,  # 10% of profiles
+        environment=os.getenv("ENV", "production"),
+        attach_stacktrace=True,
+    )
+    logger.info("✅ Sentry initialized")
+else:
+    logger.warning("⚠️  SENTRY_DSN not set - error tracking disabled")
+from slowapi import Limiter
+from slowapi.util import get_remote_address
+from slowapi.errors import RateLimitExceeded
 # ========== Auth Models ==========
 class SignupRequest(BaseModel):
     """User signup request with email, password, and company name."""
@@ -262,6 +286,14 @@ app = FastAPI(
 )
 
 
+
+# Rate limiting
+limiter = Limiter(key_func=get_remote_address)
+app.state.limiter = limiter
+app.add_exception_handler(RateLimitExceeded, lambda request, exc: JSONResponse(
+    status_code=429,
+    content={"detail": "Too many requests. Please try again later."},
+))
 @app.on_event("startup")
 async def _log_firecrawl_key_prefix() -> None:
     k = os.getenv("FIRECRAWL_API_KEY") or ""
@@ -1154,6 +1186,7 @@ async def test_supabase() -> Dict[str, Any]:
             "email_service_available": False,
         }
 
+@limiter.limit("5/hour")
 @app.post("/free-trial")
 async def free_trial(request_body: FreeTrialRequest) -> FreeTrialResponse:
     """
