@@ -1068,6 +1068,15 @@ async def stripe_webhook(request: Request) -> Dict[str, str]:
 
 # ========== Free Trial Endpoint ==========
 
+@app.get("/debug/env")
+async def debug_env() -> Dict[str, Any]:
+    """Show environment variables (sanitized)"""
+    return {
+        "SUPABASE_URL": os.getenv("SUPABASE_URL", "NOT SET"),
+        "SUPABASE_KEY_PREFIX": os.getenv("SUPABASE_KEY", "NOT SET")[:20] + "...",
+        "RESEND_API_KEY_SET": bool(os.getenv("RESEND_API_KEY")),
+    }
+
 @app.get("/debug/test-supabase")
 async def test_supabase() -> Dict[str, Any]:
     """Test Supabase connection and email service"""
@@ -1083,6 +1092,8 @@ async def test_supabase() -> Dict[str, Any]:
         supabase_error = None
         if url and key:
             try:
+                logger.info(f"🔍 Supabase URL: {url}")
+                logger.info(f"🔍 Supabase Key: {key[:20]}...")
                 # Try a simple query first
                 supabase_api_url = f"{url}/rest/v1/free_trials?limit=1"
                 headers = {"apikey": key}
