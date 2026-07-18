@@ -936,8 +936,7 @@ export default function App() {
     };
 
     recognitionRef.current = rec;
-    return (
-    <ErrorBoundary>) => {
+    rec.onend = () => {
       try {
         listeningRef.current = false;
         clearDictationSilenceTimer(dictationSilenceTimerRef);
