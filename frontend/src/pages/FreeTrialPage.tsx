@@ -6,6 +6,7 @@
 import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { ArrowLeft, CheckCircle, AlertCircle } from 'lucide-react';
+import { LocationPicker } from '../components/LocationPicker';
 
 export default function FreeTrialPage() {
   const navigate = useNavigate();
@@ -23,6 +24,15 @@ export default function FreeTrialPage() {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value } = e.target;
     setFormData(prev => ({ ...prev, [name]: value }));
+  };
+
+  const handleLocationSelect = (address: string, city: string, state: string, _lat: number, _lng: number) => {
+    setFormData(prev => ({
+      ...prev,
+      address,
+      city,
+      state,
+    }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -130,47 +140,11 @@ export default function FreeTrialPage() {
           ) : (
             <div className="bg-gradient-to-br from-slate-800/50 to-slate-900/50 border border-purple-500/30 rounded-2xl p-12">
               <form onSubmit={handleSubmit} className="space-y-6">
-                {/* Address */}
-                <div>
-                  <label className="block text-white font-bold mb-2">Site Address *</label>
-                  <input
-                    type="text"
-                    name="address"
-                    value={formData.address}
-                    onChange={handleInputChange}
-                    placeholder="123 Main Street"
-                    className="w-full px-4 py-3 bg-slate-700 border border-purple-500/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
-                    disabled={loading}
-                  />
-                </div>
-
-                {/* City & State */}
-                <div className="grid grid-cols-2 gap-4">
-                  <div>
-                    <label className="block text-white font-bold mb-2">City *</label>
-                    <input
-                      type="text"
-                      name="city"
-                      value={formData.city}
-                      onChange={handleInputChange}
-                      placeholder="Austin"
-                      className="w-full px-4 py-3 bg-slate-700 border border-purple-500/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
-                      disabled={loading}
-                    />
-                  </div>
-                  <div>
-                    <label className="block text-white font-bold mb-2">State *</label>
-                    <input
-                      type="text"
-                      name="state"
-                      value={formData.state}
-                      onChange={handleInputChange}
-                      placeholder="TX"
-                      className="w-full px-4 py-3 bg-slate-700 border border-purple-500/30 rounded-lg text-white placeholder-gray-400 focus:outline-none focus:border-purple-500"
-                      disabled={loading}
-                    />
-                  </div>
-                </div>
+                {/* Location Picker - Map + Auto-Detect */}
+                <LocationPicker
+                  onLocationSelect={handleLocationSelect}
+                  disabled={loading}
+                />
 
                 {/* Project Type */}
                 <div>
