@@ -139,9 +139,15 @@ class ResendEmailService(EmailService):
         self.api_key = api_key
         try:
             import resend
+            # Configure Resend with API key
+            resend.api_key = api_key
             self.resend = resend
-        except ImportError:
-            logger.error("resend package not installed")
+            logger.info("✅ Resend initialized with API key")
+        except ImportError as e:
+            logger.error(f"❌ resend package not installed: {e}")
+            self.resend = None
+        except Exception as e:
+            logger.error(f"❌ Error initializing Resend: {e}")
             self.resend = None
 
     async def send_research_memo(
@@ -178,12 +184,17 @@ class ResendEmailService(EmailService):
             </html>
             """
 
-            response = self.resend.Emails.send({
-                "from": "hello@regguard.com",
-                "to": to_email,
-                "subject": "Your RegGuard Free Research Memo is Ready",
-                "html": html_content,
-            })
+            # Resend API call with configured api_key
+            try:
+                response = self.resend.Emails.send({
+                    "from": "hello@regguard.com",
+                    "to": to_email,
+                    "subject": "Your RegGuard Free Research Memo is Ready",
+                    "html": html_content,
+                })
+            except Exception as e:
+                logger.error(f"❌ Resend API error: {e}")
+                return False
 
             success = response.get("id") is not None
 

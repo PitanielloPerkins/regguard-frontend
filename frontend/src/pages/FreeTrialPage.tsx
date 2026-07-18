@@ -148,14 +148,14 @@ export default function FreeTrialPage() {
 
                 {/* Project Type */}
                 <div>
-                  <label className="block text-white font-bold mb-2">What type of project? *</label>
+                  <label htmlFor="projectType" className="block text-white font-bold mb-2">What type of project? *</label>
                   <select
+                    id="projectType"
                     name="projectType"
                     value={formData.projectType}
                     onChange={handleInputChange}
                     className="w-full px-4 py-3 bg-slate-700 border border-purple-500/30 rounded-lg text-white focus:outline-none focus:border-purple-500"
                     disabled={loading}
-                    aria-label="Project type"
                   >
                     <option value="data-center">Data Center</option>
                     <option value="renewable">Solar / Wind / Battery</option>
