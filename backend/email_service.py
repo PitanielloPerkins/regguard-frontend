@@ -137,17 +137,25 @@ class ResendEmailService(EmailService):
 
     def __init__(self, api_key: str):
         self.api_key = api_key
+        self.resend = None
+        
         try:
-            import resend
+            import resend as resend_lib
+            logger.info("📦 resend module imported successfully")
+            
             # Configure Resend with API key
-            resend.api_key = api_key
-            self.resend = resend
-            logger.info("✅ Resend initialized with API key")
+            resend_lib.api_key = api_key
+            self.resend = resend_lib
+            logger.info(f"✅ Resend initialized with API key: {api_key[:20]}...")
         except ImportError as e:
-            logger.error(f"❌ resend package not installed: {e}")
+            logger.error(f"❌ resend package not installed. Install with: pip install resend")
+            logger.error(f"   ImportError: {e}")
+            self.resend = None
+        except AttributeError as e:
+            logger.error(f"❌ Error setting resend.api_key: {e}")
             self.resend = None
         except Exception as e:
-            logger.error(f"❌ Error initializing Resend: {e}")
+            logger.error(f"❌ Unexpected error initializing Resend: {type(e).__name__}: {e}")
             self.resend = None
 
     async def send_research_memo(

@@ -283,25 +283,26 @@ export function LocationPicker({ onLocationSelect, disabled = false }: LocationP
 
               {address && city && state && zip && (
                 <>
-                  <div className="bg-slate-700/50 p-4 rounded-lg border border-purple-500/30 space-y-2">
-                    <p className="text-gray-300">
-                      <span className="text-gray-400">Address:</span> {address}
-                    </p>
-                    <p className="text-gray-300">
-                      <span className="text-gray-400">City:</span> {city}
-                    </p>
-                    <p className="text-gray-300">
-                      <span className="text-gray-400">State:</span> {state}
-                    </p>
-                    <p className="text-gray-300">
-                      <span className="text-gray-400">ZIP:</span> {zip}
-                    </p>
+                  <fieldset className="bg-slate-700/50 p-4 rounded-lg border border-purple-500/30 space-y-2">
+                    <legend className="sr-only">Selected Location Details</legend>
+                    <div className="text-gray-300">
+                      <label className="text-gray-400">Address:</label> {address}
+                    </div>
+                    <div className="text-gray-300">
+                      <label className="text-gray-400">City:</label> {city}
+                    </div>
+                    <div className="text-gray-300">
+                      <label className="text-gray-400">State:</label> {state}
+                    </div>
+                    <div className="text-gray-300">
+                      <label className="text-gray-400">ZIP:</label> {zip}
+                    </div>
                     {lat && lng && (
-                      <p className="text-gray-400 text-xs">
+                      <div className="text-gray-400 text-xs">
                         Coordinates: {lat.toFixed(4)}, {lng.toFixed(4)}
-                      </p>
+                      </div>
                     )}
-                  </div>
+                  </fieldset>
 
                   {!locationConfirmed && (
                     <button
