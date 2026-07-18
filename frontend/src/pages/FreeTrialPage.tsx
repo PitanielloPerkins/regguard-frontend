@@ -41,8 +41,8 @@ export default function FreeTrialPage() {
     setLoading(true);
 
     // Validate form
-    if (!formData.address || !formData.city || !formData.state || !formData.email) {
-      setError('Please fill in all fields');
+    if (!formData.address || !formData.city || !formData.state || !formData.zip || !formData.email) {
+      setError('Please fill in all fields including ZIP code');
       setLoading(false);
       return;
     }
@@ -55,7 +55,8 @@ export default function FreeTrialPage() {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({
-            address: `${formData.address}, ${formData.city}, ${formData.state}`,
+            address: `${formData.address}, ${formData.city}, ${formData.state}, ${formData.zip}`,
+            zip: formData.zip,
             project_type: formData.projectType,
             email: formData.email,
           }),
