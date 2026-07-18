@@ -27,9 +27,16 @@ def _supabase_client() -> Optional[Client]:
         if not url or not key:
             logger.warning("SUPABASE_URL or SUPABASE_KEY not set")
             return None
-        return create_client(url, key)
+        
+        # Try to create client
+        client = create_client(url, key)
+        logger.info("Supabase client created successfully")
+        return client
     except ImportError:
         logger.warning("supabase package not installed")
+        return None
+    except Exception as e:
+        logger.error(f"Failed to create Supabase client: {e}", exc_info=True)
         return None
 
 
