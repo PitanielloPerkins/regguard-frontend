@@ -196,6 +196,8 @@ else:
 from slowapi import Limiter
 from slowapi.util import get_remote_address
 from slowapi.errors import RateLimitExceeded
+from webhook_security import verify_stripe_webhook, WebhookSecurityError
+from error_handling import RegGuardError, ValidationError, NotFoundError, create_error_response, log_error_with_context
 # ========== Auth Models ==========
 class SignupRequest(BaseModel):
     """User signup request with email, password, and company name."""
@@ -293,6 +295,20 @@ app.state.limiter = limiter
 app.add_exception_handler(RateLimitExceeded, lambda request, exc: JSONResponse(
     status_code=429,
     content={"detail": "Too many requests. Please try again later."},
+
+# Global exception handlers for standardized error responses
+@app.exception_handler(RegGuardError)
+async def regguard_error_handler(request, exc):
+    """Handle RegGuard-specific errors"""
+    return create_error_response(exc)
+
+@app.exception_handler(Exception)
+async def general_exception_handler(request, exc):
+    """Handle unexpected exceptions"""
+    log_error_with_context(exc, "Unhandled exception in request")
+    from error_handling import RegGuardError as RGE
+    generic_error = RGE("An unexpected error occurred", "INTERNAL_ERROR", 500)
+    return create_error_response(generic_error)
 ))
 @app.on_event("startup")
 async def _log_firecrawl_key_prefix() -> None:
@@ -1068,9 +1084,11 @@ async def stripe_webhook(request: Request) -> Dict[str, str]:
     body = await request.body()
     sig_header = request.headers.get("stripe-signature", "")
     
-    if not verify_stripe_webhook_signature(body, sig_header):
-        logger.warning("Invalid Stripe webhook signature")
-        raise HTTPException(status_code=401, detail="Invalid signature")
+    try:
+        verify_stripe_webhook(body, sig_header)
+    except WebhookSecurityError as e:
+        logger.warning(f"❌ Webhook verification failed: {e}")
+        raise HTTPException(status_code=401, detail="Webhook verification failed")
     
     try:
         event = json.loads(body)
