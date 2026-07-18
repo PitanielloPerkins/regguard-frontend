@@ -977,6 +977,10 @@ def debug_config() -> Dict[str, Any]:
             "stripe_secret": bool(os.getenv("STRIPE_SECRET_KEY")),
             "google_maps": bool(os.getenv("GOOGLE_MAPS_API_KEY")),
             "supabase": bool(os.getenv("SUPABASE_URL")),
+            "supabase_key": bool(os.getenv("SUPABASE_KEY")),
+            "sendgrid": bool(os.getenv("SENDGRID_API_KEY")),
+            "resend": bool(os.getenv("RESEND_API_KEY")),
+            "gemini": bool(os.getenv("GEMINI_API_KEY")),
         }
     }
 
