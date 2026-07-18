@@ -57,8 +57,6 @@ def create_free_trial(
         return None
 
     try:
-        import uuid
-        trial_id = str(uuid.uuid4())
         from datetime import timezone
         now = datetime.now(timezone.utc).isoformat()
 
@@ -70,8 +68,8 @@ def create_free_trial(
             "Prefer": "return=representation",
         }
 
+        # DON'T send the id - let Supabase auto-generate it
         payload = {
-            "id": trial_id,
             "email": email,
             "address": address,
             "project_type": project_type,
@@ -92,7 +90,7 @@ def create_free_trial(
             logger.info(f"📄 Response text: {response.text[:500]}")
             
             if response.status_code in [200, 201]:
-                logger.info(f"✅ Free trial created: {trial_id}")
+                logger.info(f"✅ Free trial created")
                 data = response.json()
                 if isinstance(data, list) and len(data) > 0:
                     trial_data = data[0]
