@@ -1077,6 +1077,19 @@ async def debug_env() -> Dict[str, Any]:
         "RESEND_API_KEY_SET": bool(os.getenv("RESEND_API_KEY")),
     }
 
+@app.get("/debug/dns")
+async def debug_dns() -> Dict[str, Any]:
+    """Test DNS resolution from Render"""
+    import socket
+    try:
+        hostname = "cuksjdvlydzxiqnjdaw.supabase.co"
+        ip = socket.gethostbyname(hostname)
+        return {"hostname": hostname, "ip": ip, "resolved": True}
+    except socket.gaierror as e:
+        return {"hostname": hostname, "error": str(e), "resolved": False}
+    except Exception as e:
+        return {"error": str(e), "resolved": False}
+
 @app.get("/debug/test-supabase")
 async def test_supabase() -> Dict[str, Any]:
     """Test Supabase connection and email service"""
