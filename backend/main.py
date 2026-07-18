@@ -1071,24 +1071,47 @@ async def stripe_webhook(request: Request) -> Dict[str, str]:
 @app.get("/debug/test-supabase")
 async def test_supabase() -> Dict[str, Any]:
     """Test Supabase connection and email service"""
+    import httpx
     try:
         from email_service import get_email_service
-        import httpx
         
         # Test Supabase REST API connection
         url = os.getenv("SUPABASE_URL")
         key = os.getenv("SUPABASE_KEY")
         
         supabase_ok = False
+        supabase_error = None
         if url and key:
             try:
+                # Try a simple query first
                 supabase_api_url = f"{url}/rest/v1/free_trials?limit=1"
-                headers = {"apikey": key, "Authorization": f"Bearer {key}"}
+                headers = {"apikey": key}
                 with httpx.Client() as client:
                     response = client.get(supabase_api_url, headers=headers, timeout=5.0)
                     supabase_ok = response.status_code in [200, 206]
-            except:
+                    if not supabase_ok:
+                        supabase_error = f"GET failed: {response.status_code}"
+                    else:
+                        # Now try an insert
+                        from datetime import datetime, timezone
+                        insert_url = f"{url}/rest/v1/free_trials"
+                        insert_headers = {"apikey": key, "Content-Type": "application/json", "Prefer": "return=representation"}
+                        insert_payload = {
+                            "email": "test@debug.com",
+                            "address": "Test Address",
+                            "project_type": "data-center",
+                            "created_at": datetime.now(timezone.utc).isoformat(),
+                            "memo_sent": False,
+                            "converted_to_paid": False,
+                            "paid_order_id": None,
+                        }
+                        insert_response = client.post(insert_url, json=insert_payload, headers=insert_headers, timeout=5.0)
+                        if insert_response.status_code not in [200, 201]:
+                            supabase_error = f"INSERT failed: {insert_response.status_code} - {insert_response.text[:200]}"
+                            supabase_ok = False
+            except Exception as e:
                 supabase_ok = False
+                supabase_error = str(e)
         
         email_service = get_email_service()
         
@@ -1096,6 +1119,7 @@ async def test_supabase() -> Dict[str, Any]:
             "supabase_connected": supabase_ok,
             "supabase_url_set": bool(url),
             "supabase_key_set": bool(key),
+            "supabase_error": supabase_error,
             "email_service_available": email_service is not None,
             "email_service_type": type(email_service).__name__ if email_service else None,
         }
