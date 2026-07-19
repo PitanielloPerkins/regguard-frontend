@@ -41,8 +41,18 @@ export default function FreeTrialPage() {
     setError('');
     setLoading(true);
 
+    // Debug: Log what we have
+    console.log('Form data before validation:', formData);
+
     // Validate form
     if (!formData.address || !formData.city || !formData.state || !formData.zip || !formData.email) {
+      console.error('Validation failed. Missing:', {
+        address: !formData.address,
+        city: !formData.city,
+        state: !formData.state,
+        zip: !formData.zip,
+        email: !formData.email,
+      });
       setError('Please fill in all fields including ZIP code');
       setLoading(false);
       return;
