@@ -7,7 +7,7 @@ import { useState, useEffect, useRef } from 'react';
 import { MapPin, Navigation, AlertCircle } from 'lucide-react';
 
 interface LocationPickerProps {
-  onLocationSelect: (address: string, city: string, state: string, lat: number, lng: number) => void;
+  onLocationSelect: (address: string, city: string, state: string, zip: string, lat: number, lng: number) => void;
   disabled?: boolean;
 }
 
@@ -152,7 +152,7 @@ export function LocationPicker({ onLocationSelect, disabled = false }: LocationP
     }
     // Pass full address with ZIP code to parent
     const fullAddress = `${address}, ${city}, ${state} ${zip}`;
-    onLocationSelect(fullAddress, city, state, lat, lng);
+    onLocationSelect(fullAddress, city, state, zip, lat, lng);
     setLocationConfirmed(true);
   };
 
@@ -241,7 +241,7 @@ export function LocationPicker({ onLocationSelect, disabled = false }: LocationP
             onClick={() => {
               if (address && city && state && zip) {
                 const fullAddress = `${address}, ${city}, ${state} ${zip}`;
-                onLocationSelect(fullAddress, city, state, 0, 0);
+                onLocationSelect(fullAddress, city, state, zip, 0, 0);
                 setLocationConfirmed(true);
               }
             }}

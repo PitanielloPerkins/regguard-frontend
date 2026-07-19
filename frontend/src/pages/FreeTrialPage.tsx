@@ -26,12 +26,13 @@ export default function FreeTrialPage() {
     setFormData(prev => ({ ...prev, [name]: value }));
   };
 
-  const handleLocationSelect = (address: string, city: string, state: string, _lat: number, _lng: number) => {
+  const handleLocationSelect = (address: string, city: string, state: string, zip: string, _lat: number, _lng: number) => {
     setFormData(prev => ({
       ...prev,
       address,
       city,
       state,
+      zip,
     }));
   };
 
