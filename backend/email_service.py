@@ -53,7 +53,7 @@ class SendGridEmailService(EmailService):
 
         try:
             message = self.Mail(
-                from_email=os.getenv("RESEND_FROM_EMAIL", "hello@regguardagent.com"),
+                from_email=os.getenv("RESEND_FROM_EMAIL", "noreply@regguardagent.com"),
                 to_emails=to_email,
                 subject="Your RegGuard Free Research Memo is Ready",
                 html_content=self._build_html_email(address, research_memo, trial_id),
@@ -195,7 +195,7 @@ class ResendEmailService(EmailService):
             # Resend API call with configured api_key
             try:
                 response = self.resend.Emails.send({
-                    "from": os.getenv("RESEND_FROM_EMAIL", "hello@regguardagent.com"),
+                    "from": os.getenv("RESEND_FROM_EMAIL", "noreply@regguardagent.com"),
                     "to": to_email,
                     "subject": "Your RegGuard Free Research Memo is Ready",
                     "html": html_content,
