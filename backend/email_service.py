@@ -53,7 +53,7 @@ class SendGridEmailService(EmailService):
 
         try:
             message = self.Mail(
-                from_email="hello@regguard.com",
+                from_email=os.getenv("RESEND_FROM_EMAIL", "hello@regguardagent.com"),
                 to_emails=to_email,
                 subject="Your RegGuard Free Research Memo is Ready",
                 html_content=self._build_html_email(address, research_memo, trial_id),
@@ -101,7 +101,7 @@ class SendGridEmailService(EmailService):
                 </a></p>
                 
                 <p style="color: #999; font-size: 12px; margin-top: 30px;">
-                    RegGuard © 2026 • Questions? Email hello@regguard.com
+                    RegGuard © 2026 • Questions? Email hello@regguardagent.com
                 </p>
             </body>
         </html>
@@ -127,7 +127,7 @@ Like what you see? Upgrade to the full package and get:
 Upgrade to Full Package ($15,000):
 https://app.regguardagent.com/order?trial={trial_id}
 
-Questions? Email hello@regguard.com
+Questions? Email hello@regguardagent.com
 RegGuard © 2026
 """
 
@@ -195,7 +195,7 @@ class ResendEmailService(EmailService):
             # Resend API call with configured api_key
             try:
                 response = self.resend.Emails.send({
-                    "from": "hello@regguard.com",
+                    "from": os.getenv("RESEND_FROM_EMAIL", "hello@regguardagent.com"),
                     "to": to_email,
                     "subject": "Your RegGuard Free Research Memo is Ready",
                     "html": html_content,
